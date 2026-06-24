@@ -33,7 +33,7 @@ distinct species.
 \author{
 Matt castle
 
-Maintainer:  <mattcastle@cefas.co.uk>
+Maintainer:  Julia Blanchard <julia.blanchard@utas.edu.au>
 }
 \references{
 ~~ Literature or other references for background information ~~
