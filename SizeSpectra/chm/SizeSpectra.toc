@@ -2,11 +2,11 @@
 <HEAD></HEAD><HTML><BODY>
 <UL>
 <LI> <OBJECT type="text/sitemap">
-<param name="Name" value="Package SizeSpectra:  Contents">
+<param name="Name" value="Package dbpmr:  Contents">
 <param name="Local" value="00Index.html">
 </OBJECT>
 <LI> <OBJECT type="text/sitemap">
-<param name="Name" value="Package SizeSpectra:  R objects">
+<param name="Name" value="Package dbpmr:  R objects">
 </OBJECT>
 <UL>
 <LI> <OBJECT type="text/sitemap">
@@ -46,7 +46,7 @@
 <param name="Local" value="Setup.Species.html">
 </OBJECT>
 <LI> <OBJECT type="text/sitemap">
-<param name="Name" value="SizeSpectra">
+<param name="Name" value="dbpmr">
 <param name="Local" value="SizeSpectra-package.html">
 </OBJECT>
 <LI> <OBJECT type="text/sitemap">
@@ -55,7 +55,7 @@
 </OBJECT>
 </UL>
 <LI> <OBJECT type="text/sitemap">
-<param name="Name" value="Package SizeSpectra:  Titles">
+<param name="Name" value="Package dbpmr:  Titles">
 </OBJECT>
 <UL>
 <LI> <OBJECT type="text/sitemap">

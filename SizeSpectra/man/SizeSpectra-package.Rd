@@ -1,5 +1,5 @@
-\name{SizeSpectra}
-\alias{SizeSpectra}
+\name{dbpmr}
+\alias{dbpmr}
 \docType{package}
 \title{
 Marine Size-Spectra Package
@@ -9,7 +9,7 @@ Spatial Size-spectra analysis functions for aquatic ecosystems.
 }
 \details{
 \tabular{ll}{
-Package: \tab SizeSpectra\cr
+Package: \tab dbpmr\cr
 Type: \tab Package\cr
 Version: \tab 1.0\cr
 Date: \tab 2007-07-11\cr

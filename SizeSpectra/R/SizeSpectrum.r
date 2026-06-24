@@ -265,7 +265,7 @@ tiny<-1e-7
 # Call C code #
 #-------------#
 
-  x<-.C('SizeSpectrum', run.params, grid.params, pla.params, pel.params, ben.params, det.params, names.params, flags.params, PACKAGE='SizeSpectra')
+  x<-.C('SizeSpectrum', run.params, grid.params, pla.params, pel.params, ben.params, det.params, names.params, flags.params, PACKAGE='dbpmr')
 
 #-----------------------------------------------------------------#
 # Return filenames of files that have been produced by the C code #
