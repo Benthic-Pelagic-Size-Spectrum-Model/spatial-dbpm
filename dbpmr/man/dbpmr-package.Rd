@@ -15,7 +15,7 @@ Version: \tab 1.0\cr
 Date: \tab 2007-07-11\cr
 License: \tab What license is it under?\cr
 }
-This package contains various functinos for creating plotting and analysing 
+This package contains various functions for creating plotting and analysing 
 spatially explicit predation driven marine size spectra. It can calculate 
 and analyse size spectra in 0, 1 and 2 spatial dimensions, and for any number of 
 distinct species.
@@ -31,9 +31,9 @@ distinct species.
 \item\code{Animate}
 }
 \author{
-Matt castle
+Matt Castle
 
-Maintainer:  <mattcastle@cefas.co.uk>
+Maintainer: Julia Blanchard <julia.blanchard@utas.edu.au>
 }
 \references{
 ~~ Literature or other references for background information ~~

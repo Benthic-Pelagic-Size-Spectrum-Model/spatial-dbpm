@@ -47,7 +47,7 @@
 </OBJECT>
 <LI> <OBJECT type="text/sitemap">
 <param name="Name" value="dbpmr">
-<param name="Local" value="SizeSpectra-package.html">
+<param name="Local" value="dbpmr-package.html">
 </OBJECT>
 <LI> <OBJECT type="text/sitemap">
 <param name="Name" value="SizeSpectrum">
@@ -84,7 +84,7 @@
 </OBJECT>
 <LI> <OBJECT type="text/sitemap">
 <param name="Name" value="Marine Size-Spectra Package ">
-<param name="Local" value="SizeSpectra-package.html">
+<param name="Local" value="dbpmr-package.html">
 </OBJECT>
 <LI> <OBJECT type="text/sitemap">
 <param name="Name" value="Run Setup Function">

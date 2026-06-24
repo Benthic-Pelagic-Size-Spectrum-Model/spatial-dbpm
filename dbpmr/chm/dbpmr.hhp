@@ -1,8 +1,8 @@
 [OPTIONS]
 Auto Index=Yes
-Contents file=SizeSpectra.toc
+Contents file=dbpmr.toc
 Compatibility=1.1 or later
-Compiled file=SizeSpectra.chm
+Compiled file=dbpmr.chm
 Default topic=00Index.html
 Display compile progress=No
 Full-text search=Yes
@@ -20,5 +20,5 @@ Setup.Grid.html
 Setup.Initial.html
 Setup.Run.html
 Setup.Species.html
-SizeSpectra-package.html
+dbpmr-package.html
 SizeSpectrum.html
