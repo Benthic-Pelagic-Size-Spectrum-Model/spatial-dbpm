@@ -1,2 +1,1 @@
-useDynLib(SizeSpectra, .registration = FALSE)
 exportPattern("^[[:alpha:]]+")
