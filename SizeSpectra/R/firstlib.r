@@ -1,8 +1,8 @@
 .First.lib <- function(lib,pkg)
 {
   # Load the dll file #
-  library.dynam("SizeSpectra",pkg,lib)
-  cat("SizeSpectra 0.1-1 loaded\n")
+  library.dynam("dbpmr",pkg,lib)
+  cat("dbpmr 0.1-1 loaded\n")
 
   # Declare the class structures to be used #
   setClass("run.params",representation(filename="character",

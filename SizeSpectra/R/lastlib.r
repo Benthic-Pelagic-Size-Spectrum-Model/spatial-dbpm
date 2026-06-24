@@ -21,7 +21,7 @@
   removeClass("detritus.results")
   removeClass("timestep.data")
   
-  library.dynam.unload("SizeSpectra",libpath)
-  cat("SizeSpectra 0.1-1 unloaded\n")
+  library.dynam.unload("dbpmr",libpath)
+  cat("dbpmr 0.1-1 unloaded\n")
   
 }
