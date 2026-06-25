@@ -101,6 +101,40 @@ times, and `Average.Time(fish)` returns the time-averaged spectrum.
 See the function help (`?Setup.Run`, `?Setup.Pelagic`, `?SizeSpectrum`,
 `?Read.In`, `?Plot.Spectrum`) for the full set of parameters.
 
+## Customising the grid
+
+`Setup.Grid()` has sensible defaults; for a simple run you usually only set how
+long to run and how often to save output:
+
+```r
+grid <- Setup.Grid(run,
+  mstep    = 0.2,     # mass: computation step (log body mass)
+  moutstep = 1,       # mass: output step (must be a multiple of mstep)
+  tmax     = 20,      # time: run length (years)
+  tstep    = 1/365,   # time: integration step (daily)
+  toutstep = 73/365   # time: output step (must be a multiple of tstep)
+)
+```
+
+The mass range (`mmin`, `mmax`) is widened automatically to cover the species
+you define, so you rarely set it. For a `spatial_dim = 0` run the spatial
+arguments are ignored (x and y collapse to a single cell).
+
+**The rule that trips people up:** the *output* steps must be exact whole-number
+multiples of the *computation* steps, or `SizeSpectrum()` errors. With the
+default daily `tstep = 1/365`:
+
+| Desired output | `toutstep` | whole steps? |
+|---|---|---|
+| every ~73 days (default) | `73/365` | 73 ✓ |
+| weekly | `7/365` | 7 ✓ |
+| ~monthly | `30/365` | 30 ✓ |
+| annual | `1` | 365 ✓ |
+| calendar-monthly | `1/12` | 30.4 ✗ (errors) |
+
+The same applies to `moutstep`/`mstep`, and to `xoutstep`/`xstep` and
+`youtstep`/`ystep` for spatial (`spatial_dim = 1` or `2`) runs.
+
 ## Development
 
 ```r
