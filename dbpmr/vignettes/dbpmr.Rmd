@@ -42,7 +42,7 @@ log-mass and time discretisation.
 ```{r run-grid}
 run  <- Setup.Run("MyRun", no_pelagic = 1, no_benthic = 1,
                   spatial_dim = 0, coupled_flag = TRUE, diff_method = 1)
-grid <- Setup.Grid(run, tmax = 10)   # integrate for 10 years
+grid <- Setup.Grid(run, tmax = 20)   # integrate for 20 years
 
 run
 ```
@@ -85,33 +85,56 @@ invisible(capture.output(
 ## 4. Read the results back
 
 `Read.In()` reads one component's output and returns a results object whose
-class depends on the component type.
+class depends on the component type. Here we read both the pelagic and the
+benthic results.
 
 ```{r read}
-fish <- Read.In("MyRun", "fish")
+fish    <- Read.In("MyRun", "fish")
+benthos <- Read.In("MyRun", "benthos")
 class(fish)
 ```
 
-## 5. Plot the size spectrum
+## 5. Plot the coupled size spectrum
 
-`Extract.Time()` pulls the spectrum at a single output time, and
-`Plot.Spectrum()` plots it (here, log abundance against log body mass at the end
-of the run).
+`Extract.Time()` pulls the spectrum at a single output time. `Plot.Spectrum()`
+opens the plot and `Points.Spectrum()` adds a second spectrum on the same axes,
+so we can show the pelagic and benthic spectra together at the end of the run.
+The benthos sit at smaller body sizes than the fish.
 
 ```{r spectrum}
-final <- Extract.Time(fish, time = max(fish@trange))
-Plot.Spectrum(final, type = "l",
+fish_final    <- Extract.Time(fish,    time = max(fish@trange))
+benthos_final <- Extract.Time(benthos, time = max(benthos@trange))
+
+Plot.Spectrum(fish_final, type = "l", col = "steelblue", lwd = 2,
+              ylim = c(-25, 2),
               xlab = "log body mass", ylab = "log abundance",
-              main = "Pelagic size spectrum (final time step)")
+              main = "Coupled size spectrum (final time step)")
+Points.Spectrum(benthos_final, col = "darkorange", pch = 20)
+legend("topright", legend = c("pelagic (fish)", "benthic"),
+       col = c("steelblue", "darkorange"),
+       lty = c(1, NA), pch = c(NA, 20), lwd = c(2, NA), bty = "n")
 ```
 
-We can also look at how total pelagic biomass changes through time, using the
-summary values stored on the results object:
+We can also track how the total biomass of each component changes through time,
+using the summary values stored on the results objects. Plotting on a
+logarithmic y-axis keeps the early transient from dominating the view: the
+benthic biomass settles to a steady state within a few years, while the pelagic
+biomass declines and roughly levels off.
 
 ```{r biomass}
-plot(fish@trange, fish@biomass, type = "l",
-     xlab = "Time (years)", ylab = "Pelagic biomass")
+plot(fish@trange, fish@biomass, type = "l", col = "steelblue", lwd = 2,
+     log = "y", ylim = range(c(fish@biomass, benthos@biomass)),
+     xlab = "Time (years)", ylab = "Biomass (log scale)",
+     main = "Biomass through time")
+lines(benthos@trange, benthos@biomass, col = "darkorange", lwd = 2)
+legend("right", legend = c("pelagic (fish)", "benthic"),
+       col = c("steelblue", "darkorange"), lwd = 2, bty = "n")
 ```
+
+This minimal default configuration is illustrative rather than tuned: the
+populations are not started from a steady state, so the pelagic spectrum decays
+over the run. Realistic applications set initial conditions, reproduction and
+fishing inputs (next section) and choose parameters that give a stable spectrum.
 
 ## Where to go next
 
