@@ -1,7 +1,3 @@
-.onLoad <- function(libname, pkgname) {
-  library.dynam("dbpmr", pkgname, libname)
-}
-
 .onAttach <- function(libname, pkgname) {
   packageStartupMessage("dbpmr loaded")
 }
