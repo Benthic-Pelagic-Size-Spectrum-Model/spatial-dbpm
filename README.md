@@ -15,8 +15,8 @@ The R package lives in the [`dbpmr/`](dbpmr) directory.
 
 ## Installation
 
-A C toolchain is required to compile the simulation engine (Rtools on Windows,
-Xcode command-line tools on macOS, or `r-base-dev` on Linux).
+Installing from source compiles the bundled C engine, so a C toolchain is
+required (see [System requirements](#system-requirements) below).
 
 From a local clone, install the package sub-directory:
 
@@ -39,6 +39,23 @@ or, with the working directory at the repository root, during development:
 ```r
 devtools::install("dbpmr")
 ```
+
+### System requirements
+
+`dbpmr` contains C code (the simulation engine in `src/`) that is compiled when
+the package is installed from source, so you need a **C toolchain**. This is
+only needed to *compile* the package — not to *use* an already-installed build.
+
+| OS | Install | How |
+|---|---|---|
+| Windows | Rtools (matching your R version) | [CRAN Rtools](https://cran.r-project.org/bin/windows/Rtools/) |
+| macOS | Xcode command-line tools | `xcode-select --install` |
+| Linux (Debian/Ubuntu) | `r-base-dev` | `sudo apt-get install r-base-dev` |
+
+If installation fails with an error such as `compilation failed`,
+`make: command not found`, or a missing compiler, the toolchain is not yet
+installed. Most users who have previously installed any R package containing
+C/C++/Fortran code already have it.
 
 ## A simple example
 
