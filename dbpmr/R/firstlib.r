@@ -1,9 +1,10 @@
-.First.lib <- function(lib,pkg)
-{
-  # Load the dll file #
-  library.dynam("dbpmr",pkg,lib)
-  cat("dbpmr 0.1-1 loaded\n")
+.onLoad <- function(libname, pkgname) {
+  library.dynam("dbpmr", pkgname, libname)
+}
 
+.onAttach <- function(libname, pkgname) {
+  packageStartupMessage("dbpmr loaded")
+}
   # Declare the class structures to be used #
   setClass("run.params",representation(filename="character",
                                        no_pelagic="integer", no_benthic="integer",
@@ -140,5 +141,3 @@
                                       row.names="Value"))),quote=F,print.gap=4)
             }
   )
-
-}
