@@ -1,1 +1,5 @@
+import(methods)
+importFrom(utils, read.csv, write.table)
+importFrom(graphics, persp, points)
+
 exportPattern("^[[:alpha:]]+")
