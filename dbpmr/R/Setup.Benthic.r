@@ -28,6 +28,10 @@
 #'   directory). Required.
 #'
 #' @return A [benthic.params] object.
+#' @note `rep_method = 1` requires a reproduction time-series input file (see
+#'   [Setup.Rep()]). These input data must be supplied by the user and are
+#'   **not** provided with the package; without the file [SizeSpectrum()] stops
+#'   with an error. The other methods (`0`, `2`, `3`) need no input file.
 #' @seealso [Setup.Pelagic()], [Setup.Detritus()]
 #' @export
 Setup.Benthic<-function(run.in, mmin=-17, mmat=-16, mmax=9, A=64, alpha=0.75, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-0.75, K_det=0.2, R_det=0.2, Ex_det=0.2, pref_det=1, rep_method=2, initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE, filename){

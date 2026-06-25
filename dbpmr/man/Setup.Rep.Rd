@@ -28,6 +28,12 @@ or benthic species whose \code{rep_method} is \code{1}. The values may be suppli
 function of time/space or read from a CSV data file. Exactly one of \code{func} or
 \code{dataname} must be given.
 }
+\note{
+This function is only needed for species with \code{rep_method = 1}, which
+require a reproduction time series. The package does not ship these input
+data; the user must generate them here (from \code{func} or \code{dataname}) before
+calling \code{\link[=SizeSpectrum]{SizeSpectrum()}}.
+}
 \seealso{
 \code{\link[=Setup.ts]{Setup.ts()}}, \code{\link[=Setup.fishing]{Setup.fishing()}}
 }

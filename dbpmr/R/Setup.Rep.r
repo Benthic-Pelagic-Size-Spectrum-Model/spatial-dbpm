@@ -14,6 +14,10 @@
 #'
 #' @return Invisibly `NULL`; called for the side effect of writing the input
 #'   file under the run's `Input` directory.
+#' @note This function is only needed for species with `rep_method = 1`, which
+#'   require a reproduction time series. The package does not ship these input
+#'   data; the user must generate them here (from `func` or `dataname`) before
+#'   calling [SizeSpectrum()].
 #' @seealso [Setup.ts()], [Setup.fishing()]
 #' @export
 `Setup.Rep`<-

@@ -40,6 +40,10 @@
 #'   directory). Required.
 #'
 #' @return A [pelagic.params] object.
+#' @note `rep_method = 1` requires a reproduction time-series input file (see
+#'   [Setup.Rep()]). These input data must be supplied by the user and are
+#'   **not** provided with the package; without the file [SizeSpectrum()] stops
+#'   with an error. The other methods (`0`, `2`, `3`) need no input file.
 #' @seealso [Setup.Benthic()], [Setup.Rep()], [Setup.fishing()]
 #' @export
 Setup.Pelagic<-function(run.in, mmin=-14, mmat=7, mmax=14, A=640, alpha=0.82, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-1, K_pla, R_pla, Ex_pla, K_pel=0.2, R_pel=0.2, Ex_pel=0.3, K_ben=0.1, R_ben=0.2, Ex_ben=0.4, pref_pla=1, pref_pel=1, pref_ben=1, q_0=log(100), sig=log(10), trunc=2, prey=0, pred=0, comp=0.1, gamma_prey=0.33, gamma_pred=0.33, gamma_comp=0.75, rep_method=2, initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE, filename){

@@ -59,6 +59,10 @@ input files. Other options are a fixed recruitment (`0`), a prescribed
 reproduction time series read from a file (`1`, prepared with `Setup.Rep()`),
 and reproduction proportional to mature biomass (`3`); see `?Setup.Pelagic`.
 
+> **Note:** `rep_method = 1` requires a reproduction time-series input file.
+> These data are **not** provided with the package and must be supplied by the
+> user (via `Setup.Rep()`); otherwise `SizeSpectrum()` stops with an error.
+
 ```{r species}
 plankton <- Setup.Plankton(run, filename = "plankton")
 pelagic  <- Setup.Pelagic(run,  filename = "fish")

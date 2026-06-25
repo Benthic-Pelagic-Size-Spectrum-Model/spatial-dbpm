@@ -74,6 +74,12 @@ A \link{benthic.params} object.
 Builds a \link{benthic.params} object and creates the species output directory
 under the run directory.
 }
+\note{
+\code{rep_method = 1} requires a reproduction time-series input file (see
+\code{\link[=Setup.Rep]{Setup.Rep()}}). These input data must be supplied by the user and are
+\strong{not} provided with the package; without the file \code{\link[=SizeSpectrum]{SizeSpectrum()}} stops
+with an error. The other methods (\code{0}, \code{2}, \code{3}) need no input file.
+}
 \seealso{
 \code{\link[=Setup.Pelagic]{Setup.Pelagic()}}, \code{\link[=Setup.Detritus]{Setup.Detritus()}}
 }
