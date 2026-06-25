@@ -3,3 +3,18 @@ importFrom(utils, read.csv, write.table)
 importFrom(graphics, persp, points)
 
 exportPattern("^[[:alpha:]]+")
+exportClasses(
+  "run.params",
+  "grid.params",
+  "plankton.params",
+  "pelagic.params",
+  "benthic.params",
+  "detritus.params",
+  "plankton.results",
+  "pelagic.results",
+  "benthic.results",
+  "detritus.results",
+  "singlefile.results",
+  "timestep.data"
+)
+exportMethods("show")
