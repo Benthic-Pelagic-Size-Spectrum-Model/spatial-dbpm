@@ -5,9 +5,11 @@
 couples a pelagic predator size spectrum to a benthic detritivore spectrum and a
 detritus pool, and integrates them forward in time using a C simulation engine.
 
-The model implemented here is based on the size-spectrum models described in
-Blanchard et al. (2009, 2011) and the spatial extension of Castle et al. (2011)
-— see [References](#references).
+The model implemented here is based on the coupled size-spectrum models
+described in Blanchard et al. (2009, 2011) and the spatial extension of
+Castle et al. (2011). Note that the spatial movement (behavioural and passive
+transport) of Castle et al. applies to the **pelagic** size spectrum only —
+benthic organisms are treated as sedentary. See [References](#references).
 
 The R package lives in the [`dbpmr/`](dbpmr) directory.
 
@@ -103,6 +105,7 @@ size-spectrum model described in:
   behavioural movement and passive transport on individual growth and community
   size structure in marine ecosystems. *Advances in Ecological Research*,
   **45**, 41–66. <https://doi.org/10.1016/B978-0-12-386475-8.00002-2>
+  (spatial movement of the pelagic size spectrum)
 
 Run `citation("dbpmr")` for these references in BibTeX form.
 
