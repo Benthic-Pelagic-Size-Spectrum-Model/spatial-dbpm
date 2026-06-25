@@ -2,9 +2,10 @@ Package: dbpmr
 Type: Package
 Title: Produces Dynamic Pelagic and Benthic Size Spectra for Marine Ecosystems
 Version: 1.0
-Date: 2007-07-11
+Date: 2026-06-25
 Author: Julia Blanchard & Matthew Castle
 Maintainer: Julia Blanchard <julia.blanchard@utas.edu.au>
-Depends: methods
-Description: More about what it does (maybe more than one line)
-License: What license is it under?
+Depends: methods, utils, graphics
+Description: R implementation of the Dynamic Benthic Pelagic Model (DBPM)
+    with spatial size-spectrum capabilities for marine ecosystems.
+License: GPL-3
