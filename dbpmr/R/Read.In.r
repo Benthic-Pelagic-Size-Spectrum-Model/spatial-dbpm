@@ -224,7 +224,7 @@ Read.In<-function(run,species,filename){
         #Fishing out
         ans@fishbio<-temp[,9]
         #Reproduction
-        ans@reproduction<-temp[,10]
+        ans@eggs<-temp[,10]
         
       #Pelagic params
       #Select parameter values for this particular species
@@ -369,7 +369,7 @@ Read.In<-function(run,species,filename){
         #Fishing out
         ans@fishbio<-temp[,7]
         #Reproduction
-        ans@reproduction<-temp[,8]
+        ans@eggs<-temp[,8]
         
       #Benthic params
       temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=(10+no_run+no_grid+no_plankton),header=FALSE,strip.white=TRUE,stringsAsFactors=FALSE)

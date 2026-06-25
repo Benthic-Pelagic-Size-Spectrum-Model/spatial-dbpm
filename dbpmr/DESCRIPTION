@@ -23,7 +23,10 @@ Imports:
     utils,
     graphics
 Suggests:
-    testthat (>= 3.0.0)
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
 Config/testthat/edition: 3
 Roxygen: list(markdown = TRUE, load = "source")
 RoxygenNote: 7.3.3

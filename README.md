@@ -58,10 +58,12 @@ run  <- Setup.Run("MyRun", no_pelagic = 1, no_benthic = 1,
                   spatial_dim = 0, coupled_flag = TRUE, diff_method = 1)
 grid <- Setup.Grid(run, tmax = 10)          # integrate for 10 years
 
-# 2. Configure the plankton resource, the two species and the detritus pool
+# 2. Configure the plankton resource, the two species and the detritus pool.
+#    rep_method = 0 uses a fixed reproduction amount (no input file needed);
+#    the default rep_method = 1 reads a reproduction time series (see ?Setup.Rep).
 plankton <- Setup.Plankton(run, filename = "plankton")
-pelagic  <- Setup.Pelagic(run,  filename = "fish")
-benthic  <- Setup.Benthic(run,  filename = "benthos")
+pelagic  <- Setup.Pelagic(run,  filename = "fish",    rep_method = 0)
+benthic  <- Setup.Benthic(run,  filename = "benthos", rep_method = 0)
 detritus <- Setup.Detritus(run, filename = "detritus")
 
 # 3. Run the simulation (calls the C engine; writes output under MyRun/)

@@ -1,0 +1,134 @@
+---
+title: "Getting started with dbpmr"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with dbpmr}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 6,
+  fig.height = 4.5
+)
+# The model writes output files to disk, so run all example chunks inside a
+# temporary directory rather than the user's working directory.
+knitr::opts_knit$set(root.dir = tempdir())
+```
+
+`dbpmr` implements the **Dynamic Benthic Pelagic Model (DBPM)**: a coupled,
+size-structured model that links a pelagic predator size spectrum to a benthic
+detritivore spectrum and a detritus pool, integrated forward in time by a C
+simulation engine. The model is based on Blanchard et al. (2009, 2011), with the
+spatial movement of the pelagic spectrum from Castle et al. (2011); see
+`citation("dbpmr")`.
+
+This vignette walks through a minimal, aspatial (0-D) run.
+
+```{r library}
+library(dbpmr)
+```
+
+## 1. Configure the run and the grid
+
+`Setup.Run()` defines the high-level structure of the simulation (how many
+species, whether benthic and pelagic are coupled, the spatial dimension) and
+creates an output directory named after the run. `Setup.Grid()` defines the
+log-mass and time discretisation.
+
+```{r run-grid}
+run  <- Setup.Run("MyRun", no_pelagic = 1, no_benthic = 1,
+                  spatial_dim = 0, coupled_flag = TRUE, diff_method = 1)
+grid <- Setup.Grid(run, tmax = 10)   # integrate for 10 years
+
+run
+```
+
+## 2. Configure the resource, species and detritus
+
+Each component is built with its own helper, which returns a parameter object
+and creates the component's output sub-directory. Here we use a single pelagic
+species and a single benthic species.
+
+`rep_method = 0` uses a **fixed** reproduction amount, so no external input file
+is required. (The default, `rep_method = 1`, reads a biomass-dependent
+reproduction time series prepared with `Setup.Rep()`.)
+
+```{r species}
+plankton <- Setup.Plankton(run, filename = "plankton")
+pelagic  <- Setup.Pelagic(run,  filename = "fish",     rep_method = 0)
+benthic  <- Setup.Benthic(run,  filename = "benthos",  rep_method = 0)
+detritus <- Setup.Detritus(run, filename = "detritus")
+```
+
+## 3. Run the simulation
+
+`SizeSpectrum()` assembles the parameters, calls the C engine and writes the
+output text files under `MyRun/`. It returns the paths needed to read the
+results back in. (The engine prints a progress counter, which we suppress here.)
+
+```{r run-model}
+invisible(capture.output(
+  files <- SizeSpectrum(run, grid, plankton, pelagic, benthic, detritus)
+))
+```
+
+## 4. Read the results back
+
+`Read.In()` reads one component's output and returns a results object whose
+class depends on the component type.
+
+```{r read}
+fish <- Read.In("MyRun", "fish")
+class(fish)
+```
+
+## 5. Plot the size spectrum
+
+`Extract.Time()` pulls the spectrum at a single output time, and
+`Plot.Spectrum()` plots it (here, log abundance against log body mass at the end
+of the run).
+
+```{r spectrum}
+final <- Extract.Time(fish, time = max(fish@trange))
+Plot.Spectrum(final, type = "l",
+              xlab = "log body mass", ylab = "log abundance",
+              main = "Pelagic size spectrum (final time step)")
+```
+
+We can also look at how total pelagic biomass changes through time, using the
+summary values stored on the results object:
+
+```{r biomass}
+plot(fish@trange, fish@biomass, type = "l",
+     xlab = "Time (years)", ylab = "Pelagic biomass")
+```
+
+## Where to go next
+
+- `Average.Time()` returns the spectrum averaged over a time window, and
+  `Animate()` steps through the output times.
+- `Setup.ts()`, `Setup.Rep()` and `Setup.fishing()` add initial conditions,
+  reproduction time series and fishing mortality.
+- Set `spatial_dim = 1` or `2` in `Setup.Run()` for spatial runs (pelagic
+  movement only).
+
+See the function help pages (e.g. `?Setup.Pelagic`, `?SizeSpectrum`) for the
+full set of parameters.
+
+## References
+
+- Blanchard, J.L., Jennings, S., Law, R., Castle, M.D., McCloghrie, P.,
+  Rochet, M.-J. & Benoît, E. (2009). How does abundance scale with body size in
+  coupled size-structured food webs? *Journal of Animal Ecology*, **78**(1),
+  270–280.
+- Blanchard, J.L., Law, R., Castle, M.D. & Jennings, S. (2011). Coupled energy
+  pathways and the resilience of size-structured food webs. *Theoretical
+  Ecology*, **4**(3), 289–300.
+- Castle, M.D., Blanchard, J.L. & Jennings, S. (2011). Predicted effects of
+  behavioural movement and passive transport on individual growth and community
+  size structure in marine ecosystems. *Advances in Ecological Research*,
+  **45**, 41–66.
