@@ -135,6 +135,28 @@ default daily `tstep = 1/365`:
 The same applies to `moutstep`/`mstep`, and to `xoutstep`/`xstep` and
 `youtstep`/`ystep` for spatial (`spatial_dim = 1` or `2`) runs.
 
+## Spatial runs and external data
+
+Spatial runs (`spatial_dim = 1` or `2`) use a **regular rectangular x/y grid**
+and plain-text inputs. The package does **not** read shapefiles, rasters or
+netCDF directly, and there is no land mask or environmental forcing of vital
+rates. You can still drive the spatial inputs (`Setup.ts()` for initial
+conditions / time series, `Setup.fishing()` for fishing) from such data by
+sampling it onto the model grid with R's geospatial packages (`terra`, `sf`,
+`ncdf4`). For example, a raster of fishing mortality:
+
+```r
+library(terra)
+Fmap <- rast("fishing_mortality.tif")               # in the model's x/y units
+Ffun <- function(m, t, x, y) terra::extract(Fmap, cbind(x, y))[1, 1]
+Setup.fishing(pelagic, run, grid, func = Ffun)
+```
+
+The model grid cells are `seq(xmin, xmax, xstep)` × `seq(ymin, ymax, ystep)`,
+and input rows are ordered time-outermost, then x, then y. The vignette
+(`vignette("dbpmr")`, section *Driving the model with spatial data*) has the
+full worked example, including netCDF time series and shapefiles.
+
 ## Development
 
 ```r

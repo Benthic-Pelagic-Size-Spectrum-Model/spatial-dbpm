@@ -186,6 +186,71 @@ fishing inputs (next section) and choose parameters that give a stable spectrum.
 See the function help pages (e.g. `?Setup.Pelagic`, `?SizeSpectrum`) for the
 full set of parameters.
 
+## Driving the model with spatial data
+
+For a spatial run (`spatial_dim = 1` or `2`) the model lives on a **regular
+rectangular x/y grid** and reads its inputs as plain text. It does **not** read
+shapefiles, rasters or netCDF directly, and it has no land mask or environmental
+forcing of vital rates. You can, however, use R's geospatial packages to sample
+such data onto the model grid and feed the inputs that *are* spatial: initial
+conditions / time series (`Setup.ts()`) and fishing mortality (`Setup.fishing()`).
+
+The grid cells are the Cartesian product of
+
+```r
+xs <- seq(grid@xmin, grid@xmax, grid@xstep)
+ys <- seq(grid@ymin, grid@ymax, grid@ystep)
+ts <- seq(0, grid@tmax, grid@tstep)
+```
+
+and the input files order rows as **time outermost, then x, then y innermost** —
+i.e. the row index is `(t-1) * length(xs) * length(ys) + (x-1) * length(ys) + y`.
+
+**Example — spatially varying fishing mortality from a raster.** `Setup.fishing()`
+accepts a function of `(m, t, x, y)`, evaluated over the whole grid, so you can
+wrap a raster lookup directly (here fishing is size- and time-independent, so `m`
+and `t` are ignored):
+
+```r
+library(terra)
+
+# Your raster, already in the model's coordinate units/extent (project first if
+# it is in lon/lat — the model uses plain numeric x/y, not geographic coords).
+Fmap <- rast("fishing_mortality.tif")
+
+Ffun <- function(m, t, x, y) terra::extract(Fmap, cbind(x, y))[1, 1]
+
+run     <- Setup.Run("Spatial", 1, 0, spatial_dim = 2, TRUE, 1)
+grid    <- Setup.Grid(run, xmax = 1000, xstep = 50, ymax = 1000, ystep = 50, tmax = 10)
+pelagic <- Setup.Pelagic(run, filename = "fish", fishing_flag = TRUE)
+
+Setup.fishing(pelagic, run, grid, func = Ffun)   # writes Spatial/Input/fish_fishing_ts.txt
+```
+
+For a **netCDF** time series (one layer per time slice), pick the layer for the
+model time `t`:
+
+```r
+Fnc <- rast("fishing_mortality.nc")              # terra reads netCDF too
+layer_for <- function(t) ...                     # map model time t -> layer index
+Ffun <- function(m, t, x, y) terra::extract(Fnc[[layer_for(t)]], cbind(x, y))[1, 1]
+```
+
+If you would rather build the field explicitly (and faster than a per-cell
+lookup), construct the matrix in the row order above and pass it to
+`Setup.ts(..., mat = ...)` for a spatio-temporal initial/time-series input:
+
+```r
+cells <- expand.grid(y = ys, x = xs, t = ts)     # y fastest, then x, then t
+# fill one column per mass bin of the species; rows follow `cells`
+```
+
+**Shapefiles** (`sf`) work the same way once converted to per-cell values — e.g.
+point-in-polygon to tag each grid cell with a region, or `terra::rasterize()` a
+polygon attribute onto `xs`/`ys`. Remember the model still simulates *every*
+rectangular cell: a shapefile lets you assign spatially varying values, but it
+cannot mask out land or give the domain an irregular shape.
+
 ## References
 
 - Blanchard, J.L., Jennings, S., Law, R., Castle, M.D., McCloghrie, P.,
