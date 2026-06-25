@@ -1,2 +1,0 @@
-.onUnload <- function(libpath) {
-}
