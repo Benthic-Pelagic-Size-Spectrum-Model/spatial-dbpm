@@ -1,3 +1,19 @@
+#' Add a size spectrum to an existing plot
+#'
+#' Like [Plot.Spectrum()] but adds points to the current plot via
+#' [graphics::points()] rather than opening a new device. Only the
+#' lower-dimensional (line/transect) cases are supported.
+#'
+#' @param timestep A [timestep.data] object (e.g. from [Extract.Time()] or
+#'   [Average.Time()]).
+#' @param mass.lim Mass limits: a length-two range, or a single mass value.
+#' @param x.lim,y.lim Spatial limits: a length-two range, or a single value.
+#'   Used only for spatial runs.
+#' @param ... Further graphical parameters passed to [graphics::points()].
+#'
+#' @return Invisibly `NULL`; called for its plotting side effect.
+#' @seealso [Plot.Spectrum()]
+#' @export
 Points.Spectrum<-function(timestep, mass.lim, x.lim, y.lim,...){
 
   #Define entire mass spectrum

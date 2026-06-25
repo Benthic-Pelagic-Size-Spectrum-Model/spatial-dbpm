@@ -1,3 +1,22 @@
+#' Calculate the rate of change of the size spectrum
+#'
+#' Experimental helper that runs a single time step from a supplied state vector
+#' `uvals` and returns the finite-difference time derivative. It assumes a
+#' two-pelagic-species configuration and relies on several sizing objects being
+#' present in the calling environment; it is retained for internal/experimental
+#' use.
+#'
+#' @param run.in A [run.params] object.
+#' @param grid.in A [grid.params] object.
+#' @param plankton.in A [plankton.params] object.
+#' @param pelagic.in A list of two [pelagic.params] objects.
+#' @param benthic.in Optional list of [benthic.params] objects.
+#' @param detritus.in Optional [detritus.params] object.
+#' @param uvals Numeric state vector of abundances.
+#'
+#' @return Numeric vector of time derivatives.
+#' @keywords internal
+#' @export
 'Calculate.du'<-function(run.in,grid.in,plankton.in,pelagic.in,benthic.in,detritus.in,uvals){
 
   grid.in@tmax<-grid.in@tstep
@@ -12,41 +31,41 @@
     benthic.in<-c(benthic.in)  
   }
 
-  dir.create(run.in@filename,showWarnings=F)
-    dir.create(paste(run.in@filename,"/",plankton.in@filename,sep=""),showWarnings=F)
+  dir.create(run.in@filename,showWarnings=FALSE)
+    dir.create(paste(run.in@filename,"/",plankton.in@filename,sep=""),showWarnings=FALSE)
    for(i in 1:length(pelagic.in)){
-    dir.create(paste(run.in@filename,"/",pelagic.in[[i]]@filename,sep=""),showWarnings=F)
+    dir.create(paste(run.in@filename,"/",pelagic.in[[i]]@filename,sep=""),showWarnings=FALSE)
   }
   if(!missing(benthic.in)){
     for(i in 1:length(benthic.in)){
-      dir.create(paste(run.in@filename,"/",benthic.in[[i]]@filename,sep=""),showWarnings=F)
+      dir.create(paste(run.in@filename,"/",benthic.in[[i]]@filename,sep=""),showWarnings=FALSE)
     }
-    dir.create(paste(run.in@filename,"/",detritus.in@filename,sep=""),showWarnings=F)
+    dir.create(paste(run.in@filename,"/",detritus.in@filename,sep=""),showWarnings=FALSE)
   }
-  dir.create(paste(run.in@filename,"/Input",sep=""),showWarnings=F)
+  dir.create(paste(run.in@filename,"/Input",sep=""),showWarnings=FALSE)
 
-  plankton.in@initial_flag=F
-  
+  plankton.in@initial_flag=FALSE
+
   for(i in 1:length(pelagic.in)){
-    pelagic.in[[i]]@initial_flag=T
-  }
-  
-  if(!missing(benthic.in)){
-    for(i in 1:length(benthic.in)){
-      benthic.in[[i]]@initial_flag=T
-    }
-    detritus.in@initial_flag=T
+    pelagic.in[[i]]@initial_flag=TRUE
   }
 
-  plankton.in@ts_flag=F
+  if(!missing(benthic.in)){
+    for(i in 1:length(benthic.in)){
+      benthic.in[[i]]@initial_flag=TRUE
+    }
+    detritus.in@initial_flag=TRUE
+  }
+
+  plankton.in@ts_flag=FALSE
   for(i in 1:length(pelagic.in)){
-    pelagic.in[[i]]@ts_flag=F
+    pelagic.in[[i]]@ts_flag=FALSE
   }
   if(!missing(benthic.in)){
     for(i in 1:length(benthic.in)){
-      benthic.in[[i]]@ts_flag=F
+      benthic.in[[i]]@ts_flag=FALSE
     }
-    detritus.in@ts_flag=F
+    detritus.in@ts_flag=FALSE
   }
 
 

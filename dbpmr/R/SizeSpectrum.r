@@ -1,3 +1,23 @@
+#' Run the dynamic size-spectrum simulation
+#'
+#' Validates the supplied parameter objects, assembles the transfer vectors and
+#' calls the underlying C engine to integrate the dynamic benthic-pelagic size
+#' spectrum. Output text files are written under the run directory.
+#'
+#' @param run.in A [run.params] object.
+#' @param grid.in A [grid.params] object.
+#' @param plankton.in A [plankton.params] object.
+#' @param pelagic.in A [pelagic.params] object, or a list of them (one per
+#'   pelagic species).
+#' @param benthic.in A [benthic.params] object, or a list of them. Optional when
+#'   `run.in@no_benthic == 0`.
+#' @param detritus.in A [detritus.params] object. Optional when
+#'   `run.in@no_benthic == 0`.
+#'
+#' @return A character vector of the paths and species filenames produced by the
+#'   run, suitable for passing to [Read.In()].
+#' @seealso [Read.In()], [Setup.Run()]
+#' @export
 `SizeSpectrum` <-
 function(run.in, grid.in, plankton.in, pelagic.in, benthic.in, detritus.in){
 
@@ -265,7 +285,7 @@ tiny<-1e-7
 # Call C code #
 #-------------#
 
-  x<-.C('SizeSpectrum', run.params, grid.params, pla.params, pel.params, ben.params, det.params, names.params, flags.params, PACKAGE='dbpmr')
+  x<-.C(C_SizeSpectrum, run.params, grid.params, pla.params, pel.params, ben.params, det.params, names.params, flags.params)
 
 #-----------------------------------------------------------------#
 # Return filenames of files that have been produced by the C code #

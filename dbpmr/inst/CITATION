@@ -1,0 +1,57 @@
+citHeader(
+  "dbpmr implements and extends the dynamic, coupled benthic-pelagic ",
+  "size-spectrum model (DBPM). When using the package, please cite the ",
+  "papers describing the underlying model:"
+)
+
+bibentry(
+  bibtype = "Article",
+  title   = "How does abundance scale with body size in coupled size-structured food webs?",
+  author  = c(
+    person("Julia L.", "Blanchard"),
+    person("Simon", "Jennings"),
+    person("Richard", "Law"),
+    person("Matthew D.", "Castle"),
+    person("Paul", "McCloghrie"),
+    person(c("Marie-Joelle"), "Rochet"),
+    person("Eric", "Benoit")
+  ),
+  journal = "Journal of Animal Ecology",
+  year    = "2009",
+  volume  = "78",
+  number  = "1",
+  pages   = "270--280",
+  doi     = "10.1111/j.1365-2656.2008.01466.x"
+)
+
+bibentry(
+  bibtype = "Article",
+  title   = "Coupled energy pathways and the resilience of size-structured food webs",
+  author  = c(
+    person("Julia L.", "Blanchard"),
+    person("Richard", "Law"),
+    person("Matthew D.", "Castle"),
+    person("Simon", "Jennings")
+  ),
+  journal = "Theoretical Ecology",
+  year    = "2011",
+  volume  = "4",
+  number  = "3",
+  pages   = "289--300",
+  doi     = "10.1007/s12080-010-0078-9"
+)
+
+bibentry(
+  bibtype   = "Article",
+  title     = "Predicted effects of behavioural movement and passive transport on individual growth and community size structure in marine ecosystems",
+  author    = c(
+    person("Matthew D.", "Castle"),
+    person("Julia L.", "Blanchard"),
+    person("Simon", "Jennings")
+  ),
+  journal   = "Advances in Ecological Research",
+  year      = "2011",
+  volume    = "45",
+  pages     = "41--66",
+  doi       = "10.1016/B978-0-12-386475-8.00002-2"
+)

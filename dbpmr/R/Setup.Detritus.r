@@ -1,4 +1,19 @@
-Setup.Detritus<-function(run.in, w_0=0.6, initial_flag=F, ts_flag=F, filename){
+#' Set up the detritus pool
+#'
+#' Builds a [detritus.params] object and creates the detritus output directory
+#' under the run directory.
+#'
+#' @param run.in A [run.params] object.
+#' @param w_0 Initial detritus biomass.
+#' @param initial_flag,ts_flag Logical flags indicating whether
+#'   initial-condition and time-series input files are supplied.
+#' @param filename Character string naming the detritus pool (and its output
+#'   directory). Required.
+#'
+#' @return A [detritus.params] object.
+#' @seealso [Setup.Benthic()]
+#' @export
+Setup.Detritus<-function(run.in, w_0=0.6, initial_flag=FALSE, ts_flag=FALSE, filename){
 
   #Assign Default Values
   if(missing(filename)) stop("A Species filename must be given")
@@ -17,7 +32,7 @@ Setup.Detritus<-function(run.in, w_0=0.6, initial_flag=F, ts_flag=F, filename){
   species@initial_flag<-as.logical(initial_flag)
   species@ts_flag<-as.logical(ts_flag)
 
-  dir.create(paste(run.in@filename,"/",filename,sep=""),showWarnings=F)
+  dir.create(paste(run.in@filename,"/",filename,sep=""),showWarnings=FALSE)
 
   return(species)
 

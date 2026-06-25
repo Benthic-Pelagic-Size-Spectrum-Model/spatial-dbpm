@@ -1,3 +1,21 @@
+#' Set up the run-level parameters
+#'
+#' Validates the high-level settings for a DBPM run, creates the output
+#' directory named `filename`, and returns a [run.params] object.
+#'
+#' @param filename Character string naming the run; also used as the output
+#'   directory that is created.
+#' @param no_pelagic Number of pelagic species (positive integer).
+#' @param no_benthic Number of benthic species (non-negative integer).
+#' @param spatial_dim Spatial dimension of the run: `0`, `1` or `2`.
+#' @param coupled_flag Logical; whether the benthic and pelagic systems are
+#'   coupled.
+#' @param diff_method Integer flagging the differencing/integration method
+#'   (`0`, `1` or `2`).
+#'
+#' @return A [run.params] object.
+#' @seealso [Setup.Grid()], [SizeSpectrum()]
+#' @export
 Setup.Run<-function(filename, no_pelagic, no_benthic, spatial_dim, coupled_flag, diff_method){
 
 #---------------------#

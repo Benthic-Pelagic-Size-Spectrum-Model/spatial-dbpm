@@ -1,10 +1,30 @@
+#' Write initial-condition or time-series input for a species
+#'
+#' Generates the `_ts.txt` input file used to seed a species' initial size
+#' spectrum (when `ts_flag` is `FALSE`) or its full time series (when `ts_flag`
+#' is `TRUE`). The values may be supplied as a function of mass/time/space, as
+#' an R matrix, or read from a CSV data file. Exactly one of `func`, `mat` or
+#' `dataname` must be given.
+#'
+#' @param species A species parameter object (e.g. from [Setup.Pelagic()]).
+#' @param run.in A [run.params] object.
+#' @param grid.in A [grid.params] object.
+#' @param func A function of `(m, t, x, y)` returning abundances.
+#' @param mat A matrix of size-spectrum values.
+#' @param dataname Path to a CSV file whose first line is the file type
+#'   (`"intercept"`, `"interslope"` or `"spectrum"`).
+#'
+#' @return Invisibly `NULL`; called for the side effect of writing the input
+#'   file under the run's `Input` directory.
+#' @seealso [Setup.Rep()], [Setup.fishing()]
+#' @export
 `Setup.ts`<-
 function(species, run.in, grid.in, func, mat, dataname){
 #func is a function of the variables m, x, y, and z
 #dataname is a filename containing either a vector of intercepts, two vectors of intercepts and slopes or a full matrix of ts values
 
 #Input checking stuff
-if(species@initial_flag==F && species@ts_flag==F) stop ("Starting values or time series are not to be specified since initial_flag==F or ts_flag=F")
+if(species@initial_flag==FALSE && species@ts_flag==FALSE) stop ("Starting values or time series are not to be specified since initial_flag==F or ts_flag=F")
 
 if(missing(func) && missing(dataname) && missing(mat)) stop("A function, matrix or data for the initial step or time series must be given")
 if(!missing(func) && !missing(dataname) && !missing(mat)) stop("Only one of a function or data for the initial step step or time series must be given")
@@ -38,7 +58,7 @@ t<-length(trange)
 
 #Calculation of initial values /time series using function
 if(!missing(func)){
-  if(species@ts_flag==T){
+  if(species@ts_flag==TRUE){
     temp<-matrix(0,nrow=(t*x*y),ncol=m)
     for(j in 1:t){
       for(k in 1:x){
@@ -50,7 +70,7 @@ if(!missing(func)){
       }
     }
   }
-  if(species@ts_flag==F){
+  if(species@ts_flag==FALSE){
   temp<-matrix(0,nrow=(x*y),ncol=m)
     for(k in 1:x){
       for(l in 1:y){
@@ -69,11 +89,11 @@ if(!missing(dataname)){
   if(!is.character(dataname)) stop("Please enter a valid filename string")
   if(!file.exists(dataname)) stop("Filename specified does not exist")
 
-  filetype<-as.character(read.csv(dataname,nrows=1,header=F,strip.white=T,stringsAsFactors=F))
-  dat<-read.csv(dataname,skip=1,header=F,strip.white=T,stringsAsFactors=F)
+  filetype<-as.character(read.csv(dataname,nrows=1,header=FALSE,strip.white=TRUE,stringsAsFactors=FALSE))
+  dat<-read.csv(dataname,skip=1,header=FALSE,strip.white=TRUE,stringsAsFactors=FALSE)
   dat<-as.matrix(dat)
   
-  if(species@ts_flag==T){
+  if(species@ts_flag==TRUE){
     #Check whether the number of lines in data file matches the number of time steps previously specified
     if(length(dat[,1])!=t*x*y){
       stop("Incorrect number of rows in data file")
@@ -113,7 +133,7 @@ if(!missing(dataname)){
     
   }
   
-  if(species@ts_flag==F){
+  if(species@ts_flag==FALSE){
     if(length(dat[,1])<1) stop("Insufficient number of rows in data file")
     temp<-matrix(0,nrow=(x*y),ncol=m)
     
@@ -155,7 +175,7 @@ if(!missing(mat)){
 #read in matrix containing full size spectra
   if(!is.matrix(mat)) stop("mat must be of type matrix")
   
-  if(species@ts_flag==T){
+  if(species@ts_flag==TRUE){
     #Check whether the number of lines in the matrix matches the number of time steps previously specified
     if(length(mat[,1])!=t*x*y){
       stop("Incorrect number of rows in data file")
@@ -178,7 +198,7 @@ if(!missing(mat)){
     
   }
   
-  if(species@ts_flag==F){
+  if(species@ts_flag==FALSE){
     if(length(mat[,1])<1) stop("Insufficient number of rows in data file")
     
     #Setup input storage array
@@ -199,9 +219,9 @@ if(!missing(mat)){
 }
 
 #Create Input directory
-dir.create(paste(run.in@filename,"/Input",sep=""),showWarnings=F)
+dir.create(paste(run.in@filename,"/Input",sep=""),showWarnings=FALSE)
 
 #Write full table all at once
-write.table(temp,paste(run.in@filename,"/input/",filename,sep=""),append=F,row.names=F,col.names=F,sep=",")
+write.table(temp,paste(run.in@filename,"/input/",filename,sep=""),append=FALSE,row.names=FALSE,col.names=FALSE,sep=",")
 
 }
