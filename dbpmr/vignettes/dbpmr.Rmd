@@ -53,14 +53,16 @@ Each component is built with its own helper, which returns a parameter object
 and creates the component's output sub-directory. Here we use a single pelagic
 species and a single benthic species.
 
-`rep_method = 0` uses a **fixed** reproduction amount, so no external input file
-is required. (The default, `rep_method = 1`, reads a biomass-dependent
-reproduction time series prepared with `Setup.Rep()`.)
+By default (`rep_method = 2`), reproduction is allocated from the assimilated
+energy of mature individuals, so the run is self-contained and needs no extra
+input files. Other options are a fixed recruitment (`0`), a prescribed
+reproduction time series read from a file (`1`, prepared with `Setup.Rep()`),
+and reproduction proportional to mature biomass (`3`); see `?Setup.Pelagic`.
 
 ```{r species}
 plankton <- Setup.Plankton(run, filename = "plankton")
-pelagic  <- Setup.Pelagic(run,  filename = "fish",     rep_method = 0)
-benthic  <- Setup.Benthic(run,  filename = "benthos",  rep_method = 0)
+pelagic  <- Setup.Pelagic(run,  filename = "fish")
+benthic  <- Setup.Benthic(run,  filename = "benthos")
 detritus <- Setup.Detritus(run, filename = "detritus")
 ```
 

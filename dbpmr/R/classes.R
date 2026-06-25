@@ -76,7 +76,7 @@
                                   pref_pla=1, pref_pel=1, pref_ben=1,
                                   q_0=2*log(10), sig=1*log(10),
                                   prey=0, pred=0, comp=0.1, gamma_prey=0.33, gamma_pred=0.33, gamma_comp=0.75,
-                                  rep_method=as.integer(1), initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE))
+                                  rep_method=as.integer(2), initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE))
 
 #' Benthic species parameters
 #'
@@ -97,7 +97,7 @@
                                   A=64, alpha=0.75, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-0.75,
                                   K_det=0.2, R_det=0.2, Ex_det=0.2,
                                   pref_det=1,
-                                  rep_method=as.integer(1), initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE))
+                                  rep_method=as.integer(2), initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE))
 
 #' Detritus parameters
 #'

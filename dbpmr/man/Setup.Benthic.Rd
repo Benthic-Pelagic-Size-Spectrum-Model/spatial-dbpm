@@ -21,7 +21,7 @@ Setup.Benthic(
   R_det = 0.2,
   Ex_det = 0.2,
   pref_det = 1,
-  rep_method = 1,
+  rep_method = 2,
   initial_flag = FALSE,
   ts_flag = FALSE,
   fishing_flag = FALSE,
@@ -54,8 +54,12 @@ for feeding on detritus.}
 
 \item{pref_det}{Feeding preference for detritus.}
 
-\item{rep_method}{Integer reproduction method (\code{0}-\code{3}); \code{1} reads a
-reproduction time series (see \code{\link[=Setup.Rep]{Setup.Rep()}}).}
+\item{rep_method}{Integer reproduction method. \code{0} = fixed recruitment held
+at the initial density of the smallest size class; \code{1} = a prescribed
+reproduction time series read from an input file (see \code{\link[=Setup.Rep]{Setup.Rep()}});
+\code{2} (the default) = reproduction allocated from assimilated energy of
+mature individuals; \code{3} = reproduction proportional to mature biomass.
+Methods \code{0}, \code{2} and \code{3} require no input file.}
 
 \item{initial_flag, ts_flag, fishing_flag}{Logical flags indicating whether
 initial-condition, time-series and fishing input files are supplied.}

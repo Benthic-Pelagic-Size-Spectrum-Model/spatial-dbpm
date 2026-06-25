@@ -28,8 +28,12 @@
 #'   competition effects.
 #' @param gamma_prey,gamma_pred,gamma_comp Mass-scaling exponents for the prey,
 #'   predator and competition effects.
-#' @param rep_method Integer reproduction method (`0`-`3`); `1` reads a
-#'   reproduction time series (see [Setup.Rep()]).
+#' @param rep_method Integer reproduction method. `0` = fixed recruitment held
+#'   at the initial density of the smallest size class; `1` = a prescribed
+#'   reproduction time series read from an input file (see [Setup.Rep()]);
+#'   `2` (the default) = reproduction allocated from assimilated energy of
+#'   mature individuals; `3` = reproduction proportional to mature biomass.
+#'   Methods `0`, `2` and `3` require no input file.
 #' @param initial_flag,ts_flag,fishing_flag Logical flags indicating whether
 #'   initial-condition, time-series and fishing input files are supplied.
 #' @param filename Character string naming the species (and its output
@@ -38,7 +42,7 @@
 #' @return A [pelagic.params] object.
 #' @seealso [Setup.Benthic()], [Setup.Rep()], [Setup.fishing()]
 #' @export
-Setup.Pelagic<-function(run.in, mmin=-14, mmat=7, mmax=14, A=640, alpha=0.82, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-1, K_pla, R_pla, Ex_pla, K_pel=0.2, R_pel=0.2, Ex_pel=0.3, K_ben=0.1, R_ben=0.2, Ex_ben=0.4, pref_pla=1, pref_pel=1, pref_ben=1, q_0=log(100), sig=log(10), trunc=2, prey=0, pred=0, comp=0.1, gamma_prey=0.33, gamma_pred=0.33, gamma_comp=0.75, rep_method=1, initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE, filename){
+Setup.Pelagic<-function(run.in, mmin=-14, mmat=7, mmax=14, A=640, alpha=0.82, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-1, K_pla, R_pla, Ex_pla, K_pel=0.2, R_pel=0.2, Ex_pel=0.3, K_ben=0.1, R_ben=0.2, Ex_ben=0.4, pref_pla=1, pref_pel=1, pref_ben=1, q_0=log(100), sig=log(10), trunc=2, prey=0, pred=0, comp=0.1, gamma_prey=0.33, gamma_pred=0.33, gamma_comp=0.75, rep_method=2, initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE, filename){
 
   #Assign Default Values
   if( missing(filename) ) stop("A Species filename must be given")

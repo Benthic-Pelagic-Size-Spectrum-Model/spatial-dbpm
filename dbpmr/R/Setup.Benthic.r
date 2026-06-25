@@ -16,8 +16,12 @@
 #' @param K_det,R_det,Ex_det Assimilation, retention and excretion coefficients
 #'   for feeding on detritus.
 #' @param pref_det Feeding preference for detritus.
-#' @param rep_method Integer reproduction method (`0`-`3`); `1` reads a
-#'   reproduction time series (see [Setup.Rep()]).
+#' @param rep_method Integer reproduction method. `0` = fixed recruitment held
+#'   at the initial density of the smallest size class; `1` = a prescribed
+#'   reproduction time series read from an input file (see [Setup.Rep()]);
+#'   `2` (the default) = reproduction allocated from assimilated energy of
+#'   mature individuals; `3` = reproduction proportional to mature biomass.
+#'   Methods `0`, `2` and `3` require no input file.
 #' @param initial_flag,ts_flag,fishing_flag Logical flags indicating whether
 #'   initial-condition, time-series and fishing input files are supplied.
 #' @param filename Character string naming the species (and its output
@@ -26,7 +30,7 @@
 #' @return A [benthic.params] object.
 #' @seealso [Setup.Pelagic()], [Setup.Detritus()]
 #' @export
-Setup.Benthic<-function(run.in, mmin=-17, mmat=-16, mmax=9, A=64, alpha=0.75, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-0.75, K_det=0.2, R_det=0.2, Ex_det=0.2, pref_det=1, rep_method=1, initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE, filename){
+Setup.Benthic<-function(run.in, mmin=-17, mmat=-16, mmax=9, A=64, alpha=0.75, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-0.75, K_det=0.2, R_det=0.2, Ex_det=0.2, pref_det=1, rep_method=2, initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE, filename){
 
   #Assign Default Values
   if( missing(filename) ) stop("A Species filename must be given")
