@@ -36,7 +36,7 @@ yrange<-seq(grid.in@ymin,grid.in@ymax,grid.in@ystep)
 trange<-seq(0,grid.in@tmax,grid.in@tstep)
 
 #Species stuff
-filename<-paste(run.in@filename,"_",species@filename,"_fishing_ts.txt",sep="")
+filename<-paste(species@filename,"_fishing_ts.txt",sep="")
 spmin<-species@mmin
 spmax<-species@mmax
 
@@ -85,6 +85,6 @@ if(missing(func)){
 dir.create(paste(run.in@filename,"/Input",sep=""),showWarnings=FALSE)
 
 #Write full table all at once
-write.table(temp,paste(run.in@filename,"/input/",filename,sep=""),append=FALSE,row.names=FALSE,col.names=FALSE,sep=",")
+write.table(temp,file.path(run.in@filename,"Input",filename),append=FALSE,row.names=FALSE,col.names=FALSE,sep=",")
 
 }

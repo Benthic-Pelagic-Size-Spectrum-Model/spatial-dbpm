@@ -222,6 +222,6 @@ if(!missing(mat)){
 dir.create(paste(run.in@filename,"/Input",sep=""),showWarnings=FALSE)
 
 #Write full table all at once
-write.table(temp,paste(run.in@filename,"/input/",filename,sep=""),append=FALSE,row.names=FALSE,col.names=FALSE,sep=",")
+write.table(temp,file.path(run.in@filename,"Input",filename),append=FALSE,row.names=FALSE,col.names=FALSE,sep=",")
 
 }
