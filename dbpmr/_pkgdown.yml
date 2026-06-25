@@ -1,0 +1,32 @@
+url: https://github.com/Benthic-Pelagic-Size-Spectrum-Model/spatial-dbpm
+
+template:
+  bootstrap: 5
+
+reference:
+  - title: Configure a run
+    contents:
+      - Setup.Run
+      - Setup.Grid
+      - Setup.Plankton
+      - Setup.Pelagic
+      - Setup.Benthic
+      - Setup.Detritus
+  - title: Inputs (initial conditions, time series, fishing, reproduction)
+    contents:
+      - Setup.ts
+      - Setup.Rep
+      - Setup.fishing
+  - title: Run the model
+    contents:
+      - SizeSpectrum
+  - title: Read and analyse output
+    contents:
+      - Read.In
+      - Extract.Time
+      - Average.Time
+  - title: Plotting
+    contents:
+      - Plot.Spectrum
+      - Points.Spectrum
+      - Animate

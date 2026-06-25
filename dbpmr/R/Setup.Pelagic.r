@@ -1,4 +1,44 @@
-Setup.Pelagic<-function(run.in, mmin=-14, mmat=7, mmax=14, A=640, alpha=0.82, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-1, K_pla, R_pla, Ex_pla, K_pel=0.2, R_pel=0.2, Ex_pel=0.3, K_ben=0.1, R_ben=0.2, Ex_ben=0.4, pref_pla=1, pref_pel=1, pref_ben=1, q_0=log(100), sig=log(10), trunc=2, prey=0, pred=0, comp=0.1, gamma_prey=0.33, gamma_pred=0.33, gamma_comp=0.75, rep_method=1, initial_flag=F, ts_flag=F, fishing_flag=F, filename){
+#' Set up a pelagic species
+#'
+#' Builds a [pelagic.params] object and creates the species output directory
+#' under the run directory.
+#'
+#' @param run.in A [run.params] object.
+#' @param mmin,mmat,mmax Minimum, maturation and maximum log-mass of the species.
+#' @param A Search/encounter rate constant.
+#' @param alpha Search-rate mass-scaling exponent.
+#' @param mu_0 Background mortality constant.
+#' @param beta Mortality mass-scaling exponent.
+#' @param mu_s Senescence mortality constant.
+#' @param epsilon Assimilation/growth efficiency.
+#' @param u_0 Abundance constant.
+#' @param lambda Spectrum slope.
+#' @param K_pla,R_pla,Ex_pla Assimilation, retention and excretion coefficients
+#'   for feeding on plankton. Default to the corresponding pelagic values.
+#' @param K_pel,R_pel,Ex_pel Assimilation, retention and excretion coefficients
+#'   for feeding on other pelagics.
+#' @param K_ben,R_ben,Ex_ben Assimilation, retention and excretion coefficients
+#'   for feeding on benthos.
+#' @param pref_pla,pref_pel,pref_ben Feeding preferences for plankton, pelagic
+#'   and benthic prey.
+#' @param q_0 Preferred predator-prey log-mass ratio.
+#' @param sig Width of the feeding kernel.
+#' @param trunc Truncation of the feeding kernel.
+#' @param prey,pred,comp Density-dependence coefficients for prey, predator and
+#'   competition effects.
+#' @param gamma_prey,gamma_pred,gamma_comp Mass-scaling exponents for the prey,
+#'   predator and competition effects.
+#' @param rep_method Integer reproduction method (`0`-`3`); `1` reads a
+#'   reproduction time series (see [Setup.Rep()]).
+#' @param initial_flag,ts_flag,fishing_flag Logical flags indicating whether
+#'   initial-condition, time-series and fishing input files are supplied.
+#' @param filename Character string naming the species (and its output
+#'   directory). Required.
+#'
+#' @return A [pelagic.params] object.
+#' @seealso [Setup.Benthic()], [Setup.Rep()], [Setup.fishing()]
+#' @export
+Setup.Pelagic<-function(run.in, mmin=-14, mmat=7, mmax=14, A=640, alpha=0.82, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-1, K_pla, R_pla, Ex_pla, K_pel=0.2, R_pel=0.2, Ex_pel=0.3, K_ben=0.1, R_ben=0.2, Ex_ben=0.4, pref_pla=1, pref_pel=1, pref_ben=1, q_0=log(100), sig=log(10), trunc=2, prey=0, pred=0, comp=0.1, gamma_prey=0.33, gamma_pred=0.33, gamma_comp=0.75, rep_method=1, initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE, filename){
 
   #Assign Default Values
   if( missing(filename) ) stop("A Species filename must be given")
@@ -62,7 +102,7 @@ Setup.Pelagic<-function(run.in, mmin=-14, mmat=7, mmax=14, A=640, alpha=0.82, mu
   species@ts_flag<-as.logical(ts_flag)
   species@fishing_flag<-as.logical(fishing_flag)
 
-  dir.create(paste(run.in@filename,"/",filename,sep=""),showWarnings=F)
+  dir.create(paste(run.in@filename,"/",filename,sep=""),showWarnings=FALSE)
   
   return(species)
 

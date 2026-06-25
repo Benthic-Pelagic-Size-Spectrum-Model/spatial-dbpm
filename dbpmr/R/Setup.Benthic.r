@@ -1,4 +1,32 @@
-Setup.Benthic<-function(run.in, mmin=-17, mmat=-16, mmax=9, A=64, alpha=0.75, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-0.75, K_det=0.2, R_det=0.2, Ex_det=0.2, pref_det=1, rep_method=1, initial_flag=F, ts_flag=F, fishing_flag=F, filename){
+#' Set up a benthic species
+#'
+#' Builds a [benthic.params] object and creates the species output directory
+#' under the run directory.
+#'
+#' @param run.in A [run.params] object.
+#' @param mmin,mmat,mmax Minimum, maturation and maximum log-mass of the species.
+#' @param A Search/encounter rate constant.
+#' @param alpha Search-rate mass-scaling exponent.
+#' @param mu_0 Background mortality constant.
+#' @param beta Mortality mass-scaling exponent.
+#' @param mu_s Senescence mortality constant.
+#' @param epsilon Assimilation/growth efficiency.
+#' @param u_0 Abundance constant.
+#' @param lambda Spectrum slope.
+#' @param K_det,R_det,Ex_det Assimilation, retention and excretion coefficients
+#'   for feeding on detritus.
+#' @param pref_det Feeding preference for detritus.
+#' @param rep_method Integer reproduction method (`0`-`3`); `1` reads a
+#'   reproduction time series (see [Setup.Rep()]).
+#' @param initial_flag,ts_flag,fishing_flag Logical flags indicating whether
+#'   initial-condition, time-series and fishing input files are supplied.
+#' @param filename Character string naming the species (and its output
+#'   directory). Required.
+#'
+#' @return A [benthic.params] object.
+#' @seealso [Setup.Pelagic()], [Setup.Detritus()]
+#' @export
+Setup.Benthic<-function(run.in, mmin=-17, mmat=-16, mmax=9, A=64, alpha=0.75, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-0.75, K_det=0.2, R_det=0.2, Ex_det=0.2, pref_det=1, rep_method=1, initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE, filename){
 
   #Assign Default Values
   if( missing(filename) ) stop("A Species filename must be given")
@@ -38,7 +66,7 @@ Setup.Benthic<-function(run.in, mmin=-17, mmat=-16, mmax=9, A=64, alpha=0.75, mu
   species@ts_flag<-as.logical(ts_flag)
   species@fishing_flag<-as.logical(fishing_flag)
 
-  dir.create(paste(run.in@filename,"/",filename,sep=""),showWarnings=F)
+  dir.create(paste(run.in@filename,"/",filename,sep=""),showWarnings=FALSE)
   
   return(species)
 }

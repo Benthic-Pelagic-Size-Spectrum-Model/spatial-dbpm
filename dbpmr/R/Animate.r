@@ -1,3 +1,20 @@
+#' Animate the size spectrum over time
+#'
+#' Plays a sequence of [Plot.Spectrum()] frames, one per output time, between the
+#' requested time limits.
+#'
+#' @param species A species results object (e.g. from [Read.In()]).
+#' @param time.lim Numeric vector of length one or two giving the start (and
+#'   optionally end) time. Defaults to the full time range.
+#' @param time.step Time increment between frames; must be a multiple of the
+#'   output time step. Defaults to the output time step.
+#' @param mass.lim,x.lim,y.lim Plotting limits passed through to
+#'   [Plot.Spectrum()].
+#' @param ... Further graphical parameters passed to [Plot.Spectrum()].
+#'
+#' @return Invisibly `NULL`; called for its plotting side effect.
+#' @seealso [Plot.Spectrum()], [Extract.Time()]
+#' @export
 Animate<-function(species,time.lim,time.step,mass.lim,x.lim,y.lim,...){
 
   dt<-species@grid@toutstep

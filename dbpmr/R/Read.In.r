@@ -1,3 +1,19 @@
+#' Read simulation output back into R
+#'
+#' Reads the text files written by [SizeSpectrum()] for one species (or a single
+#' named file) and returns the corresponding results object. The class of the
+#' returned object depends on the species type found in the run's summary file.
+#'
+#' @param run Path to the run directory.
+#' @param species Name of the species sub-directory to read.
+#' @param filename Optional name of a single output file within `species`. When
+#'   given, a [singlefile.results] object is returned instead of a species
+#'   results object.
+#'
+#' @return One of [plankton.results], [pelagic.results], [benthic.results],
+#'   [detritus.results] or [singlefile.results].
+#' @seealso [SizeSpectrum()], [Extract.Time()]
+#' @export
 Read.In<-function(run,species,filename){
 #This is a generic function for reading in all files
 
@@ -17,7 +33,7 @@ Read.In<-function(run,species,filename){
   
   #Get length of data section (i.e. number of timesteps)
   if(!file.exists(paste(run,"/parameters.txt",sep=""))) stop("Parameters file does not exist")
-  temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=(6+no_run+7),nrows=3,header=F,strip.white=T,stringsAsFactors=F)
+  temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=(6+no_run+7),nrows=3,header=FALSE,strip.white=TRUE,stringsAsFactors=FALSE)
   toutmin<-temp[temp=='toutmin',2]
   toutmax<-temp[temp=='toutmax',2]
   toutstep<-temp[temp=='toutstep',2]
@@ -29,7 +45,7 @@ Read.In<-function(run,species,filename){
 
     #Check what type of species it is
     if(!file.exists(paste(run,"/",species,"/summary.txt",sep=""))) stop("Species summary file does not exist")
-    temp<-read.csv(paste(run,"/",species,"/summary.txt",sep=""),sep=':',skip=1,nrows=1,header=F,strip.white=T,stringsAsFactors=F)
+    temp<-read.csv(paste(run,"/",species,"/summary.txt",sep=""),sep=':',skip=1,nrows=1,header=FALSE,strip.white=TRUE,stringsAsFactors=FALSE)
     speciestype<-temp[temp=='speciestype',2]
     
     
@@ -42,7 +58,7 @@ Read.In<-function(run,species,filename){
       
       
       #Run params
-      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=4,nrows=no_run,header=F,strip.white=T,stringsAsFactors=F)
+      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=4,nrows=no_run,header=FALSE,strip.white=TRUE,stringsAsFactors=FALSE)
       
       ans@run@filename<-temp[temp=='filename',2]
       ans@run@no_pelagic<-as.integer(temp[temp=='no_pelagic',2])
@@ -52,7 +68,7 @@ Read.In<-function(run,species,filename){
       ans@run@diff_method<-as.integer(temp[temp=='diff_method',2])
       
       #Grid params
-      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=(6+no_run),nrows=no_grid,header=F,strip.white=T,stringsAsFactors=F)
+      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=(6+no_run),nrows=no_grid,header=FALSE,strip.white=TRUE,stringsAsFactors=FALSE)
       
       ans@grid@mmin<-temp[temp=='mmin',2]
       ans@grid@mmax<-temp[temp=='mmax',2]
@@ -84,21 +100,21 @@ Read.In<-function(run,species,filename){
     
       #U values
       if(!file.exists(paste(run,"/",species,"/results.txt",sep=""))) stop("Species results file does not exist")
-      ans@uvals<-read.csv(paste(run,"/",species,"/results.txt",sep=""),skip=4,nrows=no_data,header=T,stringsAsFactors=F)
+      ans@uvals<-read.csv(paste(run,"/",species,"/results.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
       names(ans@uvals)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
       
       #Final U values
-      ans@finaluvals<-read.csv(paste(run,"/",species,"/results.txt",sep=""),skip=(7+no_data),nrows=1,header=T,stringsAsFactors=F)
+      ans@finaluvals<-read.csv(paste(run,"/",species,"/results.txt",sep=""),skip=(7+no_data),nrows=1,header=TRUE,stringsAsFactors=FALSE)
       names(ans@finaluvals)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@mstep)))
       
       #Summary file values
-      temp<-read.csv(paste(run,"/",species,"/summary.txt",sep=""),skip=4,nrows=no_data,header=T,stringsAsFactors=F)
+      temp<-read.csv(paste(run,"/",species,"/summary.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
         #Biomass
         ans@biomass<-temp[,4]
     
       #Plankton params
       #Can do this because there can only ever be one plankton system
-      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=(8+no_run+no_grid),nrows=no_plankton,header=F,strip.white=T,stringsAsFactors=F)
+      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=(8+no_run+no_grid),nrows=no_plankton,header=FALSE,strip.white=TRUE,stringsAsFactors=FALSE)
     
       ans@species@filename<-temp[temp=='filename',2]
       ans@species@speciestype<-temp[temp=='speciestype',2]
@@ -124,7 +140,7 @@ Read.In<-function(run,species,filename){
       
       
       #Run params
-      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=4,nrows=no_run,header=F,strip.white=T,stringsAsFactors=F)
+      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=4,nrows=no_run,header=FALSE,strip.white=TRUE,stringsAsFactors=FALSE)
       
       ans@run@filename<-temp[temp=='filename',2]
       ans@run@no_pelagic<-as.integer(temp[temp=='no_pelagic',2])
@@ -134,7 +150,7 @@ Read.In<-function(run,species,filename){
       ans@run@diff_method<-as.integer(temp[temp=='diff_method',2])
       
       #Grid params
-      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=(6+no_run),nrows=no_grid,header=F,strip.white=T,stringsAsFactors=F)
+      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=(6+no_run),nrows=no_grid,header=FALSE,strip.white=TRUE,stringsAsFactors=FALSE)
       
       ans@grid@mmin<-temp[temp=='mmin',2]
       ans@grid@mmax<-temp[temp=='mmax',2]
@@ -166,35 +182,35 @@ Read.In<-function(run,species,filename){
   
       #U values 
       if(!file.exists(paste(run,"/",species,"/results.txt",sep=""))) stop("Species results file does not exist")
-      ans@uvals<-read.csv(paste(run,"/",species,"/results.txt",sep=""),skip=4,nrows=no_data,header=T,stringsAsFactors=F)
+      ans@uvals<-read.csv(paste(run,"/",species,"/results.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
       names(ans@uvals)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
                                                                                    
       #Final U values
-      ans@finaluvals<-read.csv(paste(run,"/",species,"/results.txt",sep=""),skip=(7+no_data),nrows=1,header=T,stringsAsFactors=F)
+      ans@finaluvals<-read.csv(paste(run,"/",species,"/results.txt",sep=""),skip=(7+no_data),nrows=1,header=TRUE,stringsAsFactors=FALSE)
       names(ans@finaluvals)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@mstep)))
       
       #Growth values
       if(!file.exists(paste(run,"/",species,"/growth.txt",sep=""))) stop("Species growth file does not exist")
-      ans@growth<-read.csv(paste(run,"/",species,"/growth.txt",sep=""),skip=4,nrows=no_data,header=T,stringsAsFactors=F)
+      ans@growth<-read.csv(paste(run,"/",species,"/growth.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
       names(ans@growth)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
       
       #Mortality values
       if(!file.exists(paste(run,"/",species,"/mortality.txt",sep=""))) stop("Species mortality file does not exist")
-      ans@mortality<-read.csv(paste(run,"/",species,"/mortality.txt",sep=""),skip=4,nrows=no_data,header=T,stringsAsFactors=F)
+      ans@mortality<-read.csv(paste(run,"/",species,"/mortality.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
       names(ans@mortality)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
       
       #Predation values
  #     if(!file.exists(paste(run,"/",species,"/predation.txt",sep=""))) stop("Species predation file does not exist")
- #     ans@predation<-read.csv(paste(run,"/",species,"/predation.txt",sep=""),skip=4,nrows=no_data,header=T,stringsAsFactors=F)
+ #     ans@predation<-read.csv(paste(run,"/",species,"/predation.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
  #     names(ans@predation)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
       
       #Fishing values
       if(!file.exists(paste(run,"/",species,"/fishing.txt",sep=""))) stop("Species fishing file does not exist")
-      ans@fishing<-read.csv(paste(run,"/",species,"/fishing.txt",sep=""),skip=4,nrows=no_data,header=T,stringsAsFactors=F)
+      ans@fishing<-read.csv(paste(run,"/",species,"/fishing.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
       names(ans@fishing)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
       
       #Summary file values
-      temp<-read.csv(paste(run,"/",species,"/summary.txt",sep=""),skip=4,nrows=no_data,header=T,stringsAsFactors=F)
+      temp<-read.csv(paste(run,"/",species,"/summary.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
         #Biomass
         ans@biomass<-temp[,4]
         #Plankton in
@@ -212,7 +228,7 @@ Read.In<-function(run,species,filename){
         
       #Pelagic params
       #Select parameter values for this particular species
-      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=(10+no_run+no_grid+no_plankton),header=F,strip.white=T,stringsAsFactors=F)
+      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=(10+no_run+no_grid+no_plankton),header=FALSE,strip.white=TRUE,stringsAsFactors=FALSE)
       i<-which(temp[,2]==species)
       temp<-temp[i:(i+no_pelagic-1),]
 
@@ -273,7 +289,7 @@ Read.In<-function(run,species,filename){
       
       
       #Run params
-      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=4,nrows=no_run,header=F,strip.white=T,stringsAsFactors=F)
+      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=4,nrows=no_run,header=FALSE,strip.white=TRUE,stringsAsFactors=FALSE)
       
       ans@run@filename<-temp[temp=='filename',2]
       ans@run@no_pelagic<-as.integer(temp[temp=='no_pelagic',2])
@@ -283,7 +299,7 @@ Read.In<-function(run,species,filename){
       ans@run@diff_method<-as.integer(temp[temp=='diff_method',2])
       
       #Grid params
-      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=(6+no_run),nrows=no_grid,header=F,strip.white=T,stringsAsFactors=F)
+      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=(6+no_run),nrows=no_grid,header=FALSE,strip.white=TRUE,stringsAsFactors=FALSE)
       
       ans@grid@mmin<-temp[temp=='mmin',2]
       ans@grid@mmax<-temp[temp=='mmax',2]
@@ -315,35 +331,35 @@ Read.In<-function(run,species,filename){
       
       #U values 
       if(!file.exists(paste(run,"/",species,"/results.txt",sep=""))) stop("Species results file does not exist")
-      ans@uvals<-read.csv(paste(run,"/",species,"/results.txt",sep=""),skip=4,nrows=no_data,header=T,stringsAsFactors=F)
+      ans@uvals<-read.csv(paste(run,"/",species,"/results.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
       names(ans@uvals)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
       
       #Final U values
-      ans@finaluvals<-read.csv(paste(run,"/",species,"/results.txt",sep=""),skip=(7+no_data),nrows=1,header=T,stringsAsFactors=F)
+      ans@finaluvals<-read.csv(paste(run,"/",species,"/results.txt",sep=""),skip=(7+no_data),nrows=1,header=TRUE,stringsAsFactors=FALSE)
       names(ans@finaluvals)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@mstep)))
       
       #Growth values
       if(!file.exists(paste(run,"/",species,"/growth.txt",sep=""))) stop("Species growth file does not exist")
-      ans@growth<-read.csv(paste(run,"/",species,"/growth.txt",sep=""),skip=4,nrows=no_data,header=T,stringsAsFactors=F)
+      ans@growth<-read.csv(paste(run,"/",species,"/growth.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
       names(ans@growth)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
       
       #Mortality values
       if(!file.exists(paste(run,"/",species,"/mortality.txt",sep=""))) stop("Species mortality file does not exist")
-      ans@mortality<-read.csv(paste(run,"/",species,"/mortality.txt",sep=""),skip=4,nrows=no_data,header=T,stringsAsFactors=F)
+      ans@mortality<-read.csv(paste(run,"/",species,"/mortality.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
       names(ans@mortality)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
       
       #Predation values
       if(!file.exists(paste(run,"/",species,"/predation.txt",sep=""))) stop("Species predation file does not exist")
-      ans@predation<-read.csv(paste(run,"/",species,"/predation.txt",sep=""),skip=4,nrows=no_data,header=T,stringsAsFactors=F)
+      ans@predation<-read.csv(paste(run,"/",species,"/predation.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
       names(ans@predation)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
       
       #Fishing values
       if(!file.exists(paste(run,"/",species,"/fishing.txt",sep=""))) stop("Species fishing file does not exist")
-      ans@fishing<-read.csv(paste(run,"/",species,"/fishing.txt",sep=""),skip=4,nrows=no_data,header=T,stringsAsFactors=F)
+      ans@fishing<-read.csv(paste(run,"/",species,"/fishing.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
       names(ans@fishing)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
       
       #Summary file values
-      temp<-read.csv(paste(run,"/",species,"/summary.txt",sep=""),skip=4,nrows=no_data,header=T,stringsAsFactors=F)
+      temp<-read.csv(paste(run,"/",species,"/summary.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
         #Biomass
         ans@biomass<-temp[,4]
         #Detritus in
@@ -356,7 +372,7 @@ Read.In<-function(run,species,filename){
         ans@reproduction<-temp[,8]
         
       #Benthic params
-      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=(10+no_run+no_grid+no_plankton),header=F,strip.white=T,stringsAsFactors=F)
+      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=(10+no_run+no_grid+no_plankton),header=FALSE,strip.white=TRUE,stringsAsFactors=FALSE)
       i<-which(temp[,2]==species)
       temp<-temp[i:(i+no_benthic-1),]
       
@@ -396,7 +412,7 @@ Read.In<-function(run,species,filename){
       ans<-new("detritus.results")
       
       #Run params
-      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=4,nrows=no_run,header=F,strip.white=T,stringsAsFactors=F)
+      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=4,nrows=no_run,header=FALSE,strip.white=TRUE,stringsAsFactors=FALSE)
       
       ans@run@filename<-temp[temp=='filename',2]
       ans@run@no_pelagic<-as.integer(temp[temp=='no_pelagic',2])
@@ -406,7 +422,7 @@ Read.In<-function(run,species,filename){
       ans@run@diff_method<-as.integer(temp[temp=='diff_method',2])
       
       #Grid params
-      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=(6+no_run),nrows=no_grid,header=F,strip.white=T,stringsAsFactors=F)
+      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=(6+no_run),nrows=no_grid,header=FALSE,strip.white=TRUE,stringsAsFactors=FALSE)
       
       ans@grid@mmin<-temp[temp=='mmin',2]
       ans@grid@mmax<-temp[temp=='mmax',2]
@@ -437,7 +453,7 @@ Read.In<-function(run,species,filename){
       ans@yrange<-seq(ans@grid@ymin,ans@grid@ymax,ans@grid@youtstep)
     
       #Summary file values              
-      temp<-read.csv(paste(run,"/",species,"/summary.txt",sep=""),skip=4,nrows=no_data,header=T,stringsAsFactors=F)
+      temp<-read.csv(paste(run,"/",species,"/summary.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
         #Biomass
         ans@biomass<-temp[,4]
         #Detritus in
@@ -446,7 +462,7 @@ Read.In<-function(run,species,filename){
         ans@detout<-temp[,6]
 
       #Detritus params
-      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=(10+no_run+no_grid+no_plankton),header=F,strip.white=T,stringsAsFactors=F)
+      temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=(10+no_run+no_grid+no_plankton),header=FALSE,strip.white=TRUE,stringsAsFactors=FALSE)
       i<-which(temp[,2]==species)
       temp<-temp[i:(i+no_detritus-1),]
 
@@ -470,7 +486,7 @@ Read.In<-function(run,species,filename){
     ans=new("singlefile.results")
     
     #Run params
-    temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=4,nrows=no_run,header=F,strip.white=T,stringsAsFactors=F)
+    temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=4,nrows=no_run,header=FALSE,strip.white=TRUE,stringsAsFactors=FALSE)
       
     ans@run@filename<-temp[temp=='filename',2]
     ans@run@no_pelagic<-as.integer(temp[temp=='no_pelagic',2])
@@ -480,7 +496,7 @@ Read.In<-function(run,species,filename){
     ans@run@diff_method<-as.integer(temp[temp=='diff_method',2])
       
     #Grid params
-    temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=(6+no_run),nrows=no_grid,header=F,strip.white=T,stringsAsFactors=F)
+    temp<-read.csv(paste(run,"/parameters.txt",sep=""),sep=':',skip=(6+no_run),nrows=no_grid,header=FALSE,strip.white=TRUE,stringsAsFactors=FALSE)
       
     ans@grid@mmin<-temp[temp=='mmin',2]
     ans@grid@mmax<-temp[temp=='mmax',2]
@@ -511,13 +527,13 @@ Read.In<-function(run,species,filename){
     ans@yrange<-seq(ans@grid@ymin,ans@grid@ymax,ans@grid@youtstep)
     
     #Filetype
-    ans@filetype<-as.character(read.csv(paste(run,"/",species,"/",filename,sep=""),nrows=1,header=F,stringsAsFactors=F))
+    ans@filetype<-as.character(read.csv(paste(run,"/",species,"/",filename,sep=""),nrows=1,header=FALSE,stringsAsFactors=FALSE))
     
     #Speciestype
-    ans@speciestype<-as.character(read.csv(paste(run,"/",species,"/",filename,sep=""),skip=1,nrows=1,header=F,stringsAsFactors=F))
+    ans@speciestype<-as.character(read.csv(paste(run,"/",species,"/",filename,sep=""),skip=1,nrows=1,header=FALSE,stringsAsFactors=FALSE))
     
     #Data
-    ans@data<-read.csv(paste(run,"/",species,"/",filename,sep=""),skip=4,nrows=no_data,header=T,stringsAsFactors=F)
+    ans@data<-read.csv(paste(run,"/",species,"/",filename,sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
   }
    
   return(ans)

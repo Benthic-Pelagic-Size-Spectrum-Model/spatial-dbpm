@@ -1,3 +1,21 @@
+#' Plot a size spectrum
+#'
+#' Plots the (log) size spectrum held in a [timestep.data] object. Depending on
+#' the spatial dimension and which of the mass/space limits are given as ranges
+#' versus single values, this produces a line plot, a spatial transect or a
+#' perspective surface.
+#'
+#' @param timestep A [timestep.data] object (e.g. from [Extract.Time()] or
+#'   [Average.Time()]).
+#' @param mass.lim Mass limits: a length-two range, or a single mass value.
+#' @param x.lim,y.lim Spatial limits: a length-two range, or a single value.
+#'   Used only for spatial runs.
+#' @param ... Further graphical parameters passed to the underlying
+#'   [graphics::plot()] or [graphics::persp()] call.
+#'
+#' @return Invisibly `NULL`; called for its plotting side effect.
+#' @seealso [Points.Spectrum()], [Animate()]
+#' @export
 Plot.Spectrum<-function(timestep, mass.lim, x.lim, y.lim,...){
 
   #Define entire mass spectrum

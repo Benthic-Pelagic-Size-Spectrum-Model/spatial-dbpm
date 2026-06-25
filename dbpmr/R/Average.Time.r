@@ -1,3 +1,16 @@
+#' Average the size spectrum over a time window
+#'
+#' Averages the size spectrum of a species results object over a range of output
+#' times and returns the result as a [timestep.data] object.
+#'
+#' @param species A species results object (e.g. from [Read.In()]).
+#' @param time.lim Numeric vector of length one or two giving the start (and
+#'   optionally end) output time of the averaging window. Defaults to the full
+#'   time range.
+#'
+#' @return A [timestep.data] object holding the time-averaged spectrum.
+#' @seealso [Extract.Time()], [Plot.Spectrum()]
+#' @export
 Average.Time<-function(species,time.lim){
 
   dt<-species@grid@tout

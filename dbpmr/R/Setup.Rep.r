@@ -1,3 +1,21 @@
+#' Write reproduction input for a species
+#'
+#' Generates the `_rep_ts.txt` reproduction time-series input file for a pelagic
+#' or benthic species whose `rep_method` is `1`. The values may be supplied as a
+#' function of time/space or read from a CSV data file. Exactly one of `func` or
+#' `dataname` must be given.
+#'
+#' @param species A pelagic or benthic parameter object.
+#' @param run.in A [run.params] object.
+#' @param grid.in A [grid.params] object.
+#' @param func A function of `(t, x, y)` returning reproduction values.
+#' @param dataname Path to a CSV file of reproduction values (first line is the
+#'   file type).
+#'
+#' @return Invisibly `NULL`; called for the side effect of writing the input
+#'   file under the run's `Input` directory.
+#' @seealso [Setup.ts()], [Setup.fishing()]
+#' @export
 `Setup.Rep`<-
 function(species, run.in, grid.in, func, dataname){
 #func is a function of the variables m, x, y, and z
@@ -43,8 +61,8 @@ if(missing(func)){
   if(!file.exists(dataname)) stop("Filename specified does not exist")
 
   #Each csv file must contain a header row with 'reproduction'
-  filetype<-as.character(read.csv(dataname,nrows=1,header=F,strip.white=T,stringsAsFactors=F))
-  dat<-read.csv(dataname,skip=1,header=F,strip.white=T,stringsAsFactors=F)
+  filetype<-as.character(read.csv(dataname,nrows=1,header=FALSE,strip.white=TRUE,stringsAsFactors=FALSE))
+  dat<-read.csv(dataname,skip=1,header=FALSE,strip.white=TRUE,stringsAsFactors=FALSE)
   dat<-as.matrix(dat)
 
   #Check whether the number of lines in data file matches the number of time steps previously specified
@@ -57,9 +75,9 @@ if(missing(func)){
 }
 
 #Create Input directory
-dir.create(paste(run.in@filename,"/Input",sep=""),showWarnings=F)
+dir.create(paste(run.in@filename,"/Input",sep=""),showWarnings=FALSE)
 
 #Write full table all at once
-write.table(temp,paste(run.in@filename,"/input/",filename,sep=""),append=F,row.names=F,col.names=F,sep=",")
+write.table(temp,paste(run.in@filename,"/input/",filename,sep=""),append=FALSE,row.names=FALSE,col.names=FALSE,sep=",")
 
 }

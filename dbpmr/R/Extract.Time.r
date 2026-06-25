@@ -1,3 +1,15 @@
+#' Extract the size spectrum at a single time
+#'
+#' Pulls the size spectrum for one output time from a species results object and
+#' returns it as a [timestep.data] object ready for plotting.
+#'
+#' @param species A species results object (e.g. from [Read.In()]).
+#' @param time The output time to extract; must lie on the output grid.
+#' @param section Reserved for future use; currently ignored.
+#'
+#' @return A [timestep.data] object.
+#' @seealso [Average.Time()], [Plot.Spectrum()]
+#' @export
 Extract.Time<-function(species,time,section){
 
   tiny=1e-7

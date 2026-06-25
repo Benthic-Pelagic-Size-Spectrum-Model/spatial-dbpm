@@ -1,0 +1,20 @@
+# R build artifacts
+*.Rproj.user
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rcheck/
+*.tar.gz
+
+# Compiled native code
+*.o
+*.so
+*.dll
+*.a
+
+# pkgdown site
+docs/
+
+# macOS
+.DS_Store
