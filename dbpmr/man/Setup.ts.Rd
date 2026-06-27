@@ -15,7 +15,8 @@ Setup.ts(species, run.in, grid.in, func, mat, dataname)
 
 \item{func}{A function of \verb{(m, t, x, y)} returning abundances.}
 
-\item{mat}{A matrix of size-spectrum values.}
+\item{mat}{A matrix of size-spectrum values (rows = spatial/time cells,
+columns = the species' mass bins).}
 
 \item{dataname}{Path to a CSV file whose first line is the file type
 (\code{"intercept"}, \code{"interslope"} or \code{"spectrum"}).}
@@ -30,6 +31,14 @@ spectrum (when \code{ts_flag} is \code{FALSE}) or its full time series (when \co
 is \code{TRUE}). The values may be supplied as a function of mass/time/space, as
 an R matrix, or read from a CSV data file. Exactly one of \code{func}, \code{mat} or
 \code{dataname} must be given.
+}
+\details{
+For an initial condition (\code{ts_flag = FALSE}) the supplied \code{mat} /
+data may have either a single row, applied uniformly to every spatial cell,
+or one row per spatial cell (\code{x * y} rows) ordered with x outermost and y
+innermost (\code{row = (k - 1) * ny + l}). For a full time series
+(\code{ts_flag = TRUE}) it must have \code{t * x * y} rows in the same x/y order
+nested within time.
 }
 \seealso{
 \code{\link[=Setup.Rep]{Setup.Rep()}}, \code{\link[=Setup.fishing]{Setup.fishing()}}

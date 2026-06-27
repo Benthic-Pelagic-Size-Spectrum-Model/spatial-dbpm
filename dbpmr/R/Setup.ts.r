@@ -10,9 +10,17 @@
 #' @param run.in A [run.params] object.
 #' @param grid.in A [grid.params] object.
 #' @param func A function of `(m, t, x, y)` returning abundances.
-#' @param mat A matrix of size-spectrum values.
+#' @param mat A matrix of size-spectrum values (rows = spatial/time cells,
+#'   columns = the species' mass bins).
 #' @param dataname Path to a CSV file whose first line is the file type
 #'   (`"intercept"`, `"interslope"` or `"spectrum"`).
+#'
+#' @details For an initial condition (`ts_flag = FALSE`) the supplied `mat` /
+#'   data may have either a single row, applied uniformly to every spatial cell,
+#'   or one row per spatial cell (`x * y` rows) ordered with x outermost and y
+#'   innermost (`row = (k - 1) * ny + l`). For a full time series
+#'   (`ts_flag = TRUE`) it must have `t * x * y` rows in the same x/y order
+#'   nested within time.
 #'
 #' @return Invisibly `NULL`; called for the side effect of writing the input
 #'   file under the run's `Input` directory.
@@ -134,36 +142,50 @@ if(!missing(dataname)){
   }
   
   if(species@ts_flag==FALSE){
-    if(length(dat[,1])<1) stop("Insufficient number of rows in data file")
-    temp<-matrix(0,nrow=(x*y),ncol=m)
-    
-    if(species@speciestype!="detritus"){    
-    
+    #Initial conditions over the x*y spatial cells. The data file must hold
+    #either one row (applied uniformly to every cell) or x*y rows, one per
+    #spatial cell in (x outer, y inner) order: row = (k-1)*y + l.
+    ncell<-x*y
+    nr<-nrow(dat)
+    if(nr!=1 && nr!=ncell) stop("Data file must have 1 row (uniform) or x*y rows (one per spatial cell)")
+    src<-if(nr==1) rep(1,ncell) else seq_len(ncell)
+    temp<-matrix(0,nrow=ncell,ncol=m)
+
+    if(species@speciestype!="detritus"){
+
       if(filetype=="intercept"){
-        for(i in which(mass==spmin):which(mass==spmax)){
-          temp[1,i]=round(dat[1,1]*exp(species@lambda*mass[i]),16)
+        for(cc in 1:ncell){
+          for(i in which(mass==spmin):which(mass==spmax)){
+            temp[cc,i]=round(dat[src[cc],1]*exp(species@lambda*mass[i]),16)
+          }
         }
       }
-    
+
       if(filetype=="interslope"){
         if(length(dat[1,])<2) stop("Insufficient columns in data file")
-        for(i in which(mass==spmin):which(mass==spmax)){
-          temp[1,i]=round(dat[1,1]*exp(dat[1,2]*mass[i]),16)
+        for(cc in 1:ncell){
+          for(i in which(mass==spmin):which(mass==spmax)){
+            temp[cc,i]=round(dat[src[cc],1]*exp(dat[src[cc],2]*mass[i]),16)
+          }
         }
       }
-    
+
       if(filetype=="spectrum"){
         if(length(dat[1,])!=length(seq(spmin,spmax,grid.in@mstep))) stop("Incorrect number of columns in data file")
-        for(i in which(mass==spmin):which(mass==spmax)){
-          temp[1,i]=round(dat[1,(i-which(mass==spmin)+1)],16)
+        for(cc in 1:ncell){
+          for(i in which(mass==spmin):which(mass==spmax)){
+            temp[cc,i]=round(dat[src[cc],(i-which(mass==spmin)+1)],16)
+          }
         }
       }
       if(!(filetype=="intercept" || filetype=="interslope" || filetype=="spectrum")) stop("Unknown filetype entered")
-      
+
     }
 
     if(species@speciestype=="detritus"){
-      temp[1,1]=round(dat[1,1],16)
+      for(cc in 1:ncell){
+        temp[cc,1]=round(dat[src[cc],1],16)
+      }
     }
   }
 
@@ -199,20 +221,30 @@ if(!missing(mat)){
   }
   
   if(species@ts_flag==FALSE){
-    if(length(mat[,1])<1) stop("Insufficient number of rows in data file")
-    
+    #Initial conditions over the x*y spatial cells: mat must have either one row
+    #(applied uniformly) or x*y rows, one per spatial cell in (x outer, y inner)
+    #order: row = (k-1)*y + l.
+    ncell<-x*y
+    nr<-nrow(mat)
+    if(nr!=1 && nr!=ncell) stop("mat must have 1 row (uniform) or x*y rows (one per spatial cell)")
+    src<-if(nr==1) rep(1,ncell) else seq_len(ncell)
+
     #Setup input storage array
-    temp<-matrix(0,nrow=(x*y),ncol=m)
-    
-    if(species@speciestype!="detritus"){    
+    temp<-matrix(0,nrow=ncell,ncol=m)
+
+    if(species@speciestype!="detritus"){
       if(length(mat[1,])!=length(seq(spmin,spmax,grid.in@mstep))) stop("Incorrect number of columns in data file")
-      for(i in which(mass==spmin):which(mass==spmax)){
-        temp[1,i]=round(mat[1,(i-which(mass==spmin)+1)],16)
+      for(cc in 1:ncell){
+        for(i in which(mass==spmin):which(mass==spmax)){
+          temp[cc,i]=round(mat[src[cc],(i-which(mass==spmin)+1)],16)
+        }
       }
     }
 
     if(species@speciestype=="detritus"){
-      temp[1,1]=round(mat[1,1],16)
+      for(cc in 1:ncell){
+        temp[cc,1]=round(mat[src[cc],1],16)
+      }
     }
   }
 
