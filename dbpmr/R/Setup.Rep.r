@@ -34,8 +34,8 @@ if(!missing(func) && !missing(dataname)) stop("Only one of a function or data fo
 
 
 #Grid stuff
-xrange<-seq(grid.in@xmin,grid.in@xmax,grid.in@xstep)
-yrange<-seq(grid.in@ymin,grid.in@ymax,grid.in@ystep)
+xrange<-grid_seq(grid.in@xmin,grid.in@xmax,grid.in@xstep)
+yrange<-grid_seq(grid.in@ymin,grid.in@ymax,grid.in@ystep)
 trange<-seq(0,grid.in@tmax,grid.in@tstep)
 
 #Species stuff

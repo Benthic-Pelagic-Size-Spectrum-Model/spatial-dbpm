@@ -41,9 +41,9 @@ if(!missing(func) && missing(dataname) && !missing(mat)) stop("Only one of a fun
 if(missing(func) && !missing(dataname) && !missing(mat)) stop("Only one of a function or data for the initial step step or time series must be given")
 
 #Grid stuff
-mass<-seq(grid.in@mmin,grid.in@mmax,grid.in@mstep)
-xrange<-seq(grid.in@xmin,grid.in@xmax,grid.in@xstep)
-yrange<-seq(grid.in@ymin,grid.in@ymax,grid.in@ystep)
+mass<-grid_seq(grid.in@mmin,grid.in@mmax,grid.in@mstep)
+xrange<-grid_seq(grid.in@xmin,grid.in@xmax,grid.in@xstep)
+yrange<-grid_seq(grid.in@ymin,grid.in@ymax,grid.in@ystep)
 trange<-seq(0,grid.in@tmax,grid.in@tstep)
 
 #Species stuff
@@ -126,7 +126,7 @@ if(!missing(dataname)){
       }
     
       if(filetype=="spectrum"){
-        if(length(dat[1,])!=length(seq(spmin,spmax,grid.in@mstep))) stop("Incorrect number of columns in data file")
+        if(length(dat[1,])!=length(grid_seq(spmin,spmax,grid.in@mstep))) stop("Incorrect number of columns in data file")
         for(i in which(mass==spmin):which(mass==spmax)){
           temp[,i]=round(dat[,(i-which(mass==spmin)+1)],16)
         }
@@ -171,7 +171,7 @@ if(!missing(dataname)){
       }
 
       if(filetype=="spectrum"){
-        if(length(dat[1,])!=length(seq(spmin,spmax,grid.in@mstep))) stop("Incorrect number of columns in data file")
+        if(length(dat[1,])!=length(grid_seq(spmin,spmax,grid.in@mstep))) stop("Incorrect number of columns in data file")
         for(cc in 1:ncell){
           for(i in which(mass==spmin):which(mass==spmax)){
             temp[cc,i]=round(dat[src[cc],(i-which(mass==spmin)+1)],16)
@@ -208,7 +208,7 @@ if(!missing(mat)){
     
     if(species@speciestype!="detritus"){
 
-      if(length(mat[1,])!=length(seq(spmin,spmax,grid.in@mstep))) stop("Incorrect number of columns in matrix")
+      if(length(mat[1,])!=length(grid_seq(spmin,spmax,grid.in@mstep))) stop("Incorrect number of columns in matrix")
         for(i in which(mass==spmin):which(mass==spmax)){
           temp[,i]=round(mat[,(i-which(mass==spmin)+1)],16)
         }
@@ -233,7 +233,7 @@ if(!missing(mat)){
     temp<-matrix(0,nrow=ncell,ncol=m)
 
     if(species@speciestype!="detritus"){
-      if(length(mat[1,])!=length(seq(spmin,spmax,grid.in@mstep))) stop("Incorrect number of columns in data file")
+      if(length(mat[1,])!=length(grid_seq(spmin,spmax,grid.in@mstep))) stop("Incorrect number of columns in data file")
       for(cc in 1:ncell){
         for(i in which(mass==spmin):which(mass==spmax)){
           temp[cc,i]=round(mat[src[cc],(i-which(mass==spmin)+1)],16)

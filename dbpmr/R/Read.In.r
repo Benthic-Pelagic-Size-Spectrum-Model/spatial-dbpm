@@ -37,7 +37,7 @@ Read.In<-function(run,species,filename){
   toutmin<-temp[temp=='toutmin',2]
   toutmax<-temp[temp=='toutmax',2]
   toutstep<-temp[temp=='toutstep',2]
-  no_data<-length(seq(toutmin,toutmax,toutstep))
+  no_data<-length(grid_seq(toutmin,toutmax,toutstep))
 
 
   #Read in everything about species
@@ -93,19 +93,19 @@ Read.In<-function(run,species,filename){
       ans@grid@youtstep<-temp[temp=='youtstep',2]
       
       #Calculate ranges
-      ans@mrange<-seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)
-      ans@trange<-seq(ans@grid@toutmin,ans@grid@toutmax,ans@grid@toutstep)
-      ans@xrange<-seq(ans@grid@xmin,ans@grid@xmax,ans@grid@xoutstep)
-      ans@yrange<-seq(ans@grid@ymin,ans@grid@ymax,ans@grid@youtstep)
+      ans@mrange<-grid_seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)
+      ans@trange<-grid_seq(ans@grid@toutmin,ans@grid@toutmax,ans@grid@toutstep)
+      ans@xrange<-grid_seq(ans@grid@xmin,ans@grid@xmax,ans@grid@xoutstep)
+      ans@yrange<-grid_seq(ans@grid@ymin,ans@grid@ymax,ans@grid@youtstep)
     
       #U values
       if(!file.exists(paste(run,"/",species,"/results.txt",sep=""))) stop("Species results file does not exist")
       ans@uvals<-read.csv(paste(run,"/",species,"/results.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
-      names(ans@uvals)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
+      names(ans@uvals)<-c("t","x","y",as.character(grid_seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
       
       #Final U values
       ans@finaluvals<-read.csv(paste(run,"/",species,"/results.txt",sep=""),skip=(7+no_data),nrows=1,header=TRUE,stringsAsFactors=FALSE)
-      names(ans@finaluvals)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@mstep)))
+      names(ans@finaluvals)<-c("t","x","y",as.character(grid_seq(ans@grid@mmin,ans@grid@mmax,ans@grid@mstep)))
       
       #Summary file values
       temp<-read.csv(paste(run,"/",species,"/summary.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
@@ -175,39 +175,39 @@ Read.In<-function(run,species,filename){
       ans@grid@youtstep<-temp[temp=='youtstep',2]
       
       #Calculate ranges
-      ans@mrange<-seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)
-      ans@trange<-seq(ans@grid@toutmin,ans@grid@toutmax,ans@grid@toutstep)
-      ans@xrange<-seq(ans@grid@xmin,ans@grid@xmax,ans@grid@xoutstep)
-      ans@yrange<-seq(ans@grid@ymin,ans@grid@ymax,ans@grid@youtstep)
+      ans@mrange<-grid_seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)
+      ans@trange<-grid_seq(ans@grid@toutmin,ans@grid@toutmax,ans@grid@toutstep)
+      ans@xrange<-grid_seq(ans@grid@xmin,ans@grid@xmax,ans@grid@xoutstep)
+      ans@yrange<-grid_seq(ans@grid@ymin,ans@grid@ymax,ans@grid@youtstep)
   
       #U values 
       if(!file.exists(paste(run,"/",species,"/results.txt",sep=""))) stop("Species results file does not exist")
       ans@uvals<-read.csv(paste(run,"/",species,"/results.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
-      names(ans@uvals)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
+      names(ans@uvals)<-c("t","x","y",as.character(grid_seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
                                                                                    
       #Final U values
       ans@finaluvals<-read.csv(paste(run,"/",species,"/results.txt",sep=""),skip=(7+no_data),nrows=1,header=TRUE,stringsAsFactors=FALSE)
-      names(ans@finaluvals)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@mstep)))
+      names(ans@finaluvals)<-c("t","x","y",as.character(grid_seq(ans@grid@mmin,ans@grid@mmax,ans@grid@mstep)))
       
       #Growth values
       if(!file.exists(paste(run,"/",species,"/growth.txt",sep=""))) stop("Species growth file does not exist")
       ans@growth<-read.csv(paste(run,"/",species,"/growth.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
-      names(ans@growth)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
+      names(ans@growth)<-c("t","x","y",as.character(grid_seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
       
       #Mortality values
       if(!file.exists(paste(run,"/",species,"/mortality.txt",sep=""))) stop("Species mortality file does not exist")
       ans@mortality<-read.csv(paste(run,"/",species,"/mortality.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
-      names(ans@mortality)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
+      names(ans@mortality)<-c("t","x","y",as.character(grid_seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
       
       #Predation values
  #     if(!file.exists(paste(run,"/",species,"/predation.txt",sep=""))) stop("Species predation file does not exist")
  #     ans@predation<-read.csv(paste(run,"/",species,"/predation.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
- #     names(ans@predation)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
+ #     names(ans@predation)<-c("t","x","y",as.character(grid_seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
       
       #Fishing values
       if(!file.exists(paste(run,"/",species,"/fishing.txt",sep=""))) stop("Species fishing file does not exist")
       ans@fishing<-read.csv(paste(run,"/",species,"/fishing.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
-      names(ans@fishing)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
+      names(ans@fishing)<-c("t","x","y",as.character(grid_seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
       
       #Summary file values
       temp<-read.csv(paste(run,"/",species,"/summary.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
@@ -324,39 +324,39 @@ Read.In<-function(run,species,filename){
       ans@grid@youtstep<-temp[temp=='youtstep',2]
       
       #Calculate ranges
-      ans@mrange<-seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)
-      ans@trange<-seq(ans@grid@toutmin,ans@grid@toutmax,ans@grid@toutstep)
-      ans@xrange<-seq(ans@grid@xmin,ans@grid@xmax,ans@grid@xoutstep)
-      ans@yrange<-seq(ans@grid@ymin,ans@grid@ymax,ans@grid@youtstep)
+      ans@mrange<-grid_seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)
+      ans@trange<-grid_seq(ans@grid@toutmin,ans@grid@toutmax,ans@grid@toutstep)
+      ans@xrange<-grid_seq(ans@grid@xmin,ans@grid@xmax,ans@grid@xoutstep)
+      ans@yrange<-grid_seq(ans@grid@ymin,ans@grid@ymax,ans@grid@youtstep)
       
       #U values 
       if(!file.exists(paste(run,"/",species,"/results.txt",sep=""))) stop("Species results file does not exist")
       ans@uvals<-read.csv(paste(run,"/",species,"/results.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
-      names(ans@uvals)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
+      names(ans@uvals)<-c("t","x","y",as.character(grid_seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
       
       #Final U values
       ans@finaluvals<-read.csv(paste(run,"/",species,"/results.txt",sep=""),skip=(7+no_data),nrows=1,header=TRUE,stringsAsFactors=FALSE)
-      names(ans@finaluvals)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@mstep)))
+      names(ans@finaluvals)<-c("t","x","y",as.character(grid_seq(ans@grid@mmin,ans@grid@mmax,ans@grid@mstep)))
       
       #Growth values
       if(!file.exists(paste(run,"/",species,"/growth.txt",sep=""))) stop("Species growth file does not exist")
       ans@growth<-read.csv(paste(run,"/",species,"/growth.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
-      names(ans@growth)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
+      names(ans@growth)<-c("t","x","y",as.character(grid_seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
       
       #Mortality values
       if(!file.exists(paste(run,"/",species,"/mortality.txt",sep=""))) stop("Species mortality file does not exist")
       ans@mortality<-read.csv(paste(run,"/",species,"/mortality.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
-      names(ans@mortality)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
+      names(ans@mortality)<-c("t","x","y",as.character(grid_seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
       
       #Predation values
       if(!file.exists(paste(run,"/",species,"/predation.txt",sep=""))) stop("Species predation file does not exist")
       ans@predation<-read.csv(paste(run,"/",species,"/predation.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
-      names(ans@predation)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
+      names(ans@predation)<-c("t","x","y",as.character(grid_seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
       
       #Fishing values
       if(!file.exists(paste(run,"/",species,"/fishing.txt",sep=""))) stop("Species fishing file does not exist")
       ans@fishing<-read.csv(paste(run,"/",species,"/fishing.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
-      names(ans@fishing)<-c("t","x","y",as.character(seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
+      names(ans@fishing)<-c("t","x","y",as.character(grid_seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)))
       
       #Summary file values
       temp<-read.csv(paste(run,"/",species,"/summary.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
@@ -447,10 +447,10 @@ Read.In<-function(run,species,filename){
       ans@grid@youtstep<-temp[temp=='youtstep',2]
       
       #Calculate ranges
-      ans@mrange<-seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)
-      ans@trange<-seq(ans@grid@toutmin,ans@grid@toutmax,ans@grid@toutstep)
-      ans@xrange<-seq(ans@grid@xmin,ans@grid@xmax,ans@grid@xoutstep)
-      ans@yrange<-seq(ans@grid@ymin,ans@grid@ymax,ans@grid@youtstep)
+      ans@mrange<-grid_seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)
+      ans@trange<-grid_seq(ans@grid@toutmin,ans@grid@toutmax,ans@grid@toutstep)
+      ans@xrange<-grid_seq(ans@grid@xmin,ans@grid@xmax,ans@grid@xoutstep)
+      ans@yrange<-grid_seq(ans@grid@ymin,ans@grid@ymax,ans@grid@youtstep)
     
       #Summary file values              
       temp<-read.csv(paste(run,"/",species,"/summary.txt",sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
@@ -521,10 +521,10 @@ Read.In<-function(run,species,filename){
     ans@grid@youtstep<-temp[temp=='youtstep',2]
     
     #Calculate ranges
-    ans@mrange<-seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)
-    ans@trange<-seq(ans@grid@toutmin,ans@grid@toutmax,ans@grid@toutstep)
-    ans@xrange<-seq(ans@grid@xmin,ans@grid@xmax,ans@grid@xoutstep)
-    ans@yrange<-seq(ans@grid@ymin,ans@grid@ymax,ans@grid@youtstep)
+    ans@mrange<-grid_seq(ans@grid@mmin,ans@grid@mmax,ans@grid@moutstep)
+    ans@trange<-grid_seq(ans@grid@toutmin,ans@grid@toutmax,ans@grid@toutstep)
+    ans@xrange<-grid_seq(ans@grid@xmin,ans@grid@xmax,ans@grid@xoutstep)
+    ans@yrange<-grid_seq(ans@grid@ymin,ans@grid@ymax,ans@grid@youtstep)
     
     #Filetype
     ans@filetype<-as.character(read.csv(paste(run,"/",species,"/",filename,sep=""),nrows=1,header=FALSE,stringsAsFactors=FALSE))

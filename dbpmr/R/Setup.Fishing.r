@@ -30,9 +30,9 @@ if(!missing(func) && !missing(dataname)) stop("Only one of a function or data fo
 
 
 #Grid stuff
-mass<-seq(grid.in@mmin,grid.in@mmax,grid.in@mstep)
-xrange<-seq(grid.in@xmin,grid.in@xmax,grid.in@xstep)
-yrange<-seq(grid.in@ymin,grid.in@ymax,grid.in@ystep)
+mass<-grid_seq(grid.in@mmin,grid.in@mmax,grid.in@mstep)
+xrange<-grid_seq(grid.in@xmin,grid.in@xmax,grid.in@xstep)
+yrange<-grid_seq(grid.in@ymin,grid.in@ymax,grid.in@ystep)
 trange<-seq(0,grid.in@tmax,grid.in@tstep)
 
 #Species stuff
@@ -73,7 +73,7 @@ if(missing(func)){
   #Check whether the number of lines in data file matches the number of time steps previously specified
   if(length(dat[,1])!=t*x*y) stop("Incorrect number of rows in data file")
   #Checks whether the number of columns in data file matches the size discretisation for the species
-  if(length(dat[1,])!=length(seq(spmin,spmax,grid.in@mstep))) stop("Incorrect number of columns in data file")
+  if(length(dat[1,])!=length(grid_seq(spmin,spmax,grid.in@mstep))) stop("Incorrect number of columns in data file")
 
   temp<-matrix(0,nrow=(t*x*y),ncol=m)
   for(i in which(mass==spmin):which(mass==spmax)){
