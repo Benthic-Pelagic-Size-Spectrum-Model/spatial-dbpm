@@ -1,13 +1,20 @@
 # Benchmark: dbpmr vs the two `sizemodel()` engines
 
-Wall-clock for one 0-D run, **matched workload: 2400 timesteps × 181 size bins**,
-LME-10 forcing (pelagic + benthic + detritus + plankton, no fishing). 4 reps.
+Wall-clock for one 0-D run, **matched workload: 2400 timesteps × 181 size bins,
+all at a WEEKLY step (48/yr = 50 simulated years)**, LME-10 forcing (pelagic +
+benthic + detritus + plankton, no fishing). 4 reps.
 
-| Model | language | best (min) | mean | ~ms/timestep |
-|---|---|---|---|---|
-| **dbpmr** | C (`.C` engine) + text I/O | **1.58 s** | 2.42 s | 0.7–1.2 |
-| **CMIP5 `sizemodel`** | R (`dbpm_isimip_3b`) | 2.24 s | 2.33 s | ~0.93 |
-| **LME `sizemodel`** | R (`lme_scale_calibration`) | 1.79 s | 1.92 s | ~0.80 |
+| Model | language | step | best (min) | mean | ~ms/timestep |
+|---|---|---|---|---|---|
+| **dbpmr** | C (`.C` engine) + text I/O | weekly (`tstep=1/48`) | **1.58 s** | 2.42 s | 0.7–1.2 |
+| **LME `sizemodel`** | R (`lme_scale_calibration`) | weekly | 1.80 s | 1.89 s | ~0.75 |
+| **CMIP5 `sizemodel`** | R (`dbpm_isimip_3b`) | weekly (`tstepspryr=48`) | 2.24 s | 2.33 s | ~0.93 |
+
+Note: the LME `sizemodel()` takes its step from the input data resolution (the
+parquet is **monthly**), so it must be fed weekly-resolution input to run weekly.
+Its per-step cost is the same either way (monthly run: 1.79 s — identical), since
+each timestep does the same 181-bin work regardless of the step *duration*. Step
+*count* (2400) is what is matched here.
 
 ## Finding
 
