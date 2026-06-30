@@ -2561,6 +2561,16 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                      for(k=0 ; k<x ; k++){
                              for(l=0 ; l<y ; l++){
                                      community->detritus->w_values[k][l]=temp_detritus[k][l]+dt*(community->detritus->g_values[k][l]-community->detritus->mu_values[k][l]);
+                                     /* Guard the detritus pool. The explicit Euler step can overshoot
+                                        (mu*dt > available) and drive W negative, and a non-finite
+                                        upstream rate can make it NaN/Inf; either propagates and
+                                        corrupts or crashes the run. Detritus is a non-negative pool,
+                                        so clamp a non-finite or negative result to 0. (The reference
+                                        sizemodel intends the same guard but tests `W=="NaN"`, a
+                                        string compare that never matches a numeric NaN.) */
+                                     if(!isfinite(community->detritus->w_values[k][l]) || community->detritus->w_values[k][l]<0){
+                                             community->detritus->w_values[k][l]=0;
+                                     }
                                      temp_det_g[k][l]=community->detritus->g_values[k][l];
                                      temp_det_mu[k][l]=community->detritus->mu_values[k][l];
                              }
