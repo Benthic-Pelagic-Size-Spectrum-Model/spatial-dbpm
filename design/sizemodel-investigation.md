@@ -244,6 +244,26 @@ the **combination** warm + unproductive collapses — precisely the §2 mechanis
 (temperature-amplified small-size background mortality outpacing growth where food
 is scarce).
 
+### 6a. dbpmr on the same sweep — all 82 alive
+
+Running **dbpmr** across the same 82 LME inputs at the matching setup
+(`A.u = 64`, consumer-min −3, weekly, temperature on feeding + `mu_0`, faithful
+K/R/Ex mapping per §8) gives:
+
+| engine | runs completed | pelagic alive | collapsed |
+|---|---|---|---|
+| `sizemodel()` | 82 (no crash) | 70 | **12** (warm + oligotrophic) |
+| **dbpmr** | **82 (no crash, no NaN)** | **82** | **0** |
+
+dbpmr sustains the pelagic **and** benthos in *every* LME — including all 12 that
+`sizemodel()` collapses (10, 12, 16, 30, 31, 40, 44, 131, 134, 151, 171, 177) and
+the most oligotrophic LME-64 (pp −3.71, pelagic 0.045, benthos 4.2). The result
+is insensitive to the benthic search rate: `A.v = 6.4` (`0.1·A.u`, sizemodel
+convention) and `A.v = 0.64` (`0.01·A.u`) both give all-82-alive. This is the
+high-throughput, predation-dominated robustness of §4d: dbpmr does not carry the
+A-independent background-mortality collapse, so warm + unproductive basins persist
+rather than die — the coexistence (per JB) is the intended behaviour.
+
 ## 7. How to fix `sizemodel()` — two levers, tested on the 12
 
 Re-ran the 12 collapsed LMEs under each candidate. Predator `max(x>−3)`:
