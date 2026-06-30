@@ -433,6 +433,11 @@ coexistence:**
 
 (LME-10 and 131 stay low — they are the most oligotrophic, marginal in dbpmr too —
 but alive, not extinct.) The single units fix turns `sizemodel()`'s 70/12 into
-82/0, matching the ln-mass engine. The benthic-side predation term `PM_v` (one
-more bare-`dx` convolution, on a wrapped line) was left unpatched here and is not
-needed for the pelagic rescue, but should be corrected too for full consistency.
+82/0, matching the ln-mass engine.
+
+The **complete patch** is six spectrum integrals: the four convolutions
+(feeding l.574, 580; predation death `PM_u` l.612 and `PM_v` l.644) and the two
+reproduction egg-sums (l.732, 774). `PM_v` (the detritivore-side predation term,
+on a wrapped line) does not affect the pelagic rescue but is included for
+consistency; with all six fixed, **all 12 LMEs have both pelagic and benthos
+alive and finite** (pelagic values unchanged from the 5-edit patch, as expected).
