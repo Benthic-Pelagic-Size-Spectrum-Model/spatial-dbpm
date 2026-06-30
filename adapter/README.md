@@ -27,6 +27,25 @@ End-to-end Stage 0 / Stage 2 harness for one LME:
   DBPM_DATA=/path/to/DBPM_dev Rscript adapter/stage0_prototype.R
   ```
 
+## `lme_sweep.R`
+
+Runs `dbpmr` across **every** LME equilibrium input at the canonical setup matched
+to the reference `sizemodel()` (`A.u = 64`, `A.v = 0.1*A.u = 6.4`, consumer
+minimum `10^-3` g, weekly step, temperature on feeding + `mu_0`, faithful K/R/Ex
+budget) and tallies alive / collapsed / non-finite. Only `jsonlite` + the
+`equilibrium_runs/` JSONs are needed (no parquet).
+
+```sh
+DBPM_DATA=/path/to/DBPM_dev Rscript adapter/lme_sweep.R   # writes lme_sweep_results.csv
+# optional: AVRATIO=0.01 (A.v=0.64), TMAX=150, OUT=path.csv
+```
+
+**Result:** dbpmr completes all 82 LMEs with no crash and no `NaN`, and keeps the
+pelagic **and** benthos alive in **every** one — including the 12 warm +
+oligotrophic basins that `sizemodel()` collapses (`70 alive / 12 collapsed` at the
+identical setup). Insensitive to `A.v` (6.4 or 0.64 → all alive). See
+[`design/sizemodel-investigation.md`](../design/sizemodel-investigation.md) §6a.
+
 ### Status / findings
 
 The pipeline runs end-to-end. Progress so far:
