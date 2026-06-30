@@ -150,22 +150,31 @@ run **decays toward extinction** (final pelagic biomass ~1e-7). A search-rate
 sensitivity sweep (`A × 1, 5, 25, 100`) does **not** recover it — biomass stays
 ~1e-7 up to ×25 and the run goes **numerically unstable (NaN)** at ×100.
 
-**Interpretation.** The divergence is deeper than the flagged search-volume unit
-factor. Candidates to reconcile (the real Stage 0 work):
-- **Plankton/resource coupling** — confirm `dbpmr` treats the plankton spectrum
-  as a *fixed boundary resource* (as `sizemodel()` does) rather than a decaying
-  dynamic pool; mismatch here starves the predators.
-- **Reproduction boundary** — `dynamic_reproduction = 1` vs `dbpmr`
-  `rep_method = 2/3`; the recruitment flux at the smallest predator size sets
-  whether the spectrum self-sustains.
-- **Assimilation / mortality balance** — the `defecate_prop`/`growth_pred`/
-  `energy_pred` → single `epsilon` collapse, and the senescence terms.
-- **Search-rate units** — still a factor, but not the sole cause.
+**Follow-up diagnostics narrowed the cause:**
 
-This is the intended Stage 0 outcome: the harness now **quantifies** the gap and
-isolates the parameters that must be reconciled before the temperature (Stage 3)
-and fishing (Stage 4) work. It is a modelling reconciliation task, tracked in
-issue #8.
+- **Plankton resource — RULED OUT.** `dbpmr` holds the plankton spectrum
+  *constant* through the run (biomass 0.34217 unchanged over 40 yr), i.e. it is
+  already a fixed boundary resource like `sizemodel()`. Predators collapse
+  *despite* a constant resource, so starvation-by-resource-decay is not the cause.
+- **Search rate `A` does not resolve it.** Low `A` → slow decay to extinction
+  (pelagic biomass 0.21 → 1.6e-5 over 40 yr); raising the **benthic** `A` to 64
+  (or dbpmr's defaults 640/64) makes the coupled run **numerically unstable
+  (NaN)**. So `A = 64` is not the fix — the benthic search rate is in fact the
+  instability driver.
+
+**Remaining (the real Stage 0 work) — the predator energy / recruitment balance:**
+- **Reproduction / recruitment boundary** — `dynamic_reproduction = 1` vs
+  `rep_method = 2/3`: what sets the abundance flux at the smallest predator size
+  (`xmin_consumer`) determines whether the spectrum self-sustains.
+- **Growth vs mortality balance** — the `defecate_prop`/`growth_pred`/
+  `energy_pred` → single `epsilon` mapping, and the senescence-mortality terms
+  (`size_senescence`, `exp_senescence_mort`, `const_senescence_mort`) that
+  `dbpmr` parameterises differently (`mu_s`).
+
+**Decisive next step:** a line-by-line comparison of the growth/mortality/
+reproduction rate equations between `dbpmr`'s C core (`calculate_g_and_mu`,
+`g_pel`/`mu_pel`, `calculate_reproduction`) and the LME `sizemodel()`, to find
+where the predator energy balance diverges. Tracked in issue #8.
 
 ## 6. Adapter prototype (can start now, no engine changes)
 
