@@ -331,3 +331,63 @@ consistent with reproduction not being the survival lever (§4d).
 hyperbolic form diverging near `w_max` (`mu_s`, `epsilon`). These are different
 functional forms, so senescence is left at dbpmr's default and flagged for the
 engine-reconciliation work rather than force-fit through a fake parameter map.
+
+## 9. Root cause: a missing `ln(10)` from sizemodel's log10 conversion
+
+The §4d "2.3× growth = ln(10)" and §6a "dbpmr all-82-alive" findings have a single
+root cause, and it is **not** the inputs (dbpmr runs on the *same* inputs and
+survives): `sizemodel()` was rewritten from an **ln-mass** model (like dbpmr's
+engine) into **log10-mass** form, and the rewrite kept the bare log10 step `dx`
+(= 0.1) in the **integrals over the size spectrum**, where the ln-mass physics
+needs `dx·ln(10)` (because `d(ln w) = ln(10)·d(log10 w)`). The *advection* term was
+converted correctly — it carries the compensating `1/log(10)` Jacobian
+(`(1/log(10))·GG·Δt/dx` in `Ai`/`Bi`) — but the **integral measures did not get
+their `ln(10)`**, so every spectrum integral comes out `ln(10) = 2.3×` too small.
+
+Two such integrals matter for the pelagic:
+
+1. **Feeding / predation-death convolutions** `(U*dx) %*% gphi` and
+   `(U*dx) %*% mphi` (cmip5 lines 234, 236, 251, 253, 269, 271; helper funcs
+   95/97/100). → growth `GG`, reproduction rate `R`, and predation mortality `PM`
+   are all `ln(10)` too small. Restoring it (feeding × ln10) **rescues 9 of the 12**.
+2. **Reproduction egg-influx integral** `sum(R.u·10^x·U·dx)` (lines 392, 428).
+   → recruitment is `ln(10)` too weak. Restoring it **rescues the remaining 3**
+   (the hottest, most oligotrophic: LME-10, 131, 171).
+   (A 3rd, the detritus-input sums at lines 317–329, has the same bare `dx` and
+   should be corrected for benthic/detritus consistency, but does not bear on the
+   pelagic collapse.)
+
+**Demonstrated:** restoring *both* `ln(10)` factors makes **all 12** collapsed
+LMEs survive at `A.u = 64` — i.e. `sizemodel()` reproduces dbpmr's all-LME
+coexistence. So dbpmr "works" simply because its engine is in ln-mass and never
+dropped the factor; `sizemodel()` "fails" on the warm + oligotrophic LMEs because
+the missing `ln(10)` makes its growth and recruitment `2.3×` too weak — just
+enough to push the marginal LMEs below the self-sustaining threshold
+(survival-to-maturity `≈ exp(−∫ mortality/growth · d log w)` is exponentially
+sensitive to that 2.3×). The other 70 LMEs sit far enough above threshold that
+both engines agree.
+
+### Summary of edits needed in `sizemodel()`
+
+Express the spectrum-integration measure as the **ln step** wherever the code
+integrates over size (it is a units fix, not a recalibration):
+
+| location | now | should be |
+|---|---|---|
+| feeding `f.pel`/`f.ben` convolutions (l.234, 236) | `(U[,i]*dx) %*% gphi` | `(U[,i]*dx*log(10)) %*% gphi` |
+| satiation denominators (l.251, 269) | `(U[,i]*dx) %*% gphi` | `… *dx*log(10)) %*% gphi` (cancels in the ratio — keep consistent) |
+| predation death `PM.u`/`PM.v` (l.253, 271) | `(U[,i]*sat*dx) %*% mphi` | `(U[,i]*sat*dx*log(10)) %*% mphi` |
+| helper `growth.u`/`death.u`/`death.v` (l.95–100) | `(u*dx) %*% kernel` | `(u*dx*log(10)) %*% kernel` |
+| reproduction egg-sum (l.392, 428) | `sum(R.*·10^x·U·dx)` | `log(10)*sum(R.*·10^x·U·dx)` (numerator only; leave the `/(dx·10^x[ref])` bin-width normalisation as-is) |
+| detritus input sums (l.317–329) | `sum(…·dx)` | `log(10)*sum(…·dx)` (consistency; benthic/detritus only) |
+
+Equivalently, define `dx.int <- dx*log(10)` once and use it in every spectrum
+integral, keeping the plain `dx` only in the advection (`Δt/dx`) and the recruit
+bin-width normalisation. Leave the advection `1/log(10)` Jacobian untouched. The
+maintainers should confirm the minimal patch (the feeding fix and the advection
+`1/log(10)` interact — see §4d), but the diagnosis is unambiguous: the `2.3×`
+deficit is a forgotten `ln(10)` on the spectrum integrals.
+
+**Alternative that also rescues the last 3:** feeding-only temperature (§4c/§7) —
+not a units fix but a modelling choice. The `ln(10)` restoration is the one that
+makes `sizemodel()` *match dbpmr*.
