@@ -6,18 +6,20 @@
 # spectrum to the LME `sizemodel()` reference.
 #
 # STATUS: read -> map -> run -> compare pipeline works end-to-end.
-#   * dbpmr is numerically UNSTABLE at monthly steps for these LME-scale params
-#     (NaN); it is STABLE at WEEKLY steps (= the FishMIP time step), reaching a
-#     non-trivial equilibrium. Use tstep = 1/52.
-#   * search rates: A_pel = 64, A_ben = 0.1 * 64 (canonical dbpmr-scale values,
-#     per JB) -- NOT the literal hr_volume_search*tempeffect, which collapses.
-#     Temperature is held constant in the spin-up comparison.
-#   * plankton held fixed at the equilibrium input (u_0 = 10^int_phy_zoo,
-#     lambda = slope), confirmed constant through the run.
-# REMAINING (issue #8): the equilibrium SHAPE/units do not yet match -- dbpmr's
-#   pelagic spectrum is much shallower and offset by many orders of magnitude
-#   from the reference (density normalisation + spectral-slope reconciliation,
-#   i.e. growth-vs-mortality balance and the recruitment boundary).
+#   * search rate matched to sizemodel: A_pel = hr_volume_search (12.8),
+#     A_ben = 0.1 * A_pel; temperature applied as in sizemodel() (feeding AND
+#     background mortality * Boltzmann-Arrhenius; pelagic=surface, benthic=floor).
+#   * plankton held fixed at the equilibrium input, confirmed constant.
+#   * dbpmr is numerically UNSTABLE at monthly steps for these params (NaN) even
+#     at A=12.8, but STABLE at weekly/daily; sizemodel() is stable at monthly --
+#     a real discretisation difference despite the shared upwind scheme (#7).
+# KEY FINDING (issue #8): at matched A + temperature, the engines DISAGREE on the
+#   pelagic. The sizemodel REFERENCE has COLLAPSED predators (density ~1e-35,
+#   benthic-only equilibrium) while dbpmr SUSTAINS a pelagic spectrum -- so the
+#   no-fishing reference itself looks unhealthy on the pelagic side (likely the
+#   sizemodel issue JB flagged). The benthic/detritivore magnitudes now agree
+#   (~1e3 at the boundary) but dbpmr's benthic spectrum is steeper (reaches
+#   smaller max size) -- a growth-vs-mortality slope difference still to reconcile.
 #
 # REQUIRES: local LME data (not in this repo) + an installed dbpmr.
 #   - arrow, jsonlite
@@ -39,11 +41,21 @@ ref <- fromJSON(file.path(base, "equilibrium_runs",
 p <- ref$params
 
 ## ---- 2. crosswalk LME params -> dbpmr ---------------------------------------
-# Search rates use the canonical dbpmr-scale values (per JB); the literal
-# hr_volume_search*tempeffect collapses the population. Temperature constant in
-# the spin-up comparison, so it is absorbed into A here.
-A_pel   <- 64
-A_ben   <- 0.1 * 64
+# Search rate matched to sizemodel: A_pel = hr_volume_search, A_ben = 0.1*A_pel.
+# Temperature: sizemodel() scales BOTH the feeding rate AND the background
+# ("other") mortality by the Boltzmann-Arrhenius factor (pelagic = surface temp,
+# benthic = floor temp); senescence and predation mortality are NOT scaled.
+# Forcing is constant in the spin-up, so we fold the constant factor into the
+# effective A and mu_0 (a true per-timestep forcing is the Stage 3 engine work).
+tempeff <- function(temp) exp(p$c1[1] - p$activation_energy[1] /
+                                (p$boltzmann[1] * (temp + 273)))
+pel_te  <- tempeff(p$sea_surf_temp[1])
+ben_te  <- tempeff(p$sea_floor_temp[1])
+
+A_pel   <- p$hr_volume_search[1] * pel_te          # = 12.8 * 1.96
+A_ben   <- 0.1 * p$hr_volume_search[1] * ben_te    # = 1.28 * 0.24
+mu0_pel <- p$natural_mort[1] * pel_te
+mu0_ben <- p$natural_mort[1] * ben_te
 eps_pel <- (1 - p$defecate_prop[1]) * p$growth_pred[1]
 eps_ben <- (1 - p$defecate_prop[1]) * p$growth_detritivore[1]
 u0_pla  <- 10^p$int_phy_zoo[1]   # plankton held fixed at the equilibrium input
@@ -58,10 +70,10 @@ plankton <- Setup.Plankton(run, filename = "plankton",
               mmin = -12*LN10, mmax = -3*LN10, u_0 = u0_pla, lambda = lam_pla)
 pelagic  <- Setup.Pelagic(run, filename = "fish", mmin = -3*LN10, mmax = 6*LN10,
               alpha = p$metabolic_req_pred[1], A = A_pel, epsilon = eps_pel,
-              mu_0 = p$natural_mort[1], rep_method = 2, fishing_flag = FALSE)
+              mu_0 = mu0_pel, rep_method = 2, fishing_flag = FALSE)
 benthic  <- Setup.Benthic(run, filename = "benthos", mmin = -3*LN10, mmax = 4*LN10,
               alpha = p$metabolic_req_detritivore[1], A = A_ben, epsilon = eps_ben,
-              mu_0 = p$natural_mort[1], rep_method = 2, fishing_flag = FALSE)
+              mu_0 = mu0_ben, rep_method = 2, fishing_flag = FALSE)
 detritus <- Setup.Detritus(run, filename = "detritus")
 invisible(capture.output(SizeSpectrum(run, grid, plankton, pelagic, benthic, detritus)))
 

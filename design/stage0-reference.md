@@ -194,6 +194,40 @@ orders of magnitude (density normalisation/units + spectral-slope reconciliation
 growth-vs-mortality balance and the recruitment boundary). This is the remaining
 Stage 0 work (issue #8).
 
+### 8.2 Matched `A` + temperature correction (update)
+
+Corrected two errors in the comparison: (a) run `dbpmr` at the **same** search
+volume as the reference (`A_pel = hr_volume_search = 12.8`, `A_ben = 0.1·A_pel`),
+not 64 — `sizemodel()` itself can't run at 64; and (b) apply the **temperature
+effect as `sizemodel()` does** — the Boltzmann–Arrhenius factor scales both the
+**feeding rate** and the **background ("other") mortality** (pelagic = surface
+temp, benthic = floor temp; senescence and predation mortality are *not* scaled).
+Folded into `dbpmr` as `A·tempeffect` and `mu_0·tempeffect`.
+
+Findings (LME 10, `pel_te = 1.96`, `ben_te = 0.24`):
+
+- **The reference is a benthic-only equilibrium.** At `searchvol = 12.8`,
+  no fishing, the `sizemodel()` reference **predators are collapsed**
+  (density ~1e-35 across the predator range) while the **detritivores are alive**
+  (proper spectrum, slope ≈ −1/decade). The collapsed unfished pelagic looks
+  like a problem on the `sizemodel()` side (the "issues" JB flagged), not a
+  healthy target.
+- **`dbpmr` sustains the pelagic** even with the full temperature correction
+  (pelagic biomass ~0.87) — i.e. `dbpmr` does *not* reproduce the reference's
+  predator collapse. So at matched `A` + temperature the engines genuinely
+  disagree on pelagic persistence.
+- **Benthic agrees in magnitude** (~1e3 at the recruitment boundary, both) but
+  `dbpmr`'s detritivore spectrum is **steeper** (reaches a smaller maximum size)
+  than the reference — a growth-vs-mortality slope difference.
+- **Numerics:** `dbpmr` is `NaN` at monthly even at `A = 12.8`, stable at
+  weekly/daily; `sizemodel()` is stable at monthly (#7).
+
+**Implication:** the cleanest reconcilable target is the **benthic slope** (both
+engines keep detritivores alive); the pelagic comparison is confounded by the
+reference's collapsed predators and needs a trustworthy reference (a different
+LME / search volume, or confirmation that the collapse is the known sizemodel
+bug).
+
 ## 6. Adapter prototype (can start now, no engine changes)
 
 A pure-R adapter (using `arrow` for parquet, `jsonlite` for the reference JSONs)
