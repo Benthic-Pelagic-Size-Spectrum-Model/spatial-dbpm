@@ -108,17 +108,19 @@ long to run and how often to save output:
 
 ```r
 grid <- Setup.Grid(run,
-  mstep    = 0.2,     # mass: computation step (log body mass)
-  moutstep = 1,       # mass: output step (must be a multiple of mstep)
-  tmax     = 20,      # time: run length (years)
-  tstep    = 1/365,   # time: integration step (daily)
-  toutstep = 73/365   # time: output step (must be a multiple of tstep)
+  mstep    = 0.1 * log(10),  # mass: computation step (0.1 log10 unit)
+  moutstep = 0.1 * log(10),  # mass: output step (must be a multiple of mstep)
+  tmax     = 20,             # time: run length (years)
+  tstep    = 1/365,          # time: integration step (daily)
+  toutstep = 73/365          # time: output step (must be a multiple of tstep)
 )
 ```
 
-The mass range (`mmin`, `mmax`) is widened automatically to cover the species
-you define, so you rarely set it. For a `spatial_dim = 0` run the spatial
-arguments are ignored (x and y collapse to a single cell).
+The mass grid defaults to the canonical FishMIP/DBPM log10 spectrum — `10^-12`
+to `10^6` g in steps of `0.1` log10 unit (`0.1 * log(10)`), with the consumer
+minimum at `10^-3` g — which already spans the default plankton and
+consumer ranges, so you rarely set `mmin`/`mmax`. For a `spatial_dim = 0` run the
+spatial arguments are ignored (x and y collapse to a single cell).
 
 **The rule that trips people up:** the *output* steps must be exact whole-number
 multiples of the *computation* steps, or `SizeSpectrum()` errors. With the
