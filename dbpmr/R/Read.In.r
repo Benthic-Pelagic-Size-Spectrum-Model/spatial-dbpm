@@ -258,8 +258,8 @@ Read.In<-function(run,species,filename){
       ans@species@R_ben<-as.numeric(temp[temp=='R_ben',2])
       ans@species@Ex_ben<-as.numeric(temp[temp=='Ex_ben',2])
       
-      ans@species@pref_pla<-as.numeric(temp[temp=='pref_pel',2])
-      ans@species@pref_pel<-as.numeric(temp[temp=='pref_pla',2])
+      ans@species@pref_pla<-as.numeric(temp[temp=='pref_pla',2])
+      ans@species@pref_pel<-as.numeric(temp[temp=='pref_pel',2])
       ans@species@pref_ben<-as.numeric(temp[temp=='pref_ben',2])
       
       ans@species@q_0<-as.numeric(temp[temp=='q_0',2])
@@ -269,7 +269,7 @@ Read.In<-function(run,species,filename){
       ans@species@prey<-as.numeric(temp[temp=='prey',2])
       ans@species@pred<-as.numeric(temp[temp=='pred',2])
       ans@species@comp<-as.numeric(temp[temp=='comp',2])
-      ans@species@gamma_prey<-as.numeric(temp[temp=='gamma_pred',2])
+      ans@species@gamma_prey<-as.numeric(temp[temp=='gamma_prey',2])
       ans@species@gamma_pred<-as.numeric(temp[temp=='gamma_pred',2])
       ans@species@gamma_comp<-as.numeric(temp[temp=='gamma_comp',2])
       

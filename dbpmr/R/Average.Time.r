@@ -13,7 +13,7 @@
 #' @export
 Average.Time<-function(species,time.lim){
 
-  dt<-species@grid@tout
+  dt<-species@grid@toutstep
   tmin<-min(species@trange)
   tmax<-max(species@trange)
 
@@ -24,7 +24,7 @@ Average.Time<-function(species,time.lim){
   if(missing(time.lim)){ time.lim=vector() ; time.lim[1]=tmin ; time.lim[2]=tmax}
   if(!is.numeric(time.lim)) stop("Time limits must be numeric")
   if(length(time.lim)>2) stop("Too many time limits entered")
-  if(length(time.lim==1)) time.lim[2]=time.lim[1]
+  if(length(time.lim)==1) time.lim[2]=time.lim[1]
 
   time.start=time.lim[1]
   time.end=time.lim[2]
@@ -38,7 +38,7 @@ Average.Time<-function(species,time.lim){
 
   average<-new("timestep.data")
 
-  average@spatial.dim<-as.integer(species@run[species@run=='spatial.dim',2])
+  average@spatial_dim<-species@run@spatial_dim
   average@trange<-seq(time.start,time.end,dt)
   average@mrange<-species@mrange
   average@xrange<-species@xrange
@@ -49,11 +49,12 @@ Average.Time<-function(species,time.lim){
   jmax<-which(species@trange==time.end)
   hold<-matrix(0,length(species@xrange)*length(species@yrange),(mnum+2))
   for(i in jmin:jmax){
-    temp<-as.matrix(species@data[species@data$t==species@trange[i],2:(mnum+3)])
+    temp<-as.matrix(species@uvals[abs(species@uvals$t-species@trange[i])<1e-7,2:(mnum+3)])
     hold<-hold+temp
   }
   average@data<-as.data.frame(hold/length(average@trange))
-  
+  names(average@data)<-names(species@uvals)[2:(mnum+3)]
+
   return(average)
 }
 

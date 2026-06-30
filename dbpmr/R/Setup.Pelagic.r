@@ -101,7 +101,7 @@ Setup.Pelagic<-function(run.in, mmin=-14, mmat=7, mmax=14, A=640, alpha=0.82, mu
   species@prey<-prey
   species@pred<-pred
   species@comp<-comp
-  species@gamma_prey<-gamma_pred
+  species@gamma_prey<-gamma_prey
   species@gamma_pred<-gamma_pred
   species@gamma_comp<-gamma_comp
 
