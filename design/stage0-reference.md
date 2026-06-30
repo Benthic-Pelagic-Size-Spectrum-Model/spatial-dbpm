@@ -263,6 +263,37 @@ applies the **benthic (cold-floor) temperature** and the **detritus → detritiv
 → predator coupling**. Reconciling this is a modelling decision (which partition
 is correct for LME-10) for the domain experts — tracked in issue #8.
 
+### 8.4 Resolution — dbpmr gives the correct healthy coexistence
+
+**Domain call (JB):** the correct LME-10 behaviour is **both pelagic and benthic
+thriving** — so the canonical `sizemodel()`'s collapsed pelagic is *wrong*, and
+dbpmr's sustained pelagic is right.
+
+**Reproduction is the mechanism.** The canonical reproductive allocation is the
+*residual* assimilated energy:
+```
+R.u = (1-def.high)(1-(K.u+AM.u))·f.pel + (1-def.high)(1-(K.v+AM.v))·f.ben = 0.14·f.pel + 0.07·f.ben
+R.v = (1-def.low )(1-(K.d+AM.v))·f.det                                    = 0.05·f.det
+```
+dbpmr `rep_method = 2` uses fixed efficiencies `R_pla/R_pel/R_ben = R_det = 0.2`
+of intake — **higher**, so dbpmr invests more in recruitment and **sustains both
+groups**, whereas the canonical residual scheme is leaner and collapses the
+pelagic. (Naively setting dbpmr's `R` to the canonical values just destabilises
+the run — the difference is structural: dbpmr keeps reproduction independent of
+the growth/maintenance budget, the canonical makes it the residual of a conserved
+budget.)
+
+**Working config (healthy coexistence, no fishing, LME-10):**
+`A_pel = 64·tempeffect`, `A_ben = 6.4·tempeffect`, weekly step, temperature on
+(feeding + background mortality), **consumer-min = -3**, `rep_method = 2`
+(default R), `epsilon = 0.21/0.14`. → pelagic biomass ~0.44, benthic ~1.71, both
+with sensible spectra (`adapter/stage0_prototype.R`).
+
+**Caveat — numerical fragility:** dbpmr `NaN`s at monthly steps, at
+consumer-min = -7, and when reproduction is pushed up. consumer-min = -3 + weekly
+is the stable operating point. The fragility (the implicit scheme's stability and
+the text-file I/O) is the real engineering work for gridded scale — issues #5/#7.
+
 ## 6. Adapter prototype (can start now, no engine changes)
 
 A pure-R adapter (using `arrow` for parquet, `jsonlite` for the reference JSONs)

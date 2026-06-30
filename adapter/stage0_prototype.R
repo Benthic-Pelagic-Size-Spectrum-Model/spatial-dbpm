@@ -13,13 +13,17 @@
 #   * dbpmr is numerically UNSTABLE at monthly steps for these params (NaN) even
 #     at A=12.8, but STABLE at weekly/daily; sizemodel() is stable at monthly --
 #     a real discretisation difference despite the shared upwind scheme (#7).
-# KEY FINDING (issue #8): at matched A + temperature, the engines DISAGREE on the
-#   pelagic. The sizemodel REFERENCE has COLLAPSED predators (density ~1e-35,
-#   benthic-only equilibrium) while dbpmr SUSTAINS a pelagic spectrum -- so the
-#   no-fishing reference itself looks unhealthy on the pelagic side (likely the
-#   sizemodel issue JB flagged). The benthic/detritivore magnitudes now agree
-#   (~1e3 at the boundary) but dbpmr's benthic spectrum is steeper (reaches
-#   smaller max size) -- a growth-vs-mortality slope difference still to reconcile.
+# RESULT (issue #8): with A_pel=64, A_ben=6.4, weekly steps, temperature applied
+#   (feeding & background mortality), and consumer-min = -3 (the LME convention),
+#   dbpmr reaches a HEALTHY COEXISTING equilibrium -- BOTH pelagic (biomass ~0.4)
+#   and benthic (~1.7) thriving -- which JB confirms is the correct LME-10
+#   behaviour. The canonical sizemodel(), by contrast, collapses the pelagic for
+#   LME-10. dbpmr's rep_method=2 (R~0.2 of intake) sustains both groups; the
+#   canonical residual-energy reproduction (0.14 pel / 0.05 ben) is leaner and
+#   collapses the pelagic.
+#   Caveats: dbpmr is numerically fragile -- it NaNs at monthly steps, at
+#   consumer-min=-7, and when reproduction is pushed; consumer-min=-3 + weekly is
+#   the stable, correct operating point.
 #
 # REQUIRES: local LME data (not in this repo) + an installed dbpmr.
 #   - arrow, jsonlite
@@ -52,8 +56,8 @@ tempeff <- function(temp) exp(p$c1[1] - p$activation_energy[1] /
 pel_te  <- tempeff(p$sea_surf_temp[1])
 ben_te  <- tempeff(p$sea_floor_temp[1])
 
-A_pel   <- p$hr_volume_search[1] * pel_te          # = 12.8 * 1.96
-A_ben   <- 0.1 * p$hr_volume_search[1] * ben_te    # = 1.28 * 0.24
+A_pel   <- 64 * pel_te          # canonical search volume A.u = 64 (per JB / CMIP5)
+A_ben   <- 6.4 * ben_te         # A.v = 0.1 * A.u = 6.4
 mu0_pel <- p$natural_mort[1] * pel_te
 mu0_ben <- p$natural_mort[1] * ben_te
 eps_pel <- (1 - p$defecate_prop[1]) * p$growth_pred[1]
