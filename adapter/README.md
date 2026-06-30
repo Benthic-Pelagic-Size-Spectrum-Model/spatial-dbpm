@@ -27,15 +27,20 @@ End-to-end Stage 0 / Stage 2 harness for one LME:
   DBPM_DATA=/path/to/DBPM_dev Rscript adapter/stage0_prototype.R
   ```
 
-### Status / finding
+### Status / findings
 
-The pipeline runs end-to-end, but the **literal crosswalk does not reproduce the
-LME equilibrium**: dbpmr's pelagic spectrum decays toward extinction across the
-search-rate range (final biomass ~1e-7 vs a non-trivial reference) and becomes
-numerically unstable when `A` is pushed high. So the divergence is **deeper than
-a single search-volume scale factor** — the resource/plankton coupling, the
-reproduction boundary condition, and the assimilation/mortality balance need
-reconciling between the two engines. Tracked in issue #8 (Stage 0).
+The pipeline runs end-to-end. Progress so far:
 
-This is the expected Stage 0 outcome: the harness now *quantifies* the gap, which
-defines the reconciliation work before the temperature/fishing stages.
+- **Stable non-trivial equilibrium achieved** with `A_pel = 64`, `A_ben = 6.4`
+  (0.1×64) and **weekly** steps (pelagic biomass ~0.56). Earlier configs
+  collapsed to extinction or went `NaN`.
+- **dbpmr is numerically unstable at monthly steps** for these LME-scale params,
+  but **stable at weekly/daily** — and weekly is the FishMIP time step the LME
+  workflow uses. (Relevant to issue #7.)
+- **Plankton confirmed fixed** through the run, matching `sizemodel()`.
+
+**Remaining (issue #8):** the equilibrium *shape* and *scale* don't yet match —
+dbpmr's pelagic spectrum is much shallower and offset by many orders of magnitude
+from the reference. Next: reconcile the density normalisation/units and the
+spectral slope (growth-vs-mortality balance, recruitment boundary) by comparing
+the C rate equations to `sizemodel()`.

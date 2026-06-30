@@ -176,6 +176,24 @@ reproduction rate equations between `dbpmr`'s C core (`calculate_g_and_mu`,
 `g_pel`/`mu_pel`, `calculate_reproduction`) and the LME `sizemodel()`, to find
 where the predator energy balance diverges. Tracked in issue #8.
 
+### 8.1 Stable equilibrium reached (update)
+
+Using `A_pel = 64`, `A_ben = 0.1 × 64 = 6.4` (canonical dbpmr-scale search rates,
+per JB — not the literal `hr_volume_search × tempeffect`, which collapses) and a
+**weekly** time step, `dbpmr` reaches a **stable, non-trivial equilibrium**
+(pelagic biomass ~0.56, not extinction).
+
+- **Time step matters:** `dbpmr` is numerically unstable at **monthly** steps for
+  these LME-scale parameters (`NaN`), but stable at **weekly** and **daily**.
+  Weekly is the FishMIP step the LME workflow already uses (issue #7).
+- **Plankton** is confirmed held fixed at the equilibrium input through the run.
+
+**Still open:** the equilibrium *shape* and *absolute scale* do not yet match the
+reference — `dbpmr`'s pelagic spectrum is much **shallower** and offset by many
+orders of magnitude (density normalisation/units + spectral-slope reconciliation:
+growth-vs-mortality balance and the recruitment boundary). This is the remaining
+Stage 0 work (issue #8).
+
 ## 6. Adapter prototype (can start now, no engine changes)
 
 A pure-R adapter (using `arrow` for parquet, `jsonlite` for the reference JSONs)

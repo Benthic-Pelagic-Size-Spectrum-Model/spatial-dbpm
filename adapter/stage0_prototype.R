@@ -5,12 +5,19 @@
 # (design/stage0-reference.md), runs it, and compares the equilibrium pelagic
 # spectrum to the LME `sizemodel()` reference.
 #
-# STATUS (first run): the read -> map -> run -> compare pipeline works
-# end-to-end, but the literal crosswalk does NOT reproduce the LME equilibrium
-# -- dbpmr's pelagic spectrum decays toward extinction across the search-rate
-# range and is numerically unstable when A is pushed high. The divergence is
-# therefore deeper than a single search-volume scale factor (resource coupling /
-# reproduction boundary / assimilation balance need reconciling). See issue #8.
+# STATUS: read -> map -> run -> compare pipeline works end-to-end.
+#   * dbpmr is numerically UNSTABLE at monthly steps for these LME-scale params
+#     (NaN); it is STABLE at WEEKLY steps (= the FishMIP time step), reaching a
+#     non-trivial equilibrium. Use tstep = 1/52.
+#   * search rates: A_pel = 64, A_ben = 0.1 * 64 (canonical dbpmr-scale values,
+#     per JB) -- NOT the literal hr_volume_search*tempeffect, which collapses.
+#     Temperature is held constant in the spin-up comparison.
+#   * plankton held fixed at the equilibrium input (u_0 = 10^int_phy_zoo,
+#     lambda = slope), confirmed constant through the run.
+# REMAINING (issue #8): the equilibrium SHAPE/units do not yet match -- dbpmr's
+#   pelagic spectrum is much shallower and offset by many orders of magnitude
+#   from the reference (density normalisation + spectral-slope reconciliation,
+#   i.e. growth-vs-mortality balance and the recruitment boundary).
 #
 # REQUIRES: local LME data (not in this repo) + an installed dbpmr.
 #   - arrow, jsonlite
@@ -31,22 +38,22 @@ ref <- fromJSON(file.path(base, "equilibrium_runs",
         sprintf("init_dbpm_nonspatial_fao_lme-%d_searchvol_12.8.json", LME)))
 p <- ref$params
 
-## ---- 2. crosswalk LME params -> dbpmr (constant forcing; temp folds into A) -
-hr <- p$hr_volume_search[1]
-tempeff <- function(temp) exp(p$c1[1] - p$activation_energy[1] /
-                                (p$boltzmann[1] * (temp + 273)))
-A_pel   <- hr * p$pref_pelagic[1] * tempeff(p$sea_surf_temp[1])
-A_ben   <- hr * p$pref_benthos[1] * tempeff(p$sea_floor_temp[1])
+## ---- 2. crosswalk LME params -> dbpmr ---------------------------------------
+# Search rates use the canonical dbpmr-scale values (per JB); the literal
+# hr_volume_search*tempeffect collapses the population. Temperature constant in
+# the spin-up comparison, so it is absorbed into A here.
+A_pel   <- 64
+A_ben   <- 0.1 * 64
 eps_pel <- (1 - p$defecate_prop[1]) * p$growth_pred[1]
 eps_ben <- (1 - p$defecate_prop[1]) * p$growth_detritivore[1]
-u0_pla  <- 10^p$int_phy_zoo[1]
+u0_pla  <- 10^p$int_phy_zoo[1]   # plankton held fixed at the equilibrium input
 lam_pla <- p$slope_phy_zoo[1]
 
 ## ---- 3. configure & run dbpmr (no fishing, aspatial, to equilibrium) -------
 wd <- tempfile("stage0"); dir.create(wd); old <- setwd(wd); on.exit(setwd(old))
 run  <- Setup.Run("LMErun", 1, 1, spatial_dim = 0, coupled_flag = TRUE, diff_method = 1)
 grid <- Setup.Grid(run, mmin = -12*LN10, mmax = 6*LN10, mstep = 0.1*LN10,
-          moutstep = 0.1*LN10, tmax = p$n_years[1], tstep = 1/12, toutstep = 1)
+          moutstep = 0.1*LN10, tmax = p$n_years[1], tstep = 1/52, toutstep = 1)
 plankton <- Setup.Plankton(run, filename = "plankton",
               mmin = -12*LN10, mmax = -3*LN10, u_0 = u0_pla, lambda = lam_pla)
 pelagic  <- Setup.Pelagic(run, filename = "fish", mmin = -3*LN10, mmax = 6*LN10,
