@@ -137,6 +137,36 @@ net pelagic growth efficiency = growth_prop * growth_pred   # 0.7 * 0.3 = 0.21
 configured entirely from the crosswalk + these formulas, with temperature folded
 into `A` — so Stage 0 can run today against the engine as-is.
 
+## 8. First prototype run (findings)
+
+The harness `adapter/stage0_prototype.R` runs the full read → map → run → compare
+pipeline for LME 10 (181 log10 bins, 200-year monthly spin-up). The forcing
+parquet and reference JSON params match exactly (e.g. `intercept = int_phy_zoo =
+-3.108`, `tos = sea_surf_temp = 24.74`), confirming the data path.
+
+**Result: the literal crosswalk does not reproduce the LME equilibrium.** The
+reference predator spectrum is non-zero across all 181 bins; the matched `dbpmr`
+run **decays toward extinction** (final pelagic biomass ~1e-7). A search-rate
+sensitivity sweep (`A × 1, 5, 25, 100`) does **not** recover it — biomass stays
+~1e-7 up to ×25 and the run goes **numerically unstable (NaN)** at ×100.
+
+**Interpretation.** The divergence is deeper than the flagged search-volume unit
+factor. Candidates to reconcile (the real Stage 0 work):
+- **Plankton/resource coupling** — confirm `dbpmr` treats the plankton spectrum
+  as a *fixed boundary resource* (as `sizemodel()` does) rather than a decaying
+  dynamic pool; mismatch here starves the predators.
+- **Reproduction boundary** — `dynamic_reproduction = 1` vs `dbpmr`
+  `rep_method = 2/3`; the recruitment flux at the smallest predator size sets
+  whether the spectrum self-sustains.
+- **Assimilation / mortality balance** — the `defecate_prop`/`growth_pred`/
+  `energy_pred` → single `epsilon` collapse, and the senescence terms.
+- **Search-rate units** — still a factor, but not the sole cause.
+
+This is the intended Stage 0 outcome: the harness now **quantifies** the gap and
+isolates the parameters that must be reconciled before the temperature (Stage 3)
+and fishing (Stage 4) work. It is a modelling reconciliation task, tracked in
+issue #8.
+
 ## 6. Adapter prototype (can start now, no engine changes)
 
 A pure-R adapter (using `arrow` for parquet, `jsonlite` for the reference JSONs)
