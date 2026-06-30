@@ -228,6 +228,41 @@ reference's collapsed predators and needs a trustworthy reference (a different
 LME / search volume, or confirmation that the collapse is the known sizemodel
 bug).
 
+### 8.3 Canonical CMIP5 `sizemodel()` cross-check (`adapter/cmip5_reference.R`)
+
+Ran the canonical DBPM `sizemodel()` (from `dbpm_isimip_3b`,
+`dynamic_sizebased_model_functions_CMIP52019.R`) directly, with LME-10 constant
+stable-spin forcing. Confirms canonical parameters: `A.u = 64`, `A.v = 0.1·A.u`,
+default timestep `tstepspryr = 48` (≈ weekly), `alpha 0.82/0.75`, `mu0 = 0.2`,
+depth-dependent `pref.ben = 0.8·e^(−depth/250)` (= 5.4e-8 at 4128 m, matching the
+reference param exactly).
+
+**Findings:**
+
+- **The collapse is genuine, not a calibration artifact.** At canonical
+  `A.u = 64`, the CMIP5 `sizemodel()` **also collapses the LME-10 predators**
+  (max ~1e-31) while detritivores stay alive (max ~4.9). So both sizemodel
+  versions agree the LME-10 unfished pelagic collapses — it is the model's real
+  behaviour for this deep (4128 m), cold-floored (1.3 °C), low-export LME.
+- **`A = 64` is unviable for matching:** the canonical model *crashes* at low
+  search volumes for LME-10 unless the export ratio (`sinking_rate`, not
+  `export_ratio`) is supplied; once supplied it runs but the predators collapse.
+- **The two engines are near mirror images** at matched `A = 64` + temperature:
+  - CMIP5 → **detritivore-dominated** (extended detritivore spectrum, predators
+    collapsed);
+  - `dbpmr` → **pelagic-dominated** (extended pelagic spectrum; benthos collapses
+    once the cold-floor temperature ×0.24 is applied to `A_ben`).
+  Strikingly, dbpmr's *pelagic* and CMIP5's *detritivore* have nearly the same
+  shape and extent — each engine sustains the **opposite** functional group.
+
+**Interpretation.** This is no longer a parameter-tuning gap: the engines
+partition the **benthic–pelagic energy balance** in opposite directions. The
+prime suspects are (a) **reproduction** — dbpmr `rep_method = 2` (R·intake,
+default R = 0.2) vs the canonical egg-integral `R.u·biomass`; and (b) how each
+applies the **benthic (cold-floor) temperature** and the **detritus → detritivore
+→ predator coupling**. Reconciling this is a modelling decision (which partition
+is correct for LME-10) for the domain experts — tracked in issue #8.
+
 ## 6. Adapter prototype (can start now, no engine changes)
 
 A pure-R adapter (using `arrow` for parquet, `jsonlite` for the reference JSONs)
