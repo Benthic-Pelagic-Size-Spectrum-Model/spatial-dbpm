@@ -88,13 +88,54 @@ kernel width.
 
 ## 5. Blockers / asks before running Stage 0
 
-1. **Exact `sizemodel()` rate equations** — to reconcile `hr_volume_search`↔`A`,
-   the assimilation/defecation coefficients, the senescence terms, and the
-   plankton `int/slope`→resource mapping, I need the LME engine source
-   (`scripts/useful_functions.R`) locally, or confirmation of these mappings.
-2. Confirm `dynamic_reproduction = 1` ↔ `dbpmr` `rep_method` (2 vs 3).
-3. Confirm whether the Stage 0 comparison should hold temperature constant
-   (spin-up) — recommended — before adding the temperature forcing in Stage 3.
+The exact `sizemodel()` equations have now been read from source (see §7), which
+**removes the main blocker**: at constant spin-up forcing, Stage 0 needs **no
+engine change**. Remaining confirmations only:
+
+1. Confirm `dynamic_reproduction = 1` ↔ `dbpmr` `rep_method` (2 vs 3).
+2. Confirm the net pelagic growth efficiency mapping (LME splits it across
+   `defecate_prop`, `growth_pred`, `energy_pred`; dbpmr uses a single `epsilon`).
+
+## 7. Resolved equations (from `sizemodel()` source)
+
+Verbatim relationships extracted from `scripts/useful_functions.R`:
+
+**Search / encounter rate** — same functional form as `dbpmr`:
+```
+feed_mult_pel = hr_volume_search * 10^(log10_size * metabolic_req_pred) * pref_pelagic
+              = A * w^alpha            # w = mass, alpha = metabolic_req_pred
+```
+→ set `dbpmr` pelagic `A = hr_volume_search * pref_pelagic` (× temp factor below),
+`alpha = metabolic_req_pred` (already the default 0.82).
+
+**Temperature (Boltzmann–Arrhenius)** — multiplies the feeding rate:
+```
+pel_tempeffect = exp(c1 - activation_energy/(boltzmann*(sea_surf_temp + 273)))
+ben_tempeffect = exp(c1 - activation_energy/(boltzmann*(sea_floor_temp + 273)))
+```
+For LME 10 (T_surf = 24.74, T_floor = 1.28): pel ≈ **1.96**, ben ≈ **0.24**.
+Constant during spin-up ⇒ **fold into `A`** for Stage 0:
+`A_pel = hr_volume_search * pel_tempeffect`,
+`A_ben = hr_volume_search * pref_benthos * ben_tempeffect`. (Becomes a true
+per-timestep forcing in Stage 3.)
+
+**Plankton resource** — clean base conversion:
+```
+density = 10^int_phy_zoo * w^slope_phy_zoo
+```
+→ `dbpmr` plankton `lambda = slope_phy_zoo`, `u_0 = 10^int_phy_zoo`
+(the slope needs **no** log-base conversion — it is the exponent on mass itself).
+
+**Assimilation / growth efficiency:**
+```
+growth_prop = 1 - defecate_prop            # 0.7
+net pelagic growth efficiency = growth_prop * growth_pred   # 0.7 * 0.3 = 0.21
+```
+→ `dbpmr` `epsilon ≈ 0.21` (pelagic); benthic via `growth_detritivore`.
+
+**Implication:** a matched **no-fishing, constant-forcing** `dbpmr` 0-D run can be
+configured entirely from the crosswalk + these formulas, with temperature folded
+into `A` — so Stage 0 can run today against the engine as-is.
 
 ## 6. Adapter prototype (can start now, no engine changes)
 
