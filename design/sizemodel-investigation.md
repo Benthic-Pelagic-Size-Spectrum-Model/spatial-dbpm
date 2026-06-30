@@ -104,7 +104,7 @@ which rate differs (dbpmr's effective growth higher, or its small-size mortality
 lower) needs a direct rate-level comparison of `g_pel`/`mu_pel` at the recruit
 size against `sizemodel()`'s `GG.u`/`Z.u` — the remaining Stage 0 task.
 
-## 4b. Rate-level comparison at the recruit size (why dbpmr survives)
+## 4b. Rate-level comparison at the recruit size (the 2.3× growth)
 
 Extracted growth and mortality at the recruit (log10 −3), converting dbpmr's
 `d ln m/dt` to `d log10 m/dt` (÷ln10):
@@ -126,11 +126,60 @@ sizemodel:  GG.u = (1-def.high)*K.u*f.pel + (1-def.low)*K.v*f.ben   = 0.21*f.pel
 dbpmr g_pel: K_pla*(1/w)*pla_bio + K_pel*(1/w)*pel_bio + K_ben*(1/w)*ben_bio   (K~0.2)
 ```
 Both are `efficiency × mass-specific feeding`, with sizemodel effective 0.21 and
-dbpmr default `K = 0.2`. The ~2.3× growth difference therefore comes from the
-**feeding/intake calculation** (the `phi`/`gphi` feeding kernel and satiation),
-not the conversion efficiency — dbpmr extracts more growth from the same fixed
-plankton, letting its recruits grow out of the high small-size-mortality zone and
-the pelagic bootstrap/persist.
+dbpmr default `K = 0.2`. The conversion efficiencies are near-equal, so the ~2.3×
+sits in the **feeding integral** — see §4d, which pins it down exactly.
+
+## 4d. The 2.3× growth IS ln(10) — but it is NOT why dbpmr survives (#23)
+
+Reconciling the two intake calculations term-by-term, they are **structurally
+identical**:
+
+```
+dbpmr   pla_bio = pref*A*w_pred^alpha * SUM_i[ exp(m_i) * phi(size-i) * u_i * mstep ]
+        g_pel   = K*(1/w_pred)*pla_bio = K*pref*A*w_pred^(alpha-1) * SUM[ w_prey*phi*u*mstep ]
+
+sizemodel f.pel = A*w_pred^alpha*pref * (U*dx) %*% gphi,   gphi(q) = 10^(-q)*phi(q) = (w_prey/w_pred)*phi
+        GG.u    = (1-def)*K * f.pel  = (1-def)*K*pref*A*w_pred^(alpha-1) * SUM[ w_prey*phi*u*dx ]
+```
+
+dbpmr's explicit `exp(m_i)` prey-biomass weighting is exactly sizemodel's
+`gphi = 10^(-q)·phi` factor; same `K`, `A`, `pref`, and `w_pred^(alpha-1)`
+size-scaling. **The only difference is the integration step**: dbpmr sums over
+**ln-mass** with `mstep = 0.1·ln10 = 0.2303`; sizemodel sums over **log10-mass**
+with `dx = 0.1`. Their ratio is
+
+```
+mstep / dx = ln(10) = 2.3026
+```
+
+— exactly the measured growth ratio `0.996 / 0.44 = 2.26×` (§4b). So the 2.3× is
+**`ln(10)`**, a log10-vs-ln feeding-integration convention difference: with the
+plankton intercept `10^int` fed identically to both engines (Stage 0 mapping),
+dbpmr's feeding integral over-counts the prey by `ln(10)` relative to sizemodel's.
+
+**But this factor does not explain the survival difference.** Stripping it from
+dbpmr the clean way — dividing `A` by `ln(10)` (it multiplies the *whole*
+integral, so scaling plankton alone is insufficient) — **does not collapse the
+pelagic**; it actually *rises*:
+
+| dbpmr config (LME-10, weekly, mu0=0.2) | pelagic |
+|---|---|
+| `A = 64` (Stage 0) | ALIVE (32.4) |
+| `A = 64/ln10 = 27.8` (ln10-corrected) | **ALIVE (50.2)** |
+| plankton `10^int / ln10` | ALIVE (21.8) |
+
+dbpmr is **robust to feeding strength** because its predation mortality (`death.u`)
+scales with `A` too, so growth and death rebalance around a new equilibrium.
+sizemodel is **fragile** because its collapse is driven by *background* mortality
+(`mu0·w^−0.25·temp`), which is independent of `A`/feeding and so cannot be
+rebalanced away.
+
+**Conclusion (corrects §4b's implication).** The feeding kernel explains the *2.3×
+growth number* (it is `ln(10)`), but **not** dbpmr's persistence. Survival is set
+by the **mortality structure** (§2): dbpmr sits in a high-throughput,
+predation-dominated equilibrium insensitive to the feeding scale, whereas
+sizemodel's recruits are killed by A-independent background mortality. The lever
+remains `mu0`, not the feeding kernel.
 
 **Parameter-mapping note (Stage 0 setup):** the dbpmr runs set `epsilon = 0.21`,
 but in dbpmr `epsilon` is the **senescence** constant — growth efficiency is
