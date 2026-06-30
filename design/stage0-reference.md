@@ -269,8 +269,15 @@ is correct for LME-10) for the domain experts — tracked in issue #8.
 thriving** — so the canonical `sizemodel()`'s collapsed pelagic is *wrong*, and
 dbpmr's sustained pelagic is right.
 
-**Reproduction is the mechanism.** The canonical reproductive allocation is the
-*residual* assimilated energy:
+> **Correction (see [`sizemodel-investigation.md`](sizemodel-investigation.md)):**
+> the attribution to reproduction below is **superseded**. The sizemodel predator
+> collapse is driven by **background mortality** at small sizes (lowering `mu0`
+> restores the predators; even maximum reproduction does not), not by
+> reproduction strength. dbpmr's persistence comes from a different small-size
+> growth/mortality balance, still to be pinned down at the rate level.
+
+**Reproduction (earlier hypothesis, now superseded).** The canonical reproductive
+allocation is the *residual* assimilated energy:
 ```
 R.u = (1-def.high)(1-(K.u+AM.u))·f.pel + (1-def.high)(1-(K.v+AM.v))·f.ben = 0.14·f.pel + 0.07·f.ben
 R.v = (1-def.low )(1-(K.d+AM.v))·f.det                                    = 0.05·f.det
