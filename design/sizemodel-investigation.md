@@ -138,6 +138,27 @@ but in dbpmr `epsilon` is the **senescence** constant — growth efficiency is
 (≈ the canonical 0.21 by coincidence), not a deliberately-mapped value. A clean
 reconciliation should set `K_*` explicitly and map `epsilon`/senescence properly.
 
+## 4c. Should temperature force background mortality? (design question)
+
+`sizemodel()` applies the Boltzmann factor to **feeding** (→ growth and, via
+satiation, **predation mortality**) *and* explicitly to **background ("other")
+mortality** (`Z.u = PM.u + pel.Tempeffect*OM.u + SM.u`); senescence is unscaled.
+
+Test (LME-10): removing temperature from background mortality only — keeping it on
+feeding/predation — raises the equilibrium predator from ~1e-26 to ~1e-16 but
+**does not prevent the collapse**. So the explicit background-mortality scaling is
+a *contributing* factor, not the root cause (the growth deficit of §4b dominates).
+
+**Design recommendation (for dbpmr Stage 3 / #11).** Apply the Boltzmann factor to
+**feeding only** — it propagates consistently to growth and predation mortality
+(two sides of the same encounter process) — and leave **background mortality and
+senescence temperature-independent**. Scaling background "other" mortality up at a
+warm surface adds death with no compensating production, an asymmetry that pushes
+the pelagic toward collapse; it is also harder to justify biologically (it is a
+closure term, not a metabolic flux). dbpmr in Stage 0 folded temperature into both
+`A` and `mu_0` and still thrived (because of the higher growth), but the cleaner
+choice going forward is feeding-only.
+
 ## 5. Summary — "the problem with `sizemodel()`"
 
 1. **Dynamical/parameter:** for warm-surfaced, low-productivity LMEs the
