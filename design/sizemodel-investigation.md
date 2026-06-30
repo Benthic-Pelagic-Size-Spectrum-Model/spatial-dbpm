@@ -222,3 +222,92 @@ choice going forward is feeding-only.
 Both `sizemodel()` lineages share this core dynamics, so both collapse the LME-10
 pelagic. dbpmr gives the healthy coexistence that (per JB) is the correct
 behaviour.
+
+## 6. LME-wide sweep — it runs everywhere, collapse is warm + oligotrophic
+
+Ran the canonical CMIP5 `sizemodel()` at **`A.u = 64`, consumer-min −3,
+`temp.effect = TRUE`** across **all 82 LME** equilibrium inputs (100-yr spin).
+
+- **No crashes.** Every run completed; *no* `NaN`/error at this configuration.
+  So the `NaN` bug (§3) does **not** bite the A.u=64 LME sweep — the failures are
+  clean dynamical collapses, not numerical ones.
+- **70 ALIVE, 12 COLLAPSED.** The collapses are **not random**: every one is a
+  **warm-surface, low-productivity** basin.
+
+| collapsed LME | sst (°C) | pp (intercept) |
+|---|---|---|
+| 10, 12, 16, 30, 31, 40, 44, 131, 134, 151, 171, 177 | **all ≥ 22** | **all ≤ −2.3** |
+
+Warm LMEs with adequate productivity survive (LME-35: sst 28.4, pp −0.39 →
+alive); cold oligotrophic ones survive (LME-64: pp −3.71 → barely alive). Only
+the **combination** warm + unproductive collapses — precisely the §2 mechanism
+(temperature-amplified small-size background mortality outpacing growth where food
+is scarce).
+
+## 7. How to fix `sizemodel()` — two levers, tested on the 12
+
+Re-ran the 12 collapsed LMEs under each candidate. Predator `max(x>−3)`:
+
+| LME | baseline | `mu0 = 0.05` | feeding-only temp |
+|---|---|---|---|
+| 10  | DEAD | **alive 0.74** | DEAD 1.5e-11 |
+| 12  | DEAD | alive 4.1 | alive 0.76 |
+| 16  | DEAD | alive 3.9 | alive 0.08 |
+| 30  | DEAD | alive 12  | alive 5.8 |
+| 31  | DEAD | alive 8.4 | alive 4.3 |
+| 40  | DEAD | alive 6.0 | alive 1.4 |
+| 44  | DEAD | alive 8.1 | alive 0.004 |
+| 131 | DEAD | **alive 0.92** | DEAD 2.6e-11 |
+| 134 | DEAD | alive 11  | alive 4.0 |
+| 151 | DEAD | alive 10  | alive 2.1 |
+| 171 | DEAD | alive 2.7 | alive 0.04 |
+| 177 | DEAD | alive 12  | alive 5.2 |
+
+- **Lower background mortality (`mu0 ≈ 0.05`) rescues all 12** — the robust,
+  reliable lever (consistent with §2). It is a *recalibration*, not a code fix.
+- **Feeding-only temperature** (do not Boltzmann-amplify background mortality;
+  the §4c recommendation) **rescues 10 of 12** with no recalibration; only the two
+  most starved LMEs (10, 131, pp ≈ −3.1) still die. Biologically cleaner — it
+  removes "death with no compensating production" — and gets most of the way.
+- **`NaN` guard fix** (`W[i] == "NaN"` → `is.nan(W[i])`, §3) is *not* what the
+  LME collapses need (no `NaN` at A.u=64), but it remains a genuine robustness bug
+  for other forcings (`temp.effect = FALSE`, high `pp`).
+
+**Recommendation.** For dbpmr's FishMIP path, adopt **feeding-only temperature**
+(it fixes most LMEs structurally and is the cleaner closure) *and* expose `mu0`
+(and/or a small-size mortality floor) for the few warm-oligotrophic LMEs that need
+recalibration; fix the `is.nan` guard regardless. dbpmr already survives these
+LMEs because its mortality balance is predation-dominated and robust to feeding
+scale (§4d), so the same feeding-only-temperature choice is low-risk there.
+
+## 8. Growth-efficiency / senescence mapping (#22)
+
+The Stage 0 dbpmr crosswalk previously passed the growth efficiency into dbpmr's
+`epsilon` argument — but **`epsilon` is the senescence size offset**
+(`mu_s·(log10 w − log10 w_min)/((log10 w_max + epsilon) − log10 w)`), not an
+efficiency. The growth efficiencies are `K_pla`/`K_pel`/`K_ben`, with companion
+reproduction (`R_*`) and excretion (`Ex_*`) fractions. Each unit of intake splits
+into **defecation + (K growth + R reproduction + Ex excretion)**, with
+`K + R + Ex = 1 − defecation`.
+
+Faithful mapping from the LME JSON (sizemodel keys the budget to the **prey
+type** — pelagic/plankton use `def.high`, benthic/detritus use `def.low`):
+
+| budget channel | formula | value |
+|---|---|---|
+| pelagic-prey `K_pel`/`R_pel`/`Ex_pel` | `(1−def.high)·{K.u, 1−(K.u+AM.u), AM.u}` | 0.21 / 0.14 / 0.35 |
+| benthic-prey `K_ben`/`R_ben`/`Ex_ben` (and detritivore `K_det`/`R_det`/`Ex_det`) | `(1−def.low)·{K.v, 1−(K.v+AM.v), AM.v}` | 0.10 / 0.05 / 0.35 |
+
+(`def.high=0.3`, `def.low=0.5`, `K.u=growth_pred=0.3`, `AM.u=energy_pred=0.5`,
+`K.v=growth_detritivore=0.2`, `AM.v=energy_detritivore=0.7`.) Both channels close
+to `1−def`. The dbpmr defaults (`R_pel=0.2`, `R_ben=0.2`) over-state reproduction
+(faithful 0.14 / 0.05); `adapter/stage0_prototype.R` now sets `K_*`/`R_*`/`Ex_*`
+explicitly and no longer mis-assigns `epsilon`. Setting the lower, faithful
+reproduction does **not** collapse dbpmr (still healthy coexistence) — again
+consistent with reproduction not being the survival lever (§4d).
+
+**Senescence does not map 1:1.** sizemodel uses a power law
+`SM = const_senescence·10^(exp_senescence·(x − size_senescence))`; dbpmr uses a
+hyperbolic form diverging near `w_max` (`mu_s`, `epsilon`). These are different
+functional forms, so senescence is left at dbpmr's default and flagged for the
+engine-reconciliation work rather than force-fit through a fake parameter map.

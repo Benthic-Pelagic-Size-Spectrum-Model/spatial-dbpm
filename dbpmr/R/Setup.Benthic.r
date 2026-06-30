@@ -10,11 +10,17 @@
 #' @param mu_0 Background mortality constant.
 #' @param beta Mortality mass-scaling exponent.
 #' @param mu_s Senescence mortality constant.
-#' @param epsilon Assimilation/growth efficiency.
+#' @param epsilon Senescence size offset: added to the maximum log10 size in the
+#'   senescence denominator
+#'   `mu_s * (log10 w - log10 w_min) / ((log10 w_max + epsilon) - log10 w)`, so
+#'   senescence mortality stays finite at `w_max`. This is **not** a growth
+#'   efficiency (the growth efficiency is `K_det`).
 #' @param u_0 Abundance constant.
 #' @param lambda Spectrum slope.
-#' @param K_det,R_det,Ex_det Assimilation, retention and excretion coefficients
-#'   for feeding on detritus.
+#' @param K_det,R_det,Ex_det Growth (assimilation-to-growth), reproduction
+#'   (retention) and excretion fractions of intake when feeding on detritus.
+#'   Together with defecation they partition each unit of intake, so
+#'   `K + R + Ex = 1 - defecation`.
 #' @param pref_det Feeding preference for detritus.
 #' @param rep_method Integer reproduction method. `0` = fixed recruitment held
 #'   at the initial density of the smallest size class; `1` = a prescribed

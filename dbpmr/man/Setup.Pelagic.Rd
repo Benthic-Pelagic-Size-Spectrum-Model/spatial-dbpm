@@ -60,20 +60,26 @@ Setup.Pelagic(
 
 \item{mu_s}{Senescence mortality constant.}
 
-\item{epsilon}{Assimilation/growth efficiency.}
+\item{epsilon}{Senescence size offset: added to the maximum log10 size in the
+senescence denominator
+\verb{mu_s * (log10 w - log10 w_min) / ((log10 w_max + epsilon) - log10 w)}, so
+senescence mortality stays finite at \code{w_max}. This is \strong{not} a growth
+efficiency (the growth efficiencies are \code{K_pla}/\code{K_pel}/\code{K_ben}).}
 
 \item{u_0}{Abundance constant.}
 
 \item{lambda}{Spectrum slope.}
 
-\item{K_pla, R_pla, Ex_pla}{Assimilation, retention and excretion coefficients
-for feeding on plankton. Default to the corresponding pelagic values.}
+\item{K_pla, R_pla, Ex_pla}{Growth (assimilation-to-growth), reproduction
+(retention) and excretion fractions of intake when feeding on plankton.
+Together with defecation they partition each unit of intake, so
+\code{K + R + Ex = 1 - defecation}. Default to the corresponding pelagic values.}
 
-\item{K_pel, R_pel, Ex_pel}{Assimilation, retention and excretion coefficients
-for feeding on other pelagics.}
+\item{K_pel, R_pel, Ex_pel}{Growth, reproduction and excretion fractions for
+feeding on other pelagics.}
 
-\item{K_ben, R_ben, Ex_ben}{Assimilation, retention and excretion coefficients
-for feeding on benthos.}
+\item{K_ben, R_ben, Ex_ben}{Growth, reproduction and excretion fractions for
+feeding on benthos.}
 
 \item{pref_pla, pref_pel, pref_ben}{Feeding preferences for plankton, pelagic
 and benthic prey.}

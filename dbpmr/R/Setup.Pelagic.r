@@ -10,15 +10,21 @@
 #' @param mu_0 Background mortality constant.
 #' @param beta Mortality mass-scaling exponent.
 #' @param mu_s Senescence mortality constant.
-#' @param epsilon Assimilation/growth efficiency.
+#' @param epsilon Senescence size offset: added to the maximum log10 size in the
+#'   senescence denominator
+#'   `mu_s * (log10 w - log10 w_min) / ((log10 w_max + epsilon) - log10 w)`, so
+#'   senescence mortality stays finite at `w_max`. This is **not** a growth
+#'   efficiency (the growth efficiencies are `K_pla`/`K_pel`/`K_ben`).
 #' @param u_0 Abundance constant.
 #' @param lambda Spectrum slope.
-#' @param K_pla,R_pla,Ex_pla Assimilation, retention and excretion coefficients
-#'   for feeding on plankton. Default to the corresponding pelagic values.
-#' @param K_pel,R_pel,Ex_pel Assimilation, retention and excretion coefficients
-#'   for feeding on other pelagics.
-#' @param K_ben,R_ben,Ex_ben Assimilation, retention and excretion coefficients
-#'   for feeding on benthos.
+#' @param K_pla,R_pla,Ex_pla Growth (assimilation-to-growth), reproduction
+#'   (retention) and excretion fractions of intake when feeding on plankton.
+#'   Together with defecation they partition each unit of intake, so
+#'   `K + R + Ex = 1 - defecation`. Default to the corresponding pelagic values.
+#' @param K_pel,R_pel,Ex_pel Growth, reproduction and excretion fractions for
+#'   feeding on other pelagics.
+#' @param K_ben,R_ben,Ex_ben Growth, reproduction and excretion fractions for
+#'   feeding on benthos.
 #' @param pref_pla,pref_pel,pref_ben Feeding preferences for plankton, pelagic
 #'   and benthic prey.
 #' @param q_0 Preferred predator-prey log-mass ratio.

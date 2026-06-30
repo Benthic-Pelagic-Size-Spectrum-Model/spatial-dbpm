@@ -60,8 +60,20 @@ A_pel   <- 64 * pel_te          # canonical search volume A.u = 64 (per JB / CMI
 A_ben   <- 6.4 * ben_te         # A.v = 0.1 * A.u = 6.4
 mu0_pel <- p$natural_mort[1] * pel_te
 mu0_ben <- p$natural_mort[1] * ben_te
-eps_pel <- (1 - p$defecate_prop[1]) * p$growth_pred[1]
-eps_ben <- (1 - p$defecate_prop[1]) * p$growth_detritivore[1]
+# Energy budget (#22): each unit of intake -> defecation + assimilated (1-def);
+# the assimilated fraction splits into growth (K), reproduction (R) and
+# excretion (Ex), so K + R + Ex = 1 - def. sizemodel keys the budget to the PREY
+# type: pelagic/plankton prey use def.high + growth_pred (K.u) + energy_pred
+# (AM.u); benthic/detritus prey use def.low + growth_detritivore (K.v) +
+# energy_detritivore (AM.v). NB dbpmr's `epsilon` is the senescence size offset,
+# NOT a growth efficiency, so it must not be set from the growth coefficients.
+defh <- p$defecate_prop[1]; defl <- p$def_low[1]
+Ku <- p$growth_pred[1];          AMu <- p$energy_pred[1]
+Kv <- p$growth_detritivore[1];   AMv <- p$energy_detritivore[1]
+# pelagic predator on plankton/pelagic prey (def.high budget):
+K_pel  <- (1-defh)*Ku ; R_pel  <- (1-defh)*(1-(Ku+AMu)) ; Ex_pel <- (1-defh)*AMu
+# pelagic predator on benthic prey, and detritivore on detritus (def.low budget):
+K_lo   <- (1-defl)*Kv ; R_lo   <- (1-defl)*(1-(Kv+AMv)) ; Ex_lo  <- (1-defl)*AMv
 u0_pla  <- 10^p$int_phy_zoo[1]   # plankton held fixed at the equilibrium input
 lam_pla <- p$slope_phy_zoo[1]
 
@@ -73,11 +85,15 @@ grid <- Setup.Grid(run, mmin = -12*LN10, mmax = 6*LN10, mstep = 0.1*LN10,
 plankton <- Setup.Plankton(run, filename = "plankton",
               mmin = -12*LN10, mmax = -3*LN10, u_0 = u0_pla, lambda = lam_pla)
 pelagic  <- Setup.Pelagic(run, filename = "fish", mmin = -3*LN10, mmax = 6*LN10,
-              alpha = p$metabolic_req_pred[1], A = A_pel, epsilon = eps_pel,
-              mu_0 = mu0_pel, rep_method = 2, fishing_flag = FALSE)
+              alpha = p$metabolic_req_pred[1], A = A_pel, mu_0 = mu0_pel,
+              K_pla = K_pel, R_pla = R_pel, Ex_pla = Ex_pel,
+              K_pel = K_pel, R_pel = R_pel, Ex_pel = Ex_pel,
+              K_ben = K_lo,  R_ben = R_lo,  Ex_ben = Ex_lo,
+              rep_method = 2, fishing_flag = FALSE)
 benthic  <- Setup.Benthic(run, filename = "benthos", mmin = -3*LN10, mmax = 4*LN10,
-              alpha = p$metabolic_req_detritivore[1], A = A_ben, epsilon = eps_ben,
-              mu_0 = mu0_ben, rep_method = 2, fishing_flag = FALSE)
+              alpha = p$metabolic_req_detritivore[1], A = A_ben, mu_0 = mu0_ben,
+              K_det = K_lo, R_det = R_lo, Ex_det = Ex_lo,
+              rep_method = 2, fishing_flag = FALSE)
 detritus <- Setup.Detritus(run, filename = "detritus")
 invisible(capture.output(SizeSpectrum(run, grid, plankton, pelagic, benthic, detritus)))
 
