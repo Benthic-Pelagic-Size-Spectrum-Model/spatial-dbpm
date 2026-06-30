@@ -6,8 +6,8 @@
 \usage{
 Setup.Plankton(
   run.in,
-  mmin = -28,
-  mmax = -14,
+  mmin = -12 * log(10),
+  mmax = -3 * log(10),
   mu_0 = 0.2,
   beta = -0.25,
   u_0 = 0.01,
@@ -20,7 +20,10 @@ Setup.Plankton(
 \arguments{
 \item{run.in}{A \link{run.params} object.}
 
-\item{mmin, mmax}{Minimum and maximum log-mass of the plankton spectrum.}
+\item{mmin, mmax}{Minimum and maximum log-mass of the plankton spectrum. The
+defaults span the canonical FishMIP plankton range \code{10^-12} to \code{10^-3} g
+(natural log, \code{-12*log(10)} to \code{-3*log(10)}), meeting the consumer spectrum
+at \code{10^-3} g.}
 
 \item{mu_0}{Mortality constant.}
 

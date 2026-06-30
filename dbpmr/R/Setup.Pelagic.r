@@ -5,6 +5,9 @@
 #'
 #' @param run.in A [run.params] object.
 #' @param mmin,mmat,mmax Minimum, maturation and maximum log-mass of the species.
+#'   The defaults are the canonical FishMIP consumer range `10^-3` to `10^6` g
+#'   (natural log, `-3*log(10)` to `6*log(10)`), so the consumer minimum is
+#'   `10^-3` g.
 #' @param A Search/encounter rate constant.
 #' @param alpha Search-rate mass-scaling exponent.
 #' @param mu_0 Background mortality constant.
@@ -52,7 +55,7 @@
 #'   with an error. The other methods (`0`, `2`, `3`) need no input file.
 #' @seealso [Setup.Benthic()], [Setup.Rep()], [Setup.fishing()]
 #' @export
-Setup.Pelagic<-function(run.in, mmin=-14, mmat=7, mmax=14, A=640, alpha=0.82, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-1, K_pla, R_pla, Ex_pla, K_pel=0.2, R_pel=0.2, Ex_pel=0.3, K_ben=0.1, R_ben=0.2, Ex_ben=0.4, pref_pla=1, pref_pel=1, pref_ben=1, q_0=log(100), sig=log(10), trunc=2, prey=0, pred=0, comp=0.1, gamma_prey=0.33, gamma_pred=0.33, gamma_comp=0.75, rep_method=2, initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE, filename){
+Setup.Pelagic<-function(run.in, mmin=-3*log(10), mmat=2*log(10), mmax=6*log(10), A=640, alpha=0.82, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-1, K_pla, R_pla, Ex_pla, K_pel=0.2, R_pel=0.2, Ex_pel=0.3, K_ben=0.1, R_ben=0.2, Ex_ben=0.4, pref_pla=1, pref_pel=1, pref_ben=1, q_0=log(100), sig=log(10), trunc=2, prey=0, pred=0, comp=0.1, gamma_prey=0.33, gamma_pred=0.33, gamma_comp=0.75, rep_method=2, initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE, filename){
 
   #Assign Default Values
   if( missing(filename) ) stop("A Species filename must be given")

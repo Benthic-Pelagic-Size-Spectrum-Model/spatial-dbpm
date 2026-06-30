@@ -71,7 +71,7 @@ if(!missing(func)){
     for(j in 1:t){
       for(k in 1:x){
         for(l in 1:y){
-          for(i in which(mass==spmin):which(mass==spmax)){
+          for(i in mass_index(mass,spmin):mass_index(mass,spmax)){
             temp[((j-1)*x*y)+((k-1)*y)+l,i]=round(func(mass[i],trange[j],xrange[k],yrange[l]),16)
           }
         }
@@ -82,7 +82,7 @@ if(!missing(func)){
   temp<-matrix(0,nrow=(x*y),ncol=m)
     for(k in 1:x){
       for(l in 1:y){
-        for(i in which(mass==spmin):which(mass==spmax)){
+        for(i in mass_index(mass,spmin):mass_index(mass,spmax)){
           temp[((k-1)*y)+l,i]=round(func(mass[i],trange[1],xrange[k],yrange[l]),16)
         }
       }
@@ -113,22 +113,22 @@ if(!missing(dataname)){
     if(species@speciestype!="detritus"){
     
       if(filetype=="intercept"){
-        for(i in which(mass==spmin):which(mass==spmax)){
+        for(i in mass_index(mass,spmin):mass_index(mass,spmax)){
           temp[,i]=round(dat[,1]*exp(species@lambda*mass[i]),16)
         }
       }
     
       if(filetype=="interslope"){
         if(length(dat[1,])<2) stop("Insufficient columns in data file")
-        for(i in which(mass==spmin):which(mass==spmax)){
+        for(i in mass_index(mass,spmin):mass_index(mass,spmax)){
           temp[,i]=round(dat[,1]*exp(dat[,2]*mass[i]),16)
         }
       }
     
       if(filetype=="spectrum"){
         if(length(dat[1,])!=length(grid_seq(spmin,spmax,grid.in@mstep))) stop("Incorrect number of columns in data file")
-        for(i in which(mass==spmin):which(mass==spmax)){
-          temp[,i]=round(dat[,(i-which(mass==spmin)+1)],16)
+        for(i in mass_index(mass,spmin):mass_index(mass,spmax)){
+          temp[,i]=round(dat[,(i-mass_index(mass,spmin)+1)],16)
         }
       }
       if(!(filetype=="intercept" || filetype=="interslope" || filetype=="spectrum")) stop("Unknown filetype entered")
@@ -155,7 +155,7 @@ if(!missing(dataname)){
 
       if(filetype=="intercept"){
         for(cc in 1:ncell){
-          for(i in which(mass==spmin):which(mass==spmax)){
+          for(i in mass_index(mass,spmin):mass_index(mass,spmax)){
             temp[cc,i]=round(dat[src[cc],1]*exp(species@lambda*mass[i]),16)
           }
         }
@@ -164,7 +164,7 @@ if(!missing(dataname)){
       if(filetype=="interslope"){
         if(length(dat[1,])<2) stop("Insufficient columns in data file")
         for(cc in 1:ncell){
-          for(i in which(mass==spmin):which(mass==spmax)){
+          for(i in mass_index(mass,spmin):mass_index(mass,spmax)){
             temp[cc,i]=round(dat[src[cc],1]*exp(dat[src[cc],2]*mass[i]),16)
           }
         }
@@ -173,8 +173,8 @@ if(!missing(dataname)){
       if(filetype=="spectrum"){
         if(length(dat[1,])!=length(grid_seq(spmin,spmax,grid.in@mstep))) stop("Incorrect number of columns in data file")
         for(cc in 1:ncell){
-          for(i in which(mass==spmin):which(mass==spmax)){
-            temp[cc,i]=round(dat[src[cc],(i-which(mass==spmin)+1)],16)
+          for(i in mass_index(mass,spmin):mass_index(mass,spmax)){
+            temp[cc,i]=round(dat[src[cc],(i-mass_index(mass,spmin)+1)],16)
           }
         }
       }
@@ -209,8 +209,8 @@ if(!missing(mat)){
     if(species@speciestype!="detritus"){
 
       if(length(mat[1,])!=length(grid_seq(spmin,spmax,grid.in@mstep))) stop("Incorrect number of columns in matrix")
-        for(i in which(mass==spmin):which(mass==spmax)){
-          temp[,i]=round(mat[,(i-which(mass==spmin)+1)],16)
+        for(i in mass_index(mass,spmin):mass_index(mass,spmax)){
+          temp[,i]=round(mat[,(i-mass_index(mass,spmin)+1)],16)
         }
     }
     
@@ -235,8 +235,8 @@ if(!missing(mat)){
     if(species@speciestype!="detritus"){
       if(length(mat[1,])!=length(grid_seq(spmin,spmax,grid.in@mstep))) stop("Incorrect number of columns in data file")
       for(cc in 1:ncell){
-        for(i in which(mass==spmin):which(mass==spmax)){
-          temp[cc,i]=round(mat[src[cc],(i-which(mass==spmin)+1)],16)
+        for(i in mass_index(mass,spmin):mass_index(mass,spmax)){
+          temp[cc,i]=round(mat[src[cc],(i-mass_index(mass,spmin)+1)],16)
         }
       }
     }

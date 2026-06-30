@@ -4,7 +4,10 @@
 #' under the run directory.
 #'
 #' @param run.in A [run.params] object.
-#' @param mmin,mmax Minimum and maximum log-mass of the plankton spectrum.
+#' @param mmin,mmax Minimum and maximum log-mass of the plankton spectrum. The
+#'   defaults span the canonical FishMIP plankton range `10^-12` to `10^-3` g
+#'   (natural log, `-12*log(10)` to `-3*log(10)`), meeting the consumer spectrum
+#'   at `10^-3` g.
 #' @param mu_0 Mortality constant.
 #' @param beta Mortality mass-scaling exponent.
 #' @param u_0 Abundance constant.
@@ -16,7 +19,7 @@
 #'
 #' @return A [plankton.params] object.
 #' @export
-Setup.Plankton<-function(run.in, mmin=-28,mmax=-14,mu_0=0.2, beta=-0.25, u_0=0.01, lambda=-1, initial_flag=FALSE, ts_flag=FALSE, filename){
+Setup.Plankton<-function(run.in, mmin=-12*log(10),mmax=-3*log(10),mu_0=0.2, beta=-0.25, u_0=0.01, lambda=-1, initial_flag=FALSE, ts_flag=FALSE, filename){
 
   #Assign Default Values
   if(missing(filename)) stop("A Species filename must be given")

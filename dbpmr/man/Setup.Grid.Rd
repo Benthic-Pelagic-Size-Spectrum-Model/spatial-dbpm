@@ -6,10 +6,10 @@
 \usage{
 Setup.Grid(
   run,
-  mmin = -28,
-  mmax = 14,
-  mstep = 0.2,
-  moutstep = 1,
+  mmin = -12 * log(10),
+  mmax = 6 * log(10),
+  mstep = 0.1 * log(10),
+  moutstep = 0.1 * log(10),
   t1 = 0,
   tmax = 1,
   tstep = (1/365),
@@ -30,7 +30,10 @@ Setup.Grid(
 \item{run}{A \link{run.params} object (used to decide the spatial dimension).}
 
 \item{mmin, mmax, mstep, moutstep}{Minimum, maximum, step and output step of the
-log-mass grid.}
+log-mass grid. The defaults are the canonical FishMIP/DBPM log10 grid
+expressed in natural log: \code{10^-12} to \code{10^6} g in steps of \code{0.1} log10
+units (\code{0.1 * log(10)}), so the consumer minimum \code{10^-3} g lands exactly on
+a grid point.}
 
 \item{t1, tmax, tstep}{Start, end and step of the time grid (in years).}
 

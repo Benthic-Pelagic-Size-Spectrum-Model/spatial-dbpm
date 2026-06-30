@@ -21,3 +21,25 @@ grid_seq <- function(from, to, by) {
   if (length(s) < n) s <- c(s, s[length(s)] + by * seq_len(n - length(s)))
   s
 }
+
+#' Locate a size on the mass grid robustly (internal)
+#'
+#' Returns the index of the grid point nearest `target`. Replaces the fragile
+#' `which(mass == target)`, which relies on exact floating-point equality: on an
+#' irrational grid (a log10 grid expressed in natural log) a size computed
+#' directly (e.g. `-3 * log(10)`) and the same size accumulated by [seq()] can
+#' differ in the last bit, so `==` finds nothing. The match is the nearest grid
+#' point, validated to lie within a small fraction of the target (well inside one
+#' bin), so a genuinely off-grid size still errors rather than snapping silently.
+#'
+#' @param mass Numeric mass-grid vector.
+#' @param target Size to locate.
+#' @return Integer index into `mass`.
+#' @keywords internal
+#' @noRd
+mass_index <- function(mass, target) {
+  i <- which.min(abs(mass - target))
+  if (length(i) == 0L || abs(mass[i] - target) > 1e-6 * max(1, abs(target)))
+    stop("size ", target, " does not align with the mass grid", call. = FALSE)
+  i
+}

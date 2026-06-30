@@ -32,7 +32,7 @@
                                         t1="numeric", tmax="numeric", tstep="numeric", toutmin="numeric", toutmax="numeric", toutstep="numeric",
                                         xmin="numeric", xmax="numeric", xstep="numeric", xoutstep="numeric",
                                         ymin="numeric", ymax="numeric", ystep="numeric", youtstep="numeric"),
-                        prototype(mmin=-28, mmax=14, mstep=0.2, moutstep=1,
+                        prototype(mmin=-12*log(10), mmax=6*log(10), mstep=0.1*log(10), moutstep=0.1*log(10),
                                   t1=0, tmax=1, tstep=(1/365), toutmin=0, toutmax=1, toutstep=(5/365),
                                   xmin=0, xmax=1000, xstep=50, xoutstep=50,
                                   ymin=0, ymax=1000, ystep=50, youtstep=50))
@@ -49,7 +49,7 @@
                                             u_0="numeric", lambda="numeric", mu_0="numeric", beta="numeric",
                                             initial_flag="logical", ts_flag="logical"),
                         prototype(filename="plankton", speciestype="plankton",
-                                  mmin=-28, mmax=-14,
+                                  mmin=-12*log(10), mmax=-3*log(10),
                                   u_0=0.01, lambda=-1, mu_0=0.2, beta=-0.25,
                                   initial_flag=FALSE, ts_flag=FALSE))
   
@@ -70,7 +70,7 @@
                                            prey="numeric", pred="numeric", comp="numeric",gamma_prey="numeric", gamma_pred="numeric", gamma_comp="numeric",
                                            rep_method="integer", initial_flag="logical", ts_flag="logical", fishing_flag="logical"),
                         prototype(filename="pelagic",speciestype="pelagic",
-                                  mmin=-14, mmat=7, mmax=14,
+                                  mmin=-3*log(10), mmat=2*log(10), mmax=6*log(10),
                                   A=640, alpha=0.82, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-1,
                                   K_pla=0.2, R_pla=0.2, Ex_pla=0.3, K_pel=0.2, R_pel=0.2, Ex_pel=0.3, K_ben=0.1, R_ben=0.2, Ex_ben=0.4,
                                   pref_pla=1, pref_pel=1, pref_ben=1,
@@ -93,7 +93,7 @@
                                            pref_det="numeric",
                                            rep_method="integer", initial_flag="logical", ts_flag="logical", fishing_flag="logical"),
                         prototype(filename="benthic",speciestype="benthic",
-                                  mmin=-17, mmat=-16, mmax=9,
+                                  mmin=-3*log(10), mmat=0, mmax=4*log(10),
                                   A=64, alpha=0.75, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-0.75,
                                   K_det=0.2, R_det=0.2, Ex_det=0.2,
                                   pref_det=1,

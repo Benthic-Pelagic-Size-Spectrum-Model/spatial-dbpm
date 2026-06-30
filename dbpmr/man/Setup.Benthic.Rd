@@ -6,9 +6,9 @@
 \usage{
 Setup.Benthic(
   run.in,
-  mmin = -17,
-  mmat = -16,
-  mmax = 9,
+  mmin = -3 * log(10),
+  mmat = 0,
+  mmax = 4 * log(10),
   A = 64,
   alpha = 0.75,
   mu_0 = 0.2,
@@ -31,7 +31,10 @@ Setup.Benthic(
 \arguments{
 \item{run.in}{A \link{run.params} object.}
 
-\item{mmin, mmat, mmax}{Minimum, maturation and maximum log-mass of the species.}
+\item{mmin, mmat, mmax}{Minimum, maturation and maximum log-mass of the species.
+The defaults are the canonical FishMIP detritivore range \code{10^-3} to \code{10^4} g
+(natural log, \code{-3*log(10)} to \code{4*log(10)}), so the consumer minimum is
+\code{10^-3} g.}
 
 \item{A}{Search/encounter rate constant.}
 

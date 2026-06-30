@@ -5,6 +5,9 @@
 #'
 #' @param run.in A [run.params] object.
 #' @param mmin,mmat,mmax Minimum, maturation and maximum log-mass of the species.
+#'   The defaults are the canonical FishMIP detritivore range `10^-3` to `10^4` g
+#'   (natural log, `-3*log(10)` to `4*log(10)`), so the consumer minimum is
+#'   `10^-3` g.
 #' @param A Search/encounter rate constant.
 #' @param alpha Search-rate mass-scaling exponent.
 #' @param mu_0 Background mortality constant.
@@ -40,7 +43,7 @@
 #'   with an error. The other methods (`0`, `2`, `3`) need no input file.
 #' @seealso [Setup.Pelagic()], [Setup.Detritus()]
 #' @export
-Setup.Benthic<-function(run.in, mmin=-17, mmat=-16, mmax=9, A=64, alpha=0.75, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-0.75, K_det=0.2, R_det=0.2, Ex_det=0.2, pref_det=1, rep_method=2, initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE, filename){
+Setup.Benthic<-function(run.in, mmin=-3*log(10), mmat=0, mmax=4*log(10), A=64, alpha=0.75, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-0.75, K_det=0.2, R_det=0.2, Ex_det=0.2, pref_det=1, rep_method=2, initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE, filename){
 
   #Assign Default Values
   if( missing(filename) ) stop("A Species filename must be given")

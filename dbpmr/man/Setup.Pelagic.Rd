@@ -6,9 +6,9 @@
 \usage{
 Setup.Pelagic(
   run.in,
-  mmin = -14,
-  mmat = 7,
-  mmax = 14,
+  mmin = -3 * log(10),
+  mmat = 2 * log(10),
+  mmax = 6 * log(10),
   A = 640,
   alpha = 0.82,
   mu_0 = 0.2,
@@ -48,7 +48,10 @@ Setup.Pelagic(
 \arguments{
 \item{run.in}{A \link{run.params} object.}
 
-\item{mmin, mmat, mmax}{Minimum, maturation and maximum log-mass of the species.}
+\item{mmin, mmat, mmax}{Minimum, maturation and maximum log-mass of the species.
+The defaults are the canonical FishMIP consumer range \code{10^-3} to \code{10^6} g
+(natural log, \code{-3*log(10)} to \code{6*log(10)}), so the consumer minimum is
+\code{10^-3} g.}
 
 \item{A}{Search/encounter rate constant.}
 

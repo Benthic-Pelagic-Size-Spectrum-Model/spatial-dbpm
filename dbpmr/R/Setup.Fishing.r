@@ -51,7 +51,7 @@ if(missing(dataname)){
   for(j in 1:t){
     for(k in 1:x){
       for(l in 1:y){
-        for(i in which(mass==spmin):which(mass==spmax)){
+        for(i in mass_index(mass,spmin):mass_index(mass,spmax)){
           temp[((j-1)*x*y)+((k-1)*y)+l,i]=signif(func(mass[i],trange[j],xrange[k],yrange[l]))
         }
       }
@@ -76,8 +76,8 @@ if(missing(func)){
   if(length(dat[1,])!=length(grid_seq(spmin,spmax,grid.in@mstep))) stop("Incorrect number of columns in data file")
 
   temp<-matrix(0,nrow=(t*x*y),ncol=m)
-  for(i in which(mass==spmin):which(mass==spmax)){
-    temp[,i]=signif(dat[,(i-which(mass==spmin)+1)])
+  for(i in mass_index(mass,spmin):mass_index(mass,spmax)){
+    temp[,i]=signif(dat[,(i-mass_index(mass,spmin)+1)])
   }
 }
 

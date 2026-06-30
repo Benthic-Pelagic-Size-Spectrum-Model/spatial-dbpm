@@ -6,7 +6,10 @@
 #'
 #' @param run A [run.params] object (used to decide the spatial dimension).
 #' @param mmin,mmax,mstep,moutstep Minimum, maximum, step and output step of the
-#'   log-mass grid.
+#'   log-mass grid. The defaults are the canonical FishMIP/DBPM log10 grid
+#'   expressed in natural log: `10^-12` to `10^6` g in steps of `0.1` log10
+#'   units (`0.1 * log(10)`), so the consumer minimum `10^-3` g lands exactly on
+#'   a grid point.
 #' @param t1,tmax,tstep Start, end and step of the time grid (in years).
 #' @param toutmin,toutmax,toutstep Minimum, maximum and step of the time output
 #'   grid (in years).
@@ -18,7 +21,7 @@
 #' @return A [grid.params] object.
 #' @seealso [Setup.Run()]
 #' @export
-Setup.Grid<-function(run, mmin=-28,mmax=14,mstep=0.2,moutstep=1,t1=0,tmax=1,tstep=(1/365),toutmin=0,toutmax=tmax,toutstep=(73/365),xmin=0,xmax=1000,xstep=50,xoutstep=50,ymin=0,ymax=1000,ystep=50,youtstep=50){
+Setup.Grid<-function(run, mmin=-12*log(10),mmax=6*log(10),mstep=0.1*log(10),moutstep=0.1*log(10),t1=0,tmax=1,tstep=(1/365),toutmin=0,toutmax=tmax,toutstep=(73/365),xmin=0,xmax=1000,xstep=50,xoutstep=50,ymin=0,ymax=1000,ystep=50,youtstep=50){
 
 #------------------#  
 # Create Grid List #
