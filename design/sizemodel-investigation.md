@@ -104,6 +104,40 @@ which rate differs (dbpmr's effective growth higher, or its small-size mortality
 lower) needs a direct rate-level comparison of `g_pel`/`mu_pel` at the recruit
 size against `sizemodel()`'s `GG.u`/`Z.u` — the remaining Stage 0 task.
 
+## 4b. Rate-level comparison at the recruit size (why dbpmr survives)
+
+Extracted growth and mortality at the recruit (log10 −3), converting dbpmr's
+`d ln m/dt` to `d log10 m/dt` (÷ln10):
+
+| | growth (log10/yr) | total mortality (/yr) |
+|---|---|---|
+| **sizemodel** (early, collapsing) | 0.44 | 2.2 (mostly background) |
+| **dbpmr** (sustained) | **0.996** (≈2.3×) | 13.3 (predation-dominated) |
+
+dbpmr runs a **high-throughput** pelagic — ~2.3× faster growth, much higher
+(predation) mortality, and correspondingly high reproduction — which sustains the
+spectrum; sizemodel runs a **low-throughput** one (slow growth, lean reproduction)
+that decays from the low initial density. So it is *not* a simple
+growth/mortality ratio at the recruit (dbpmr's ratio is actually lower).
+
+**Growth formulas (structurally identical, efficiencies near-equal):**
+```
+sizemodel:  GG.u = (1-def.high)*K.u*f.pel + (1-def.low)*K.v*f.ben   = 0.21*f.pel + 0.1*f.ben
+dbpmr g_pel: K_pla*(1/w)*pla_bio + K_pel*(1/w)*pel_bio + K_ben*(1/w)*ben_bio   (K~0.2)
+```
+Both are `efficiency × mass-specific feeding`, with sizemodel effective 0.21 and
+dbpmr default `K = 0.2`. The ~2.3× growth difference therefore comes from the
+**feeding/intake calculation** (the `phi`/`gphi` feeding kernel and satiation),
+not the conversion efficiency — dbpmr extracts more growth from the same fixed
+plankton, letting its recruits grow out of the high small-size-mortality zone and
+the pelagic bootstrap/persist.
+
+**Parameter-mapping note (Stage 0 setup):** the dbpmr runs set `epsilon = 0.21`,
+but in dbpmr `epsilon` is the **senescence** constant — growth efficiency is
+`K_pla/K_pel/K_ben`. The runs therefore used dbpmr's *default* `K = 0.2`
+(≈ the canonical 0.21 by coincidence), not a deliberately-mapped value. A clean
+reconciliation should set `K_*` explicitly and map `epsilon`/senescence properly.
+
 ## 5. Summary — "the problem with `sizemodel()`"
 
 1. **Dynamical/parameter:** for warm-surfaced, low-productivity LMEs the
