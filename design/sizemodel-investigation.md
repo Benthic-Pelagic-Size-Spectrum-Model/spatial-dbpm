@@ -391,3 +391,26 @@ deficit is a forgotten `ln(10)` on the spectrum integrals.
 **Alternative that also rescues the last 3:** feeding-only temperature (§4c/§7) —
 not a units fix but a modelling choice. The `ln(10)` restoration is the one that
 makes `sizemodel()` *match dbpmr*.
+
+### 9a. Both `sizemodel()` lineages share the bug
+
+The LME calibration model
+(`lme_scale_calibration_ISMIP3a`, branch `new_features`,
+`scripts/useful_functions.R`) is the same engine refactored with descriptive
+names (`predators`/`detritivores`/`log_size_increase`/`constant_growth`/
+`constant_mortality` for `U`/`V`/`dx`/`gphi`/`mphi`). It carries the **identical**
+omission — `log(10)` appears only in the advection/recruitment Jacobians
+(lines 718, 720, 737, 751, 753, 777) and on **none** of the spectrum integrals:
+
+| integral | CMIP5 line | LME `useful_functions.R` line |
+|---|---|---|
+| feeding → growth (pelagic / benthic) | 234 / 236 | 574 / 580 |
+| predation death `PM_u` (and `PM_v`) | 253 / 271 | 612 (and sibling) |
+| reproduction egg-sum (pred / det) | 392 / 428 | 732 / 774 |
+| detritus-input sums | 317–329 | 691 (+ siblings) |
+| advection `1/log(10)` (correct) | `Ai`/`Bi` | 718–720, 751–753 |
+
+Both lineages descend from one ln-mass original converted to log10 with the same
+dropped factor, which is why both collapse the LME-10 (and the other warm +
+oligotrophic) pelagic identically. The §9 edit table applies verbatim, with the
+line numbers remapped per the table above.
