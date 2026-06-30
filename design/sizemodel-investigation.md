@@ -52,6 +52,30 @@ So the lever is **background mortality**, not reproduction. The default
 dominates the balance). LME-10 is deep, warm-surfaced and low-productivity — the
 combination makes the predators non-viable in this model.
 
+## 2b. It is not a detritus → mortality cascade (causation is reversed)
+
+Tested whether a growing detritus pool drives a detritivore boom that then spikes
+mortality on the pelagic. Time trace (LME-10):
+
+| yr | detritus `W` | detritivore bio | predator bio | predation-mort@recruit |
+|---|---|---|---|---|
+| 0.02 | 0.003 | 4e-5 | 0.0041 | 0.23 |
+| 1.5 | 0.18 | 4e-5 | 0.0012 | 0.07 |
+| 15 | 0.74 | 0.17 | 9e-7 | 3e-5 |
+| 45 | 0.21 | 0.32 | 5e-12 | ~0 |
+
+- The **predator decays from the first step**, before any detritus build-up; it
+  never booms.
+- Detritus accumulates and the **detritivore boom happens later** (after the
+  pelagic is already gone).
+- **Predation** mortality on recruits is small and *falling* (≤0.24/yr → 0);
+  background mortality is a constant **2.2/yr** (~10× larger).
+
+So causation is reversed: the pelagic collapses first (background mortality ≫
+growth), then dead bodies + defecation feed the detritus, then detritivores boom
+on it. The detritus/detritivore rise is a **consequence** of the collapse, not
+its cause, and the preventive lever is `mu0`, not the detritus pathway.
+
 ## 3. The model is also numerically fragile
 
 The detritus pool `W` readily goes `NaN`, crashing the run — e.g. with
