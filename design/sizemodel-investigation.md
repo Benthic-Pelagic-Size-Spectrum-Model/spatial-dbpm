@@ -414,3 +414,25 @@ Both lineages descend from one ln-mass original converted to log10 with the same
 dropped factor, which is why both collapse the LME-10 (and the other warm +
 oligotrophic) pelagic identically. The §9 edit table applies verbatim, with the
 line numbers remapped per the table above.
+
+**Empirically closed on the LME code.** Patched `useful_functions.R` — restored
+`log(10)` on the feeding/death convolutions (l.574, 580, 612) and the
+reproduction egg-sums (l.732, 774) — and re-ran the repo's own
+`run_model()`/`sizemodel()` with its real per-LME parquet forcing, `search_vol = 64`,
+consumer-min −3, weekly, `temp_effect = TRUE`. **All 12 collapsed LMEs flip to
+coexistence:**
+
+| LME | baseline | fixed | LME | baseline | fixed |
+|---|---|---|---|---|---|
+| 10  | 1e-30 | **0.017** | 44  | 4e-23 | **8250** |
+| 12  | 2e-33 | **3820**  | 131 | 1e-31 | **27.3** |
+| 16  | 3e-32 | **3610**  | 134 | 2e-26 | **10500** |
+| 30  | 2e-26 | **12500** | 151 | 5e-24 | **10000** |
+| 31  | 1e-31 | **8280**  | 171 | 1e-35 | **2200** |
+| 40  | 1e-29 | **5860**  | 177 | 6e-26 | **12000** |
+
+(LME-10 and 131 stay low — they are the most oligotrophic, marginal in dbpmr too —
+but alive, not extinct.) The single units fix turns `sizemodel()`'s 70/12 into
+82/0, matching the ln-mass engine. The benthic-side predation term `PM_v` (one
+more bare-`dx` convolution, on a wrapped line) was left unpatched here and is not
+needed for the pelagic rescue, but should be corrected too for full consistency.
