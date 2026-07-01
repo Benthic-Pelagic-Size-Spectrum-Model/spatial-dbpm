@@ -441,3 +441,27 @@ reproduction egg-sums (l.732, 774). `PM_v` (the detritivore-side predation term,
 on a wrapped line) does not affect the pelagic rescue but is included for
 consistency; with all six fixed, **all 12 LMEs have both pelagic and benthos
 alive and finite** (pelagic values unchanged from the 5-edit patch, as expected).
+
+### 9b. Upstream PRs and the gridded model
+
+The `ln(10)` fix is filed as PRs on both upstream repos (issues #1 / #13):
+
+| repo | file / model | branch | PR |
+|---|---|---|---|
+| `dbpm_isimip_3b` | CMIP5 `sizemodel()` | `master` | #2 |
+| `lme_scale_calibration_ISMIP3a` | `scripts/useful_functions.R` `sizemodel()` | `new_features` | #14 |
+| `lme_scale_calibration_ISMIP3a` | `dbpm_model_functions.R` **`gridded_sizemodel()` + `sizemodel()`** | `main` | #15 |
+
+**Gridded model / migration note.** The spatial `gridded_sizemodel()` (the
+`predators[j, , i]` per-cell loop) currently exists **only on `main`
+(`dbpm_model_functions.R`)** and carries the identical bug; PR #15 fixes it there
+(21 lines, both functions in that file). The `new_features` refactor
+(`useful_functions.R`) has the gridded *param/forcing* plumbing
+(`sizeparam(gridded=)`, `run_model(gridded_forcing=)`) but its `sizemodel()` is
+aspatial — the spatial model has **not yet been migrated** into the refactor.
+When the team ports `gridded_sizemodel()` into `new_features/useful_functions.R`,
+the same six spectrum-integral edits (feeding/death convolutions + reproduction
+egg-sums, translated to the refactor names `log_size_increase`/`constant_growth`/
+`constant_mortality`/`reprod_pred`/`reprod_det`) must be carried over. Until then,
+PR #15 on `main` is the working gridded fix. Not empirically validated here (no
+gridded forcing on hand) — recommend a baseline-vs-fixed gridded run before merge.
