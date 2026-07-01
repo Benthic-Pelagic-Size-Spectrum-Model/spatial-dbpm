@@ -51,7 +51,9 @@ Setup.Pelagic(
 \item{mmin, mmat, mmax}{Minimum, maturation and maximum log-mass of the species.
 The defaults are the canonical FishMIP consumer range \code{10^-3} to \code{10^6} g
 (natural log, \code{-3*log(10)} to \code{6*log(10)}), so the consumer minimum is
-\code{10^-3} g.}
+\code{10^-3} g. Require \verb{mmin < mmat < mmax}: a maturation size at or above \code{mmax}
+leaves no mature size classes, which zeroes endogenous reproduction
+(\code{rep_method} 2/3) and silently collapses the species — this is warned.}
 
 \item{A}{Search/encounter rate constant.}
 

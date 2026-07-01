@@ -7,7 +7,9 @@
 #' @param mmin,mmat,mmax Minimum, maturation and maximum log-mass of the species.
 #'   The defaults are the canonical FishMIP detritivore range `10^-3` to `10^4` g
 #'   (natural log, `-3*log(10)` to `4*log(10)`), so the consumer minimum is
-#'   `10^-3` g.
+#'   `10^-3` g. Require `mmin < mmat < mmax`: a maturation size at or above `mmax`
+#'   leaves no mature size classes, which zeroes endogenous reproduction
+#'   (`rep_method` 2/3) and silently collapses the species — this is warned.
 #' @param A Search/encounter rate constant.
 #' @param alpha Search-rate mass-scaling exponent.
 #' @param mu_0 Background mortality constant.
@@ -52,6 +54,16 @@ Setup.Benthic<-function(run.in, mmin=-3*log(10), mmat=0, mmax=4*log(10), A=64, a
   if( !(initial_flag==0 || initial_flag==1) ) stop("Please enter a logical value for initial_flag: (T,F)")
   if( !(ts_flag==0 || ts_flag==1) ) stop("Please enter a logical value for ts_flag: (T,F)")
   if( !(fishing_flag==0 || fishing_flag==1) ) stop("Please enter a logical value for fishing_flag: (T,F)")
+
+  #Maturation-size sanity: mmin < mmat < mmax. If mmat >= mmax there are no mature
+  #size classes, so endogenous reproduction (rep_method 2/3) produces no eggs and
+  #the species collapses silently with no error - warn rather than fail.
+  if( mmin >= mmax ) stop("mmin must be less than mmax")
+  if( mmat >= mmax ) warning("mmat (", signif(mmat, 4), ") >= mmax (", signif(mmax, 4),
+    "): no mature size classes. With rep_method 2 or 3 this gives zero reproduction and ",
+    "the species will collapse silently - set mmat below mmax.", call.=FALSE)
+  if( mmat <= mmin ) warning("mmat (", signif(mmat, 4), ") <= mmin (", signif(mmin, 4),
+    "): every size class is treated as mature.", call.=FALSE)
 
   #Create list
   species<-new("benthic.params")
