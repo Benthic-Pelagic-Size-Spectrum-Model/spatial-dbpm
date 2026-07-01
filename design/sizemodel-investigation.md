@@ -452,6 +452,17 @@ The `ln(10)` fix is filed as PRs on both upstream repos (issues #1 / #13):
 | `lme_scale_calibration_ISMIP3a` | `scripts/useful_functions.R` `sizemodel()` (R) | `new_features` | #14 |
 | `lme_scale_calibration_ISMIP3a` | `dbpm_model_functions.R` `gridded_sizemodel()`+`sizemodel()` (R, legacy) | `main` | #15 |
 | `lme_scale_calibration_ISMIP3a` | **`scripts/useful_functions.py` `gridded_sizemodel_rk4`/`gridded_sizemodel` (Python — the active gridded model)** | `new_features` | #16 |
+| `dbpm_isimip_3b` | detritus NaN-guard/clamp (robustness, **not** ln10) | `master` | #3 |
+
+**Numerical-robustness PR (#3).** Separate from the `ln(10)` fixes. The CMIP5
+detritus update `W[i+1]=W[i]+dW·Δt` can overshoot to negative at coarse timesteps
+(a team member's monthly runs crashed exactly this way); the code then bailed the
+whole run and set `U[,i]<-"NaN"` (a string, coercing the numeric matrix to
+character; the guard `W[i]=="NaN"` also never matched a numeric NaN). PR #3 clamps
+`W` to 0 on a non-finite/negative update so the run continues, and fixes the guard
+to `is.nan()`/`NA` — matching the dbpmr C-engine guard and the Python's
+negative-clamp. Removes the *detritus-driven* crash; the deeper productive-LME
+overflow at coarse dt (a consumer-spectrum instability) still needs a finer step.
 
 **Gridded model — the active one is Python.** The spatial gridded model actually
 run for FishMIP is the **Python** `gridded_sizemodel_rk4()` in
