@@ -2,15 +2,147 @@
 # ---------------------------------------------------------------------
 # Estimate ONE catchability Q by minimising the difference between the MODELLED
 # and OBSERVED catch TIME SERIES (log MSE), given the model + forcing:
-#   F(x,t) = Q * s(x) * effort_norm(t)   -- s(x) knife-edge at log10(w)=1 (10 g),
-#   effort normalised to [0,1] over the LME series, Q bounded [0,3], A fixed = 64.
+#   F_g(x,t) = Q * s(x) * (B_g/sum_g B) * effort_norm(t)
+# where
+#   s(x)            knife-edge selectivity, 1 for w >= 10 g (log10 w = 1),
+#   effort_norm(t)  nominal effort normalised to [0,1] over the LME series,
+#   (B_g/sum_g B)   biomass-proportional effort split across functional groups
+#                   (DBPM.md "gravity": effort ~ biomass, so catch ~ biomass^2),
+#   Q               single catchability, bounded [0,3], A (search vol) fixed = 64.
 # Per the FishMIP DBPM.md spec (Fish-MIP/Global_MEM_Model_Templates).
 #
-# CAVEAT (Tier-1): environmental forcing is held CONSTANT here (only effort varies)
-# - the catch time series is driven by effort + fishing dynamics, not environmental
-# variability. Time-varying temperature/plankton forcing is issue #11 (needs the
-# in-memory column driver #5). So this validates the Q-calibration mechanism; a
-# full fit adds the environmental time series.
+# ENVIRONMENTAL FORCING (#11): plankton, temperature AND detritus sinking are TIME-VARYING,
+# using the exact same obsclim forcings as sizemodel(), held at year-1 values during spin.
+#  - plankton: monthly (10^intercept/ln10)*w^slope via dbpmr's plankton time-series input
+#    (ts_flag), re-read every timestep by the C engine.
+#  - temperature + sinking: monthly tos/tob -> Boltzmann-Arrhenius tempeffect, and
+#    export_ratio -> sinking_rate, written to forcing_ts.txt (the dbpmr forcing plugin:
+#    header-named channels, one row per timestep). tempeffect scales feeding A + background
+#    mortality mu_0 (senescence/fishing NOT scaled); sinking_rate scales surface-origin
+#    detritus inputs in g_det (detritus mortality kept un-temperatured, as in sizemodel).
+#  - depth: pref_benthos = 0.8*exp(-depth/250) (predator-benthos coupling) + areal conversion.
+#
+# UNITS (ln vs log10): the LME `intercept` is a per-LOG10-density intercept
+# (sizemodel: rho = 10^intercept * w^slope, integrated with d(log10)). dbpmr's
+# u_values are per-LN density, so the plankton intercept converts as
+#   u_0 = 10^intercept / ln(10)      (slope/lambda is base-invariant).
+# All spectrum integrals below (biomass, catch) use dbpmr-native per-ln density
+# with dm = d(ln w) and carry NO ln(10) factor - matching the C engine's own
+# integrals (SizeSpectra.c:2263/2293/2336).
 #
 #   DBPM_DATA=/path/to/DBPM_dev Rscript adapter/sandbox/tier1_fishing_calib.R [LME]
 
+.libPaths(c("/tmp/dbpmrlib", .libPaths()))
+suppressMessages({ library(jsonlite); library(dbpmr); library(arrow); library(dplyr); library(stringr) })
+LN10 <- log(10)
+base <- Sys.getenv("DBPM_DATA",
+  "/Users/juliab6/Library/CloudStorage/OneDrive-UniversityofTasmania/DBPM_mizer/DBPM_dev")
+L <- as.integer(c(commandArgs(TRUE), "14")[1])
+
+# --- biology params (equilibrium init json) + Boltzmann-Arrhenius temperature ---
+p  <- fromJSON(file.path(base, "equilibrium_runs",
+        sprintf("init_dbpm_nonspatial_fao_lme-%d_searchvol_12.8.json", L)))$params
+# tempeffect(T) multiplies feeding (A) and background mortality (mu_0). It is now
+# TIME-VARYING via dbpmr's temperature driver (temperature_ts.txt, read each timestep)
+# rather than folded into constant A/mu_0 - so A/mu_0 below are the BASE (unscaled) rates.
+te <- function(T) exp(p$c1[1] - p$activation_energy[1] / (p$boltzmann[1] * (T + 273)))
+# faithful K/R/Ex energy budget (issue #22), keyed to prey type
+dh <- p$defecate_prop[1]; dl <- p$def_low[1]
+Ku <- p$growth_pred[1];        AMu <- p$energy_pred[1]
+Kv <- p$growth_detritivore[1]; AMv <- p$energy_detritivore[1]
+Kp <- (1-dh)*Ku; Rp <- (1-dh)*(1-(Ku+AMu)); Ep <- (1-dh)*AMu
+Kl <- (1-dl)*Kv; Rl <- (1-dl)*(1-(Kv+AMv)); El <- (1-dl)*AMv
+dcorr <- min(p$depth[1], 200); bhd <- 20; wsel <- 1 * LN10   # knife-edge at 10 g (ln units)
+
+# --- obsclim forcing: annual effort/catch series + monthly plankton intercept/slope ---
+di <- read_parquet(Sys.glob(file.path(base, "dbpm_inputs",
+        sprintf("dbpm_clim-fish-inputs_fao_lme-%d_*.parquet", L)))[1]) |>
+      filter(str_detect(scenario, "obsclim")) |> arrange(year, month)
+yr <- di |> group_by(year) |>
+      summarise(eff = mean(total_nom_active_area_m2, na.rm = TRUE),
+                cat = mean(catch_tonnes_area_m2, na.rm = TRUE) * 1e6, .groups = "drop") |>
+      arrange(year)
+effn <- yr$eff / max(yr$eff); nyr <- nrow(yr); spin <- 40; tmax <- spin + nyr
+eff_at <- function(t) { i <- floor(t) - spin + 1; if (i < 1) effn[1] else if (i > nyr) effn[nyr] else effn[i] }
+intm <- di$intercept; slpm <- di$slope; nmon <- length(intm)
+int1 <- mean(di$intercept[di$year == min(di$year)]); slp1 <- mean(di$slope[di$year == min(di$year)])
+pl_at <- function(t) { if (t < spin) return(c(int1, slp1))
+  j <- max(1, min(nmon, floor((t - spin) * 12) + 1)); c(intm[j], slpm[j]) }
+# per-LN plankton spectrum, UNIT-MATCHED to dbpmr: (10^intercept/ln10) * exp(slope*m)
+plfun <- function(m, t, x, y) { ab <- pl_at(t); (10^ab[1] / LN10) * exp(ab[2] * m) }
+# --- MONTHLY environmental forcing series (obsclim), spin held at year-1 mean ---
+tos <- di$tos; tob <- di$tob                     # surface / seafloor temperature
+er  <- di$export_ratio                           # sinking rate (fraction reaching seafloor)
+tos1 <- mean(di$tos[di$year == min(di$year)]); tob1 <- mean(di$tob[di$year == min(di$year)])
+er1  <- mean(di$export_ratio[di$year == min(di$year)])
+midx <- function(t) max(1, min(nmon, floor((t - spin) * 12) + 1))   # obsclim month index at time t
+# forcing channels at model-time t
+temp_at <- function(t) { if (t < spin) return(c(te(tos1), te(tob1))); j <- midx(t); c(te(tos[j]), te(tob[j])) }
+sink_at <- function(t) { if (t < spin) return(er1); er[midx(t)] }
+# depth -> predator-benthos coupling (sizemodel: pref_benthos = 0.8*exp(-depth/250)) + areal
+depth_mean <- p$depth[1]; pref_ben_depth <- 0.8 * exp(-depth_mean / 250)
+
+# --- one simulation: time-varying plankton + gravity-split fishing (shares s_pel,s_ben) ---
+runsim <- function(Q, s_pel, s_ben) {
+  wd <- tempfile("tv"); dir.create(wd); old <- setwd(wd)
+  run  <- Setup.Run("R", 1, 1, 0, TRUE, 1)
+  grid <- Setup.Grid(run, tmax = tmax, tstep = 1/48, toutstep = 1)
+  pl   <- Setup.Plankton(run, filename = "plankton", lambda = slp1, ts_flag = TRUE)
+  Setup.ts(pl, run, grid, func = plfun)
+  # BASE (unscaled) A/mu_0; temperature applied per-timestep by the driver below
+  pe <- Setup.Pelagic(run, filename = "fish", mmin = -3*LN10, mmat = 2*LN10, mmax = 6*LN10,
+          alpha = p$metabolic_req_pred[1], A = 64, mu_0 = p$natural_mort[1], pref_ben = pref_ben_depth,
+          K_pla = Kp, R_pla = Rp, Ex_pla = Ep, K_pel = Kp, R_pel = Rp, Ex_pel = Ep,
+          K_ben = Kl, R_ben = Rl, Ex_ben = El, rep_method = 2, fishing_flag = (Q > 0))
+  be <- Setup.Benthic(run, filename = "benthos", mmin = -3*LN10, mmat = 1*LN10, mmax = 4*LN10,
+          alpha = p$metabolic_req_detritivore[1], A = 6.4, mu_0 = p$natural_mort[1],
+          K_det = Kl, R_det = Rl, Ex_det = El, rep_method = 2, fishing_flag = (Q > 0))
+  de <- Setup.Detritus(run, filename = "detritus")
+  # environmental forcing plugin: write forcing_ts.txt (header + one row per timestep, row j ->
+  # model time j*tstep), auto-detected by the C engine. Channels: pel/ben temperature effect
+  # (scale feeding A + background mortality mu_0) and sinking_rate (scale surface detritus input).
+  nst  <- round(tmax / (1/48)) + 2
+  ts_t <- seq_len(nst) * (1/48)
+  tmat <- vapply(ts_t, temp_at, numeric(2)); smat <- vapply(ts_t, sink_at, numeric(1))
+  di_in <- file.path("R", "Input"); dir.create(di_in, showWarnings = FALSE, recursive = TRUE)
+  # supplying the depth channel toggles Dunne-2007 burial ON (applied to dbpmr's per-volume
+  # detrital flux directly, as sizemodel does - the value is not used to rescale the burial).
+  writeLines(c("pel_tempeff,ben_tempeff,sinking_rate,depth",
+               sprintf("%.8g,%.8g,%.8g,%.8g", tmat[1, ], tmat[2, ], smat, dcorr)),
+             file.path(di_in, "forcing_ts.txt"))
+  if (Q > 0) {
+    Setup.fishing(pe, run, grid, func = function(m, t, x, y) Q * s_pel * as.numeric(m >= wsel) * eff_at(t))
+    Setup.fishing(be, run, grid, func = function(m, t, x, y) Q * s_ben * as.numeric(m >= wsel) * eff_at(t))
+  }
+  ok <- tryCatch({ invisible(capture.output(SizeSpectrum(run, grid, pl, pe, be, de))); TRUE },
+                 error = function(e) { message(conditionMessage(e)); FALSE })
+  if (!ok) { setwd(old); return(NULL) }
+  f <- Read.In("R", "fish"); b <- Read.In("R", "benthos"); setwd(old)
+  list(Um = as.matrix(f@uvals[, -(1:3)]), Vm = as.matrix(b@uvals[, -(1:3)]), tt = f@uvals[, 1],
+       x = f@mrange / LN10, w = exp(f@mrange), dm = diff(f@mrange)[1])
+}
+
+# --- 1) unfished equilibrium -> fishable-biomass shares (DBPM.md gravity split) ---
+u0 <- runsim(0, 0, 0); fi <- u0$x >= 1; nT <- length(u0$tt)
+Bpel <- sum(u0$Um[nT, fi] * u0$w[fi] * u0$dm) * dcorr
+Bben <- sum(u0$Vm[nT, fi] * u0$w[fi] * u0$dm) * bhd
+s_pel <- Bpel / (Bpel + Bben); s_ben <- Bben / (Bpel + Bben)
+cat(sprintf("=== FAO-LME %d: single-Q + gravity split + time-varying plankton ===\n", L))
+cat(sprintf("  unfished fishable biomass  pel=%.3g  ben=%.3g  -> shares  pel=%.2f  ben=%.2f\n",
+            Bpel, Bben, s_pel, s_ben))
+
+# --- 2) calibrate Q to the observed catch time series (log-MSE) ---
+catch_model <- function(Q) {
+  r <- runsim(Q, s_pel, s_ben); if (is.null(r)) return(rep(NA, nyr))
+  k <- match(spin + (1:nyr), r$tt)
+  sapply(k, function(kk) { e <- eff_at(r$tt[kk])
+    sum(Q * s_pel * e * r$Um[kk, fi] * r$w[fi] * r$dm) * dcorr +
+    sum(Q * s_ben * e * r$Vm[kk, fi] * r$w[fi] * r$dm) * bhd })
+}
+obj <- function(Q) { m <- catch_model(Q); if (all(is.na(m))) return(1e6)
+  ok <- is.finite(m) & m > 0 & yr$cat > 0; mean((log10(m[ok]) - log10(yr$cat[ok]))^2) }
+n <- 0; o <- optimise(function(Q) { n <<- n + 1; obj(Q) }, lower = 0, upper = 3, tol = 0.01)
+Qf <- o$minimum; mc <- catch_model(Qf)
+cat(sprintf("  optimise[0,3]: evals=%d  Q=%.3f  MSE(log catch)=%.3f  corr=%.2f\n",
+            n, Qf, o$objective, suppressWarnings(cor(log10(mc), log10(yr$cat), use = "complete.obs"))))
+cat(sprintf("  catch mean: model=%.3f  obs=%.3f (g m-2 yr-1)\n", mean(mc, na.rm = TRUE), mean(yr$cat)))
