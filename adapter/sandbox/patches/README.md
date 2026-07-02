@@ -26,6 +26,22 @@ via `INT_OFFSET`, pending the real re-run): a `+0.3` shift (~MLD 100 m) on LME-3
 takes Q off the bound (2.99 → 1.08), matches the observed catch (0.35 vs 0.29 g
 m⁻² yr⁻¹), and restores a pelagic-dominated system (share 0.15 → 0.70).
 
+### Input files required
+
+The MLD path (`get_threshold_depth` + `integrating_phyto`) reads:
+
+| variable | grid | status |
+|---|---|---|
+| **`mlotst-0125`** (mixed-layer depth, 0.125 kg m⁻³) | monthly | **NEW** — added to `dbpm_var` (was not downloaded before) |
+| `phyc`, `phypico` (3-D depth-resolved phyto) | monthly | already pulled |
+| `thkcello` (layer thickness) | fixed (grid_dir) | already pulled |
+| `deptho` (bathymetry) | fixed/per-exp | already in `dbpm_var` (else = `thkcello.sum('lev')`) |
+
+All are published on the UTAS THREDDS portal
+(`.../obsclim/global/monthly/.../GFDL-MOM6-COBALT2/` has `mlotst-0125`, `phyc`,
+`phypico`; `.../fixed/...` has `thkcello`). Only `mlotst-0125` is new — the patch
+adds it to the download list so the workflow is self-contained.
+
 Apply: `cd adapter/sandbox/lme-workflow && git apply ../patches/lme-workflow-mld-aware-phyto.patch`
 (already applied in the working tree). Then re-run `00_processing_dbpm_global_inputs.py`
-on the cluster to regenerate the parquets.
+on the cluster (fetches `mlotst-0125`) to regenerate the parquets.

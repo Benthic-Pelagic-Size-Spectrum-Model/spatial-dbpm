@@ -1,3 +1,19 @@
+diff --git a/scripts/00_processing_dbpm_global_inputs.py b/scripts/00_processing_dbpm_global_inputs.py
+index 112bf57..be72989 100644
+--- a/scripts/00_processing_dbpm_global_inputs.py
++++ b/scripts/00_processing_dbpm_global_inputs.py
+@@ -34,7 +34,10 @@ if __name__ == '__main__':
+     resolutions = ['1deg', '025deg']
+ 
+     #Define variables of interest
+-    dbpm_var = ['phyc', 'phypico', 'siconc', 'deptho', 'expc-bot', 'tob', 'tos']
++    # mlotst-0125 (mixed-layer depth, 0.125 kg m-3 criterion) is required by the
++    # MLD-aware phyto averaging in integrating_phyto()/get_threshold_depth().
++    dbpm_var = ['phyc', 'phypico', 'siconc', 'deptho', 'expc-bot', 'tob', 'tos',
++                'mlotst-0125']
+     
+     #Loop through experiments and resolutions
+     for res in resolutions:
 diff --git a/scripts/useful_functions.py b/scripts/useful_functions.py
 index 02cd353..9d7d859 100644
 --- a/scripts/useful_functions.py
