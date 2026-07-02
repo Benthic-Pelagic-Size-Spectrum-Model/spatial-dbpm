@@ -64,8 +64,12 @@ yr <- di |> group_by(year) |>
       arrange(year)
 effn <- yr$eff / max(yr$eff); nyr <- nrow(yr); spin <- 40; tmax <- spin + nyr
 eff_at <- function(t) { i <- floor(t) - spin + 1; if (i < 1) effn[1] else if (i > nyr) effn[nyr] else effn[i] }
-intm <- di$intercept; slpm <- di$slope; nmon <- length(intm)
-int1 <- mean(di$intercept[di$year == min(di$year)]); slp1 <- mean(di$slope[di$year == min(di$year)])
+# INT_OFFSET: additive log10 shift on the plankton intercept, to emulate the MLD-aware
+# phyto averaging (deep columns gain ~log10(200/MLD) ~ +0.3..0.6) before the upstream
+# preprocessing is re-run. Default 0 (use the parquet's fixed-200 m intercept as-is).
+int_off <- as.numeric(Sys.getenv("INT_OFFSET", "0"))
+intm <- di$intercept + int_off; slpm <- di$slope; nmon <- length(intm)
+int1 <- mean(di$intercept[di$year == min(di$year)]) + int_off; slp1 <- mean(di$slope[di$year == min(di$year)])
 pl_at <- function(t) { if (t < spin) return(c(int1, slp1))
   j <- max(1, min(nmon, floor((t - spin) * 12) + 1)); c(intm[j], slpm[j]) }
 # per-LN plankton spectrum, UNIT-MATCHED to dbpmr: (10^intercept/ln10) * exp(slope*m)
