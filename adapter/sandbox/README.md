@@ -30,13 +30,17 @@ and the submodule's R deps (arrow, dplyr, …).
 
 ## Status
 - [x] Submodule import + `engine=` switch runs both engines on one LME (aspatial,
-      stable-spin, no fishing). **Proven** (LME-14).
-- [ ] Reconcile magnitudes: apply ln(10) fix (PR #14) to the submodule + the
-      ln-vs-log10 density convention, so the two engines match like-for-like.
-- [ ] Fishing (`Fmort` / gravity) + catch output in the adapter.
-- [ ] Optimiser calibration of `search_vol` (#17) through the swapped engine.
-- [ ] Transient obsclim forcing (needs the in-memory column driver, #5/#11).
-- [ ] Fold `engine=` into the LME repo as a PR (#24).
+      stable-spin, no fishing). **Proven** (LME-14). — `tier1_engine_swap.R`
+- [x] **Fishing + single-Q transient calibration** — `F=Q·s(x)·effort_norm(t)`,
+      knife-edge at 10 g, effort normalised [0,1], catch-time-series log-MSE
+      objective, `Q∈[0,3]`, `A=64` fixed. **Proven** (LME-14: `optimise` 13 evals,
+      `Q=0.018`, catch-time-series corr 0.95). — `tier1_fishing_calib.R`
+- [ ] Time-varying **environmental** forcing (temperature/plankton) — currently
+      held constant; needs the in-memory column driver (#5/#11).
+- [ ] Reconcile magnitudes vs sizemodel (apply ln(10) PR #14 to submodule +
+      density convention) — for like-for-like comparison (not required to run).
+- [ ] Gravity effort split across groups (∝ biomass) + creep + sectors (DBPM.md).
+- [ ] Fold `engine=` / the calibration into the LME repo as a PR (#24).
 
 ## Scope
 Tier-1 only (aspatial calibration seam). Gridded runs + gravity feedback are
