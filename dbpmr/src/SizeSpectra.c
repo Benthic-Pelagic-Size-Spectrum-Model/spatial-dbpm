@@ -2560,16 +2560,31 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
              if(community->detritus->ts_flag==0){
                      for(k=0 ; k<x ; k++){
                              for(l=0 ; l<y ; l++){
-                                     community->detritus->w_values[k][l]=temp_detritus[k][l]+dt*(community->detritus->g_values[k][l]-community->detritus->mu_values[k][l]);
-                                     /* Guard the detritus pool. The explicit Euler step can overshoot
-                                        (mu*dt > available) and drive W negative, and a non-finite
-                                        upstream rate can make it NaN/Inf; either propagates and
-                                        corrupts or crashes the run. Detritus is a non-negative pool,
-                                        so clamp a non-finite or negative result to 0. (The reference
-                                        sizemodel intends the same guard but tests `W=="NaN"`, a
-                                        string compare that never matches a numeric NaN.) */
-                                     if(!isfinite(community->detritus->w_values[k][l]) || community->detritus->w_values[k][l]<0){
-                                             community->detritus->w_values[k][l]=0;
+                                     /* Analytical (exponential) integrator for the detritus pool.
+                                        Over a step the fish/plankton state is fixed, so detritus obeys a
+                                        LINEAR ODE  dW/dt = I - kappa*W , with input I = g_values (constant)
+                                        and loss mu_values = kappa*W (detritivory is proportional to W).
+                                        The exact solution  W(t+dt) = W* + (W0-W*)*exp(-kappa*dt),
+                                        W* = I/kappa,  is UNCONDITIONALLY STABLE and provably non-negative
+                                        (a convex combination of W0>=0 and W*>=0) - unlike the explicit
+                                        Euler step W += dt*(I-kappa*W), which overshoots to negative when
+                                        kappa*dt > 1 and drives the NaN/collapse cascade. Removes the
+                                        timestep stability limit on the detritus pool. */
+                                     {
+                                       double W0 = temp_detritus[k][l];
+                                       double In = community->detritus->g_values[k][l];        /* input rate I */
+                                       double loss = community->detritus->mu_values[k][l];     /* = kappa*W0   */
+                                       double kappa = (W0 > 1e-30) ? loss / W0 : 0.0;
+                                       if(kappa > 1e-30){
+                                               double Wstar = In / kappa;
+                                               community->detritus->w_values[k][l] = Wstar + (W0 - Wstar)*exp(-kappa*dt);
+                                       }else{
+                                               community->detritus->w_values[k][l] = W0 + In*dt;   /* kappa -> 0 limit */
+                                       }
+                                       /* defensive backstop only against a non-finite upstream rate */
+                                       if(!isfinite(community->detritus->w_values[k][l]) || community->detritus->w_values[k][l]<0){
+                                               community->detritus->w_values[k][l]=0;
+                                       }
                                      }
                                      temp_det_g[k][l]=community->detritus->g_values[k][l];
                                      temp_det_mu[k][l]=community->detritus->mu_values[k][l];
