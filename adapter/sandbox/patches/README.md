@@ -15,11 +15,23 @@ for deep than shallow LMEs (`corr(depth, intercept) = -0.45`), so deep LMEs look
 oligotrophic and their pelagic under-produces (LME-3 California Current: Q pinned
 at the [0,3] calibration bound, catch under-shooting).
 
-The fix **wires in the already-present `get_threshold_depth()`** (mixed-layer depth
-in deep water, full column `>= MLD` in shallow water, capped at `thresh_depth`) as a
-per-cell weight mask on the thickness-weighted mean, so phyto is averaged over the
-mixed layer where it actually sits. (CMIP5 used `min(depth,100)`; ISIMIP3a's fixed
-200 m doubled the dilution.)
+The fix makes the averaging **depth** selectable via an `averaging` argument, and
+reduces **both** size fractions (total `phyc`, small `phypico`) over the **same**
+layer so the small/large ratio — which sets the spectrum **slope** in `GetPPIntSlope`
+(`lphy = phyc − phypico`) — stays consistent:
+
+- `fixed200` — legacy thickness-weighted mean over the top 200 m (depth-biased).
+- `mld` — thickness-weighted mean over the mixed layer (`get_threshold_depth`);
+  de-biases but truncates a deep chlorophyll maximum.
+- `cumulative90` — mean over the layer holding 90 % of the column phyto biomass.
+- **`biomass_weighted` (default, recommended)** — total-phyto-biomass-weighted mean
+  concentration over the whole column, `∫phyc²/∫phyc` for total (and
+  `∫phypico·phyc/∫phyc` for small) = *column biomass ÷ effective productive
+  thickness*. Threshold- and light-free (no MLD field, no DCM truncation), and it's
+  the density a **vertically-migrating, food-tracking pelagic forager** actually
+  experiences — captures surface + DCM, ignores phyto-poor water it swims through
+  but doesn't feed in. (CMIP5 used `min(depth,100)`; ISIMIP3a's fixed 200 m doubled
+  the dilution.)
 
 **Emulated effect** (intercept offset `+log10(200/MLD)` in `tier1_fishing_calib.R`
 via `INT_OFFSET`, pending the real re-run): a `+0.3` shift (~MLD 100 m) on LME-3
