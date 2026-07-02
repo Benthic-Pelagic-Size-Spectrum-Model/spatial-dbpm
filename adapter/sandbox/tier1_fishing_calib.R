@@ -164,3 +164,13 @@ Qf <- o$minimum; mc <- catch_model(Qf)
 cat(sprintf("  optimise[0,3]: evals=%d  Q=%.3f  MSE(log catch)=%.3f  corr=%.2f\n",
             n, Qf, o$objective, suppressWarnings(cor(log10(mc), log10(yr$cat), use = "complete.obs"))))
 cat(sprintf("  catch mean: model=%.3f  obs=%.3f (g m-2 yr-1)\n", mean(mc, na.rm = TRUE), mean(yr$cat)))
+
+# optional: save the calibrated catch time series + stats (for batch plotting)
+if (nzchar(Sys.getenv("SAVE_RDS"))) {
+  cr <- suppressWarnings(cor(log10(mc), log10(yr$cat), use = "complete.obs"))
+  reg <- if ("region_name" %in% names(di)) as.character(di$region_name[1]) else NA
+  saveRDS(list(L = L, region = reg, year = yr$year, obs = yr$cat, model = mc,
+               Q = Qf, mse = o$objective, corr = cr, s_pel = s_pel, s_ben = s_ben,
+               depth = depth_mean),
+          Sys.getenv("SAVE_RDS"))
+}
