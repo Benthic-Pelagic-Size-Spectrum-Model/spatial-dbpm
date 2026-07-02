@@ -33,10 +33,12 @@ typedef struct run_info{
         int col_ben_tempeff;
         int col_sinking_rate;
         int col_depth;
+        int col_residence_time;
         double pel_tempeff;    //current surface-temperature multiplier (default 1)
         double ben_tempeff;    //current seafloor-temperature multiplier (default 1)
         double sinking_rate;   //current detritus sinking/export fraction (default 1)
         double depth;          //water-column depth (m); read+available. Supplying the channel toggles Dunne burial ON (col_depth>=0); the value is NOT used to rescale the burial flux (sizemodel applies burial to the per-volume flux directly)
+        double residence_time; //detritus residence time tau (yr) for the alternative first-order pool loss W/tau (dimensionally clean; supplied via the residence_time channel). 0/absent = off
 
         } RUN;
 
@@ -1417,10 +1419,12 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      run->col_ben_tempeff=-1;
      run->col_sinking_rate=-1;
      run->col_depth=-1;
+     run->col_residence_time=-1;
      run->pel_tempeff=1.0;
      run->ben_tempeff=1.0;
      run->sinking_rate=1.0;
      run->depth=1.0;
+     run->residence_time=0.0;
      run->fptr_forcing=NULL;
      {
              char fname_forcing[256];
@@ -1442,6 +1446,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
                                      else if(strcmp(name,"ben_tempeff")==0)  run->col_ben_tempeff=col;
                                      else if(strcmp(name,"sinking_rate")==0)  run->col_sinking_rate=col;
                                      else if(strcmp(name,"depth")==0)  run->col_depth=col;
+                                     else if(strcmp(name,"residence_time")==0)  run->col_residence_time=col;
                                      col++;
                                      name=strtok(NULL,",");
                              }
@@ -2500,6 +2505,7 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                      if(run->col_ben_tempeff>=0 && run->col_ben_tempeff<nv) run->ben_tempeff=vals[run->col_ben_tempeff];
                      if(run->col_sinking_rate>=0 && run->col_sinking_rate<nv) run->sinking_rate=vals[run->col_sinking_rate];
                      if(run->col_depth>=0 && run->col_depth<nv) run->depth=vals[run->col_depth];
+                     if(run->col_residence_time>=0 && run->col_residence_time<nv) run->residence_time=vals[run->col_residence_time];
              }
              for(s=0 ; s<n ; s++){
                      community->pelagic[s].A    = community->pelagic[s].A_base    * run->pel_tempeff;
@@ -2695,6 +2701,17 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                                        }
                                        double loss = community->detritus->mu_values[k][l];     /* = kappa*W0   */
                                        double kappa = (W0 > 1e-30) ? loss / W0 : 0.0;
+                                       /* Alternative/opt-in residence-time closure: a first-order loss W/tau on the
+                                          detritus POOL (remineralisation/export from the benthic layer), added to the
+                                          detritivory rate. Dimensionally clean in dbpmr's per-volume units - no areal
+                                          ambiguity - and the exact integrator below absorbs it (K = kappa + 1/tau, so
+                                          the equilibrium is W* = In/(kappa+1/tau); with negligible detritivory that is
+                                          the classic W* = In*tau). Supplied via the residence_time channel (yr); an
+                                          alternative to Dunne burial (Julia's commented CMIP5 variant made this loss
+                                          proportional to W). Off when the channel is absent or tau<=0. */
+                                       if(run->col_residence_time>=0 && run->residence_time>0.0){
+                                               kappa += 1.0/run->residence_time;
+                                       }
                                        if(kappa > 1e-30){
                                                double Wstar = In / kappa;
                                                community->detritus->w_values[k][l] = Wstar + (W0 - Wstar)*exp(-kappa*dt);

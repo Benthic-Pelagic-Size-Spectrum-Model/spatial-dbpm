@@ -105,11 +105,18 @@ runsim <- function(Q, s_pel, s_ben) {
   ts_t <- seq_len(nst) * (1/48)
   tmat <- vapply(ts_t, temp_at, numeric(2)); smat <- vapply(ts_t, sink_at, numeric(1))
   di_in <- file.path("R", "Input"); dir.create(di_in, showWarnings = FALSE, recursive = TRUE)
-  # supplying the depth channel toggles Dunne-2007 burial ON (applied to dbpmr's per-volume
-  # detrital flux directly, as sizemodel does - the value is not used to rescale the burial).
-  writeLines(c("pel_tempeff,ben_tempeff,sinking_rate,depth",
-               sprintf("%.8g,%.8g,%.8g,%.8g", tmat[1, ], tmat[2, ], smat, dcorr)),
-             file.path(di_in, "forcing_ts.txt"))
+  # detritus closure (env DET_CLOSURE): "burial" (default) -> Dunne via the depth channel;
+  # "residence:TAU" -> dimensionally-clean first-order pool loss W/tau via residence_time.
+  cl <- Sys.getenv("DET_CLOSURE", "burial")
+  if (grepl("^residence", cl)) {
+    tau <- as.numeric(sub("^residence:?", "", cl)); if (is.na(tau)) tau <- 1
+    hdr <- "pel_tempeff,ben_tempeff,sinking_rate,residence_time"
+    rows <- sprintf("%.8g,%.8g,%.8g,%.8g", tmat[1, ], tmat[2, ], smat, tau)
+  } else {
+    hdr <- "pel_tempeff,ben_tempeff,sinking_rate,depth"
+    rows <- sprintf("%.8g,%.8g,%.8g,%.8g", tmat[1, ], tmat[2, ], smat, dcorr)
+  }
+  writeLines(c(hdr, rows), file.path(di_in, "forcing_ts.txt"))
   if (Q > 0) {
     Setup.fishing(pe, run, grid, func = function(m, t, x, y) Q * s_pel * as.numeric(m >= wsel) * eff_at(t))
     Setup.fishing(be, run, grid, func = function(m, t, x, y) Q * s_ben * as.numeric(m >= wsel) * eff_at(t))

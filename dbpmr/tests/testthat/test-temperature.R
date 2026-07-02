@@ -87,3 +87,14 @@ test_that("burial matches sizemodel: applied to per-volume flux (depth value doe
   b_d500 <- run_biomass(64, 6.4, 0.2, 0.2, forcing = list(depth = 500))
   expect_equal(b_d500[["ben"]], b_d1[["ben"]], tolerance = 1e-9)
 })
+
+test_that("residence-time closure: shorter tau -> less detritus -> less benthos, and is opt-in", {
+  # first-order pool loss W/tau: shorter residence time removes detritus faster -> less benthos
+  b_none  <- run_biomass(64, 6.4, 0.2, 0.2, forcing = NULL)                        # closure off
+  b_long  <- run_biomass(64, 6.4, 0.2, 0.2, forcing = list(residence_time = 100))  # weak loss
+  b_short <- run_biomass(64, 6.4, 0.2, 0.2, forcing = list(residence_time = 0.1))  # strong loss
+  expect_lt(b_short[["ben"]], b_long[["ben"]])
+  # tau=0 disables it (identical to no closure)
+  b_zero  <- run_biomass(64, 6.4, 0.2, 0.2, forcing = list(residence_time = 0))
+  expect_equal(b_zero[["ben"]], b_none[["ben"]], tolerance = 1e-9)
+})
