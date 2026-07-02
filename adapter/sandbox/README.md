@@ -62,8 +62,16 @@ and the submodule's R deps (arrow, dplyr, …).
       dbpmr wants per-ln, so `u_0=10^intercept/ln10` (was 2.3× too high);
       (b) engine biomass integral had a spurious ×ln(10). Verified against the C
       engine's own integrals (SizeSpectra.c:2263/2293/2336). — `dbpmr_engine.R`
-- [ ] Reconcile magnitudes vs sizemodel (apply ln(10) PR #14 to submodule +
-      density convention) — for like-for-like comparison (not required to run).
+- [x] **Per-volume units + reference thickness reconciled** — DBPM state is
+      per-VOLUME (g m⁻³; the plankton intercept is a depth-weighted-mean
+      concentration). Output areal conversion matches sizemodel exactly: predators
+      ×`min(depth,200)`, detritivores ×`20` (`useful_functions.R:793-814`). The
+      coupled detritus `input_w` mixes pelagic-(≤200 m) and benthic-(20 m)
+      per-volume fluxes without an inter-reference conversion — an inherent DBPM
+      simplification (~8-10× under-weight of the sinking pelagic input) reproduced
+      **identically to sizemodel by design**; documented in `g_det`. A
+      dimensionally-consistent mode was considered and deliberately not adopted
+      (would deviate from sizemodel + need recalibration).
 - [ ] Gravity refinements: creep (annual Q increase) + sectors (DBPM.md).
 - [ ] Fold `engine=` / the calibration into the LME repo as a PR (#24).
 

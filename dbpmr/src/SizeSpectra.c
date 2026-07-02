@@ -3301,7 +3301,19 @@ double g_det(int xspace, int yspace, RUN *run, GRID *grid, COMMUNITY *community)
 
      /*Surface-origin inputs sink: scale by the time-varying sinking_rate (= export ratio),
        exactly as sizemodel multiplies its pelagic detritus inputs by sinking_rate[i]. Seafloor
-       (dead-benthos) inputs are added unscaled. Default sinking_rate 1.*/
+       (dead-benthos) inputs are added unscaled. Default sinking_rate 1.
+
+       REFERENCE-THICKNESS NOTE (matches sizemodel by design): DBPM densities are per-VOLUME,
+       but the pelagic groups are referenced to the productive column (min(depth,200) m) and the
+       benthic groups to the benthic-habitat layer (20 m) - the output areal conversions differ
+       accordingly (predators x min(depth,200), detritivores x 20). Here the two per-volume
+       fluxes are summed into the (20 m-referenced) detritus pool WITHOUT an inter-reference
+       conversion, so the sinking pelagic input is effectively under-weighted by ~min(depth,200)/20
+       (~8-10x). This is an inherent DBPM simplification, reproduced here identically to sizemodel
+       (its coupled input_w mixes the per-volume terms the same way); it is partly absorbed by the
+       search-volume calibration. A dimensionally-consistent alternative (areal-referenced sinking
+       + areal Dunne burial) would deviate from sizemodel and require recalibration - deliberately
+       not done.*/
      return(run->sinking_rate * ans_surf + ans_bed);
 }
 
