@@ -37,7 +37,10 @@ run_model_dbpmr <- function(fishing_params, dbpm_inputs,
   S  <- f1(p$hr_volume_search)                    # search volume (calibration knob)
   depth <- f1(p$depth); dcorr <- min(depth, 200); bhd <- 20  # areal output multipliers
   sink0 <- f1(p$sinking_rate)                     # export ratio (fraction reaching seafloor)
-  pref_ben_depth <- 0.8 * exp(-depth / 250)       # predator-benthos coupling (sizemodel)
+  # predator-benthos coupling on a vertical-MIGRATION length (~1500 m), not the passive
+  # sinking length (250 m): the legacy 0.8*exp(-depth/250) zeroes coupling by ~1 km and
+  # collapses deep-system pelagics; migration keeps them weakly coupled. See tier1_fishing_calib.R.
+  pref_ben_depth <- 0.8 * exp(-depth / 1500)
 
   wd <- tempfile("dbpmr_eng"); dir.create(wd); old <- setwd(wd); on.exit(setwd(old))
   run  <- dbpmr::Setup.Run("R", 1, 1, spatial_dim = 0, coupled_flag = TRUE, diff_method = 1)

@@ -79,8 +79,15 @@ midx <- function(t) max(1, min(nmon, floor((t - spin) * 12) + 1))   # obsclim mo
 # forcing channels at model-time t
 temp_at <- function(t) { if (t < spin) return(c(te(tos1), te(tob1))); j <- midx(t); c(te(tos[j]), te(tob[j])) }
 sink_at <- function(t) { if (t < spin) return(er1); er[midx(t)] }
-# depth -> predator-benthos coupling (sizemodel: pref_benthos = 0.8*exp(-depth/250)) + areal
-depth_mean <- p$depth[1]; pref_ben_depth <- 0.8 * exp(-depth_mean / 250)
+# depth -> predator-benthos coupling. The legacy 0.8*exp(-depth/250) reuses the passive
+# SINKING attenuation length (~250 m), so coupling is ~0 by 1000 m and truly zero in the
+# deep - far too steep for animals that vertically migrate hundreds of metres (it also
+# contradicts sizeparam's own cited intent, Trueman: 0.75 <500 m, 0.5 to 1800 m). Decay
+# instead on a vertical-MIGRATION length (~1500 m, mesopelagic + deep migrators): same form
+# and 0.8 surface value, but coupling persists across the DVM range and deep systems stay
+# weakly coupled (0.08 at 3437 m) rather than losing the pelagic web entirely.
+coupling_scale <- 1500
+depth_mean <- p$depth[1]; pref_ben_depth <- 0.8 * exp(-depth_mean / coupling_scale)
 
 # --- one simulation: time-varying plankton + gravity-split fishing (shares s_pel,s_ben) ---
 runsim <- function(Q, s_pel, s_ben) {
