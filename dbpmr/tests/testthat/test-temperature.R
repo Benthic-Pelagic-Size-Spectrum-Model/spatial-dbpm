@@ -1,0 +1,89 @@
+# Environmental forcing plugin (forcing_ts.txt)
+# ---------------------------------------------
+# The engine auto-detects <run>/Input/forcing_ts.txt: a header line naming channels
+# (pel_tempeff, ben_tempeff, sinking_rate) then one row per timestep. Each timestep it
+# scales feeding (A) and background mortality (mu_0) from base values by pel/ben_tempeff
+# (mirroring sizemodel's pel/ben_tempeffect) and scales surface-origin detritus inputs
+# in g_det by sinking_rate. Missing channels fall back to neutral (1).
+
+LN10 <- log(10)
+
+# minimal pelagic+benthic run. `forcing` = named list of constant channel values written
+# to forcing_ts.txt (or NULL for no file). Returns c(pel=biomass, ben=biomass).
+run_biomass <- function(A_pel, A_ben, mu_pel, mu_ben, forcing = NULL) {
+  wd <- tempfile("forcetest"); dir.create(wd); old <- setwd(wd); on.exit(setwd(old))
+  run  <- Setup.Run("R", 1, 1, 0, TRUE, 1)
+  grid <- Setup.Grid(run, tmax = 15, tstep = 1/48, toutstep = 1)
+  pl <- Setup.Plankton(run, filename = "plankton", u_0 = 10^(-0.5)/LN10, lambda = -1)
+  pe <- Setup.Pelagic(run, filename = "fish", A = A_pel, mu_0 = mu_pel,
+                      K_pla = 0.2, R_pla = 0.1, Ex_pla = 0.5, rep_method = 2)
+  be <- Setup.Benthic(run, filename = "benthos", A = A_ben, mu_0 = mu_ben,
+                      K_det = 0.1, R_det = 0.2, Ex_det = 0.4, rep_method = 2)
+  de <- Setup.Detritus(run, filename = "detritus")
+  if (!is.null(forcing)) {
+    d <- file.path("R", "Input"); dir.create(d, showWarnings = FALSE, recursive = TRUE)
+    nst <- round(grid@tmax / grid@tstep) + 2
+    hdr <- paste(names(forcing), collapse = ",")
+    rows <- do.call(paste, c(lapply(forcing, function(v) sprintf("%.10g", rep_len(v, nst))), sep = ","))
+    writeLines(c(hdr, rows), file.path(d, "forcing_ts.txt"))
+  }
+  invisible(capture.output(SizeSpectrum(run, grid, pl, pe, be, de)))
+  f <- Read.In("R", "fish"); b <- Read.In("R", "benthos")
+  m <- f@mrange; dm <- diff(m)[1]
+  c(pel = sum(as.numeric(f@finaluvals[1, -(1:3)]) * exp(m) * dm),
+    ben = sum(as.numeric(b@finaluvals[1, -(1:3)]) * exp(m) * dm))
+}
+
+test_that("constant temperature forcing reproduces folded A/mu_0", {
+  te_pel <- 0.85; te_ben <- 0.31
+  b_fold   <- run_biomass(64 * te_pel, 6.4 * te_ben, 0.2 * te_pel, 0.2 * te_ben, forcing = NULL)
+  b_driver <- run_biomass(64, 6.4, 0.2, 0.2,
+                          forcing = list(pel_tempeff = te_pel, ben_tempeff = te_ben))
+  # Near-exact: the only (intended) departure is that g_det uses the BASE, un-temperatured
+  # mortality for detritus input - which the folded run cannot replicate (it bakes te into
+  # mu_0_base). That leaks a ~1e-4 difference through detritus coupling; feeding+spectrum
+  # mortality match to machine precision.
+  expect_equal(b_driver[["pel"]], b_fold[["pel"]], tolerance = 2e-3)
+})
+
+test_that("temperature forcing changes rates (tempeff=1 differs from folded)", {
+  te_pel <- 0.85; te_ben <- 0.31
+  b_fold <- run_biomass(64 * te_pel, 6.4 * te_ben, 0.2 * te_pel, 0.2 * te_ben, forcing = NULL)
+  b_neut <- run_biomass(64, 6.4, 0.2, 0.2, forcing = NULL)  # no file -> tempeff=1
+  expect_false(isTRUE(all.equal(b_neut[["pel"]], b_fold[["pel"]], tolerance = 1e-3)))
+})
+
+test_that("sinking_rate < 1 lowers detritus-fed detritivore biomass", {
+  # less surface detritus reaching the seafloor -> smaller detritus pool -> less benthos
+  b_full <- run_biomass(64, 6.4, 0.2, 0.2, forcing = list(sinking_rate = 1.0))
+  b_half <- run_biomass(64, 6.4, 0.2, 0.2, forcing = list(sinking_rate = 0.3))
+  expect_lt(b_half[["ben"]], b_full[["ben"]])
+})
+
+test_that("sinking_rate = 1 matches no-forcing (neutral default)", {
+  b_none <- run_biomass(64, 6.4, 0.2, 0.2, forcing = NULL)
+  b_one  <- run_biomass(64, 6.4, 0.2, 0.2, forcing = list(sinking_rate = 1.0))
+  expect_equal(b_one[["ben"]], b_none[["ben"]], tolerance = 1e-6)
+})
+
+test_that("burial is opt-in via the depth channel (absent -> no burial)", {
+  # no depth channel -> burial disabled -> identical to plain no-forcing detritus
+  b_none  <- run_biomass(64, 6.4, 0.2, 0.2, forcing = NULL)
+  b_sink1 <- run_biomass(64, 6.4, 0.2, 0.2, forcing = list(sinking_rate = 1))  # no depth col
+  expect_equal(b_sink1[["ben"]], b_none[["ben"]], tolerance = 1e-6)
+})
+
+test_that("Dunne-2007 burial (opt-in via depth channel) lowers detritus-fed benthos", {
+  # supplying the depth channel enables burial -> less detritus reaches the pool -> less benthos
+  b_none <- run_biomass(64, 6.4, 0.2, 0.2, forcing = NULL)             # burial off
+  b_bur  <- run_biomass(64, 6.4, 0.2, 0.2, forcing = list(depth = 1))  # burial on
+  expect_lt(b_bur[["ben"]], b_none[["ben"]])
+})
+
+test_that("burial matches sizemodel: applied to per-volume flux (depth value does NOT rescale)", {
+  # dbpmr densities are per-VOLUME; sizemodel applies Dunne to its per-volume input_w directly,
+  # so the depth value must not change the burial fraction - only its presence toggles burial on
+  b_d1   <- run_biomass(64, 6.4, 0.2, 0.2, forcing = list(depth = 1))
+  b_d500 <- run_biomass(64, 6.4, 0.2, 0.2, forcing = list(depth = 500))
+  expect_equal(b_d500[["ben"]], b_d1[["ben"]], tolerance = 1e-9)
+})
