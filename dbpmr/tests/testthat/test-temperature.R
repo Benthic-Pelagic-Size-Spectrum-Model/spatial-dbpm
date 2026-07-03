@@ -88,6 +88,20 @@ test_that("burial matches sizemodel: applied to per-volume flux (depth value doe
   expect_equal(b_d500[["ben"]], b_d1[["ben"]], tolerance = 1e-9)
 })
 
+test_that("size-dependent export is opt-in (absent -> unchanged detritus dynamics)", {
+  # no export channel -> flat sinking_rate, identical to a plain sinking_rate=1 run
+  b_flat <- run_biomass(64, 6.4, 0.2, 0.2, forcing = list(sinking_rate = 1))
+  b_none <- run_biomass(64, 6.4, 0.2, 0.2, forcing = NULL)
+  expect_equal(b_flat[["ben"]], b_none[["ben"]], tolerance = 1e-6)
+})
+
+test_that("size-dependent export: stronger attenuation lowers detritus-fed benthos", {
+  # export(m) = exp(-export_attn * exp(-export_gamma*m)); larger export_attn -> less reaches the bed
+  b_lo <- run_biomass(64, 6.4, 0.2, 0.2, forcing = list(export_attn = 0.1, export_gamma = 0.4))
+  b_hi <- run_biomass(64, 6.4, 0.2, 0.2, forcing = list(export_attn = 5.0, export_gamma = 0.4))
+  expect_lt(b_hi[["ben"]], b_lo[["ben"]])
+})
+
 test_that("residence-time closure: shorter tau -> less detritus -> less benthos, and is opt-in", {
   # first-order pool loss W/tau: shorter residence time removes detritus faster -> less benthos
   b_none  <- run_biomass(64, 6.4, 0.2, 0.2, forcing = NULL)                        # closure off

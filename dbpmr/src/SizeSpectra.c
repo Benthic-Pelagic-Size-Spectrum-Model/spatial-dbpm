@@ -34,11 +34,15 @@ typedef struct run_info{
         int col_sinking_rate;
         int col_depth;
         int col_residence_time;
+        int col_export_attn;   //size-dependent detritus export (opt-in): particle of ln-mass m reaches
+        int col_export_gamma;  //the seafloor with fraction exp(-export_attn*exp(-export_gamma*m))
         double pel_tempeff;    //current surface-temperature multiplier (default 1)
         double ben_tempeff;    //current seafloor-temperature multiplier (default 1)
         double sinking_rate;   //current detritus sinking/export fraction (default 1)
         double depth;          //water-column depth (m); read+available. Supplying the channel toggles Dunne burial ON (col_depth>=0); the value is NOT used to rescale the burial flux (sizemodel applies burial to the per-volume flux directly)
         double residence_time; //detritus residence time tau (yr) for the alternative first-order pool loss W/tau (dimensionally clean; supplied via the residence_time channel). 0/absent = off
+        double export_attn;    //size-dependent export: attenuation number A = k(T)*z/w0 (per-timestep, from export_attn channel; larger = more remineralisation = less export)
+        double export_gamma;   //size-dependent export: allometric sinking-velocity exponent (w_s ~ mass^gamma); larger particles sink faster -> higher export
 
         } RUN;
 
@@ -1420,11 +1424,15 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      run->col_sinking_rate=-1;
      run->col_depth=-1;
      run->col_residence_time=-1;
+     run->col_export_attn=-1;
+     run->col_export_gamma=-1;
      run->pel_tempeff=1.0;
      run->ben_tempeff=1.0;
      run->sinking_rate=1.0;
      run->depth=1.0;
      run->residence_time=0.0;
+     run->export_attn=0.0;
+     run->export_gamma=0.0;
      run->fptr_forcing=NULL;
      {
              char fname_forcing[256];
@@ -1447,6 +1455,8 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
                                      else if(strcmp(name,"sinking_rate")==0)  run->col_sinking_rate=col;
                                      else if(strcmp(name,"depth")==0)  run->col_depth=col;
                                      else if(strcmp(name,"residence_time")==0)  run->col_residence_time=col;
+                                     else if(strcmp(name,"export_attn")==0)  run->col_export_attn=col;
+                                     else if(strcmp(name,"export_gamma")==0)  run->col_export_gamma=col;
                                      col++;
                                      name=strtok(NULL,",");
                              }
@@ -2506,6 +2516,8 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                      if(run->col_sinking_rate>=0 && run->col_sinking_rate<nv) run->sinking_rate=vals[run->col_sinking_rate];
                      if(run->col_depth>=0 && run->col_depth<nv) run->depth=vals[run->col_depth];
                      if(run->col_residence_time>=0 && run->col_residence_time<nv) run->residence_time=vals[run->col_residence_time];
+                     if(run->col_export_attn>=0 && run->col_export_attn<nv) run->export_attn=vals[run->col_export_attn];
+                     if(run->col_export_gamma>=0 && run->col_export_gamma<nv) run->export_gamma=vals[run->col_export_gamma];
              }
              for(s=0 ; s<n ; s++){
                      community->pelagic[s].A    = community->pelagic[s].A_base    * run->pel_tempeff;
@@ -3287,17 +3299,35 @@ double g_det(int xspace, int yspace, RUN *run, GRID *grid, COMMUNITY *community)
      double ans_surf=0;   /*surface-origin inputs (sink to the seafloor -> scaled by sinking_rate)*/
      double ans_bed=0;    /*seafloor-origin inputs (dead benthos, already on the bed -> no sinking)*/
 
+     /* Size-dependent export closure (opt-in): when the export_attn channel is supplied, each
+        surface particle of ln-mass m reaches the seafloor with fraction
+          export(m) = exp( -export_attn * exp(-export_gamma*m) ),
+        from an allometric sinking speed w_s ~ mass^export_gamma and an attenuation number
+        export_attn = k(T)*z/w0 - so large carcasses/pellets sink faster and are recycled less
+        than small ones. Replaces the flat sinking_rate. Default (channel absent): flat export. */
+     int size_dep = (run->col_export_attn>=0);
+
      if(run->coupled_flag==1){
              for(s=0 ; s<n ; s++){
                      /*Rate of det biomass in from pelagic defecation (faeces follow the
-                       temperature-scaled feeding, as sizemodel's defbypred does)*/
-                     ans_surf+=(community->pelagic[s].Ex_pla*community->pelagic[s].pla_total[xspace][yspace]+community->pelagic[s].Ex_pel*community->pelagic[s].pel_total[xspace][yspace]+community->pelagic[s].Ex_ben*community->pelagic[s].ben_total[xspace][yspace]);
+                       temperature-scaled feeding, as sizemodel's defbypred does). Flat export uses
+                       the pre-summed *_total; size-dependent export reconstructs faeces per predator
+                       size (pla_bio/pel_bio/ben_bio) so export(m) can weight each size class.*/
+                     if(!size_dep){
+                             ans_surf+=(community->pelagic[s].Ex_pla*community->pelagic[s].pla_total[xspace][yspace]+community->pelagic[s].Ex_pel*community->pelagic[s].pel_total[xspace][yspace]+community->pelagic[s].Ex_ben*community->pelagic[s].ben_total[xspace][yspace]);
+                     }
                      for(i=community->pelagic[s].ipelmin ; i<(community->pelagic[s].ipelmax+1) ; i++){
                              /*Dead pelagic stuff. Use the BASE (un-temperature-scaled) background
                                mortality: sizemodel removes temperature from the mortality feeding
                                the detritus pool.*/
-                             ans_surf+=community->pelagic[s].mu_0_base*exp(community->pelagic[s].beta*grid->m_values[i])*community->pelagic[s].u_values[i][xspace][yspace]*exp(grid->m_values[i])*grid->mstep;
-                             ans_surf+=community->pelagic[s].mu_s*((log10(exp(grid->m_values[i]))-log10(exp(community->pelagic[s].pelmin)))/((log10(exp(community->pelagic[s].pelmax))+community->pelagic[s].epsilon)-log10(exp(grid->m_values[i]))))*community->pelagic[s].u_values[i][xspace][yspace]*exp(grid->m_values[i])*grid->mstep;
+                             double dead = community->pelagic[s].mu_0_base*exp(community->pelagic[s].beta*grid->m_values[i])*community->pelagic[s].u_values[i][xspace][yspace]*exp(grid->m_values[i])*grid->mstep
+                                         + community->pelagic[s].mu_s*((log10(exp(grid->m_values[i]))-log10(exp(community->pelagic[s].pelmin)))/((log10(exp(community->pelagic[s].pelmax))+community->pelagic[s].epsilon)-log10(exp(grid->m_values[i]))))*community->pelagic[s].u_values[i][xspace][yspace]*exp(grid->m_values[i])*grid->mstep;
+                             if(size_dep){
+                                     double faeces = (community->pelagic[s].Ex_pla*community->pelagic[s].pla_bio[i][xspace][yspace]+community->pelagic[s].Ex_pel*community->pelagic[s].pel_bio[i][xspace][yspace]+community->pelagic[s].Ex_ben*community->pelagic[s].ben_bio[i][xspace][yspace])*community->pelagic[s].u_values[i][xspace][yspace]*grid->mstep;
+                                     ans_surf += exp(-run->export_attn*exp(-run->export_gamma*grid->m_values[i]))*(faeces + dead);
+                             }else{
+                                     ans_surf += dead;
+                             }
                      }
                      /*Dead benthos (detritivore background + senescence mortality). These bodies
                        are already on/in the seafloor, so they DO NOT get the sinking_rate factor -
@@ -3313,7 +3343,9 @@ double g_det(int xspace, int yspace, RUN *run, GRID *grid, COMMUNITY *community)
      }
      for(i=community->plankton->iplamin ; i<(community->plankton->iplamax+1) ; i++){
              /*Rate of det biomass in from dead (sinking) plankton - surface origin*/
-             ans_surf+=community->plankton->mu_0*exp(community->plankton->beta*grid->m_values[i])*community->plankton->u_values[i][xspace][yspace]*exp(grid->m_values[i])*grid->mstep;
+             double pdead = community->plankton->mu_0*exp(community->plankton->beta*grid->m_values[i])*community->plankton->u_values[i][xspace][yspace]*exp(grid->m_values[i])*grid->mstep;
+             if(size_dep) ans_surf += exp(-run->export_attn*exp(-run->export_gamma*grid->m_values[i]))*pdead;
+             else         ans_surf += pdead;
      }
 
      /*Surface-origin inputs sink: scale by the time-varying sinking_rate (= export ratio),
@@ -3331,7 +3363,9 @@ double g_det(int xspace, int yspace, RUN *run, GRID *grid, COMMUNITY *community)
        search-volume calibration. A dimensionally-consistent alternative (areal-referenced sinking
        + areal Dunne burial) would deviate from sizemodel and require recalibration - deliberately
        not done.*/
-     return(run->sinking_rate * ans_surf + ans_bed);
+     /* size-dependent export already applied export(m) per size class inside ans_surf, so it
+        replaces the flat sinking_rate; otherwise scale the aggregated surface flux by sinking_rate */
+     return((size_dep ? ans_surf : run->sinking_rate * ans_surf) + ans_bed);
 }
 
 double mu_det(int xspace, int yspace, RUN *run, GRID *grid, COMMUNITY *community)

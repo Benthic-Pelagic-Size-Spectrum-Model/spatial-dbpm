@@ -93,21 +93,23 @@ sink_at <- function(t) { if (t < spin) return(er1); er[midx(t)] }
 coupling_scale <- 1500
 depth_mean <- p$depth[1]; pref_ben_depth <- 0.8 * exp(-depth_mean / coupling_scale)
 
-# --- one simulation: time-varying plankton + gravity-split fishing (shares s_pel,s_ben) ---
-runsim <- function(Q, s_pel, s_ben) {
+# --- one simulation at per-group catchabilities (qp pelagic, qb benthic) ---
+# single-Q gravity split is qp = Q*s_pel, qb = Q*s_ben; two_Q frees them.
+runsim <- function(qp, qb) {
   wd <- tempfile("tv"); dir.create(wd); old <- setwd(wd)
   run  <- Setup.Run("R", 1, 1, 0, TRUE, 1)
   grid <- Setup.Grid(run, tmax = tmax, tstep = 1/48, toutstep = 1)
   pl   <- Setup.Plankton(run, filename = "plankton", lambda = slp1, ts_flag = TRUE)
   Setup.ts(pl, run, grid, func = plfun)
+  fishing <- (qp > 0 || qb > 0)
   # BASE (unscaled) A/mu_0; temperature applied per-timestep by the driver below
   pe <- Setup.Pelagic(run, filename = "fish", mmin = -3*LN10, mmat = 2*LN10, mmax = 6*LN10,
           alpha = p$metabolic_req_pred[1], A = 64, mu_0 = p$natural_mort[1], pref_ben = pref_ben_depth,
           K_pla = Kp, R_pla = Rp, Ex_pla = Ep, K_pel = Kp, R_pel = Rp, Ex_pel = Ep,
-          K_ben = Kl, R_ben = Rl, Ex_ben = El, rep_method = 2, fishing_flag = (Q > 0))
+          K_ben = Kl, R_ben = Rl, Ex_ben = El, rep_method = 2, fishing_flag = fishing)
   be <- Setup.Benthic(run, filename = "benthos", mmin = -3*LN10, mmat = 1*LN10, mmax = 4*LN10,
           alpha = p$metabolic_req_detritivore[1], A = 6.4, mu_0 = p$natural_mort[1],
-          K_det = Kl, R_det = Rl, Ex_det = El, rep_method = 2, fishing_flag = (Q > 0))
+          K_det = Kl, R_det = Rl, Ex_det = El, rep_method = 2, fishing_flag = fishing)
   de <- Setup.Detritus(run, filename = "detritus")
   # environmental forcing plugin: write forcing_ts.txt (header + one row per timestep, row j ->
   # model time j*tstep), auto-detected by the C engine. Channels: pel/ben temperature effect
@@ -117,20 +119,31 @@ runsim <- function(Q, s_pel, s_ben) {
   tmat <- vapply(ts_t, temp_at, numeric(2)); smat <- vapply(ts_t, sink_at, numeric(1))
   di_in <- file.path("R", "Input"); dir.create(di_in, showWarnings = FALSE, recursive = TRUE)
   # detritus closure (env DET_CLOSURE): "burial" (default) -> Dunne via the depth channel;
-  # "residence:TAU" -> dimensionally-clean first-order pool loss W/tau via residence_time.
+  # "residence:TAU" -> first-order pool loss W/tau via residence_time;
+  # "export:GAMMA:ATTN0" -> SIZE-DEPENDENT export: a surface particle of ln-mass m reaches the
+  #   seafloor with fraction exp(-attn(t)*exp(-GAMMA*m)) (large carcasses/pellets sink faster).
+  #   attn(t) = ATTN0 * (dcorr/200) * exp(0.05*(tob(t)-mean tob))  (deeper/warmer -> more attenuation).
   cl <- Sys.getenv("DET_CLOSURE", "burial")
   if (grepl("^residence", cl)) {
     tau <- as.numeric(sub("^residence:?", "", cl)); if (is.na(tau)) tau <- 1
     hdr <- "pel_tempeff,ben_tempeff,sinking_rate,residence_time"
     rows <- sprintf("%.8g,%.8g,%.8g,%.8g", tmat[1, ], tmat[2, ], smat, tau)
+  } else if (grepl("^export", cl)) {
+    prm  <- as.numeric(strsplit(sub("^export:?", "", cl), ":")[[1]])
+    gam  <- if (length(prm) >= 1 && !is.na(prm[1])) prm[1] else 0.4
+    att0 <- if (length(prm) >= 2 && !is.na(prm[2])) prm[2] else 1
+    tobt <- vapply(ts_t, function(t) tob[midx(t)], numeric(1)); tobt[ts_t < spin] <- tob1
+    attn <- att0 * (dcorr / 200) * exp(0.05 * (tobt - mean(tob)))
+    hdr  <- "pel_tempeff,ben_tempeff,sinking_rate,export_attn,export_gamma"
+    rows <- sprintf("%.8g,%.8g,%.8g,%.8g,%.8g", tmat[1, ], tmat[2, ], smat, attn, gam)
   } else {
     hdr <- "pel_tempeff,ben_tempeff,sinking_rate,depth"
     rows <- sprintf("%.8g,%.8g,%.8g,%.8g", tmat[1, ], tmat[2, ], smat, dcorr)
   }
   writeLines(c(hdr, rows), file.path(di_in, "forcing_ts.txt"))
-  if (Q > 0) {
-    Setup.fishing(pe, run, grid, func = function(m, t, x, y) Q * s_pel * as.numeric(m >= wsel) * eff_at(t))
-    Setup.fishing(be, run, grid, func = function(m, t, x, y) Q * s_ben * as.numeric(m >= wsel) * eff_at(t))
+  if (fishing) {
+    Setup.fishing(pe, run, grid, func = function(m, t, x, y) qp * as.numeric(m >= wsel) * eff_at(t))
+    Setup.fishing(be, run, grid, func = function(m, t, x, y) qb * as.numeric(m >= wsel) * eff_at(t))
   }
   ok <- tryCatch({ invisible(capture.output(SizeSpectrum(run, grid, pl, pe, be, de))); TRUE },
                  error = function(e) { message(conditionMessage(e)); FALSE })
@@ -141,28 +154,59 @@ runsim <- function(Q, s_pel, s_ben) {
 }
 
 # --- 1) unfished equilibrium -> fishable-biomass shares (DBPM.md gravity split) ---
-u0 <- runsim(0, 0, 0); fi <- u0$x >= 1; nT <- length(u0$tt)
+u0 <- runsim(0, 0); fi <- u0$x >= 1; nT <- length(u0$tt)
 Bpel <- sum(u0$Um[nT, fi] * u0$w[fi] * u0$dm) * dcorr
 Bben <- sum(u0$Vm[nT, fi] * u0$w[fi] * u0$dm) * bhd
 s_pel <- Bpel / (Bpel + Bben); s_ben <- Bben / (Bpel + Bben)
-cat(sprintf("=== FAO-LME %d: single-Q + gravity split + time-varying plankton ===\n", L))
+two_Q <- nzchar(Sys.getenv("TWO_Q"))   # TWO_Q set -> estimate q_pel, q_ben separately
+cat(sprintf("=== FAO-LME %d: %s + time-varying plankton ===\n", L,
+            if (two_Q) "per-group Q (q_pel,q_ben)" else "single-Q + gravity split"))
 cat(sprintf("  unfished fishable biomass  pel=%.3g  ben=%.3g  -> shares  pel=%.2f  ben=%.2f\n",
             Bpel, Bben, s_pel, s_ben))
 
-# --- 2) calibrate Q to the observed catch time series (log-MSE) ---
-catch_model <- function(Q) {
-  r <- runsim(Q, s_pel, s_ben); if (is.null(r)) return(rep(NA, nyr))
+# --- catch time series at catchabilities (qp,qb) + log-MSE objective ---
+catch_ts <- function(qp, qb) {
+  r <- runsim(qp, qb); if (is.null(r)) return(rep(NA, nyr))
   k <- match(spin + (1:nyr), r$tt)
   sapply(k, function(kk) { e <- eff_at(r$tt[kk])
-    sum(Q * s_pel * e * r$Um[kk, fi] * r$w[fi] * r$dm) * dcorr +
-    sum(Q * s_ben * e * r$Vm[kk, fi] * r$w[fi] * r$dm) * bhd })
+    sum(qp * e * r$Um[kk, fi] * r$w[fi] * r$dm) * dcorr +
+    sum(qb * e * r$Vm[kk, fi] * r$w[fi] * r$dm) * bhd })
 }
-obj <- function(Q) { m <- catch_model(Q); if (all(is.na(m))) return(1e6)
-  ok <- is.finite(m) & m > 0 & yr$cat > 0; mean((log10(m[ok]) - log10(yr$cat[ok]))^2) }
-n <- 0; o <- optimise(function(Q) { n <<- n + 1; obj(Q) }, lower = 0, upper = 3, tol = 0.01)
-Qf <- o$minimum; mc <- catch_model(Qf)
-cat(sprintf("  optimise[0,3]: evals=%d  Q=%.3f  MSE(log catch)=%.3f  corr=%.2f\n",
-            n, Qf, o$objective, suppressWarnings(cor(log10(mc), log10(yr$cat), use = "complete.obs"))))
+logmse <- function(m) { if (all(is.na(m))) return(1e6)
+  ok <- is.finite(m) & m > 0 & yr$cat > 0
+  if (sum(ok) < 3) return(1e6); mean((log10(m[ok]) - log10(yr$cat[ok]))^2) }
+
+# --- 2) calibrate to the observed catch time series (log-MSE) ---
+n <- 0; Qf <- NA_real_
+if (!two_Q) {
+  # single common Q, gravity split: q_pel = Q*s_pel, q_ben = Q*s_ben (1-D Brent)
+  o  <- optimise(function(Q) { n <<- n + 1; logmse(catch_ts(Q * s_pel, Q * s_ben)) },
+                 lower = 0, upper = 3, tol = 0.01)
+  Qf <- o$minimum; qpf <- Qf * s_pel; qbf <- Qf * s_ben; mse <- o$objective
+  cat(sprintf("  optimise[0,3]: evals=%d  Q=%.3f  ", n, Qf))
+} else {
+  # per-group catchabilities. The objective is bimodal (yield-curve low-F / high-F
+  # basins) and non-smooth (knife-edge selectivity), so use a coarse grid seed to find
+  # the global basin, then a BOUNDED derivative-free polish. nloptr:
+  #   TWO_Q_OPT=grid_bobyqa (default) grid seed + NLOPT_LN_BOBYQA (bounded local)
+  #   TWO_Q_OPT=directL               NLOPT_GN_DIRECT_L (deterministic global)
+  obj2 <- function(q) { n <<- n + 1; logmse(catch_ts(q[1], q[2])) }
+  alg  <- Sys.getenv("TWO_Q_OPT", "grid_bobyqa")
+  if (alg == "directL") {
+    res <- nloptr::nloptr(c(1, 1), obj2, lb = c(0, 0), ub = c(3, 3),
+             opts = list(algorithm = "NLOPT_GN_DIRECT_L", maxeval = 80, xtol_rel = 1e-3))
+  } else {
+    qs <- seq(0.05, 3, length.out = 5); G <- expand.grid(qp = qs, qb = qs)
+    seed <- as.numeric(G[which.min(apply(G, 1, function(q) obj2(as.numeric(q)))), ])
+    res  <- nloptr::nloptr(seed, obj2, lb = c(0, 0), ub = c(3, 3),
+             opts = list(algorithm = "NLOPT_LN_BOBYQA", maxeval = 40, xtol_rel = 1e-3))
+  }
+  qpf <- res$solution[1]; qbf <- res$solution[2]; mse <- res$objective
+  cat(sprintf("  %s: evals=%d  q_pel=%.3f  q_ben=%.3f  ", alg, n, qpf, qbf))
+}
+mc <- catch_ts(qpf, qbf)
+cat(sprintf("MSE(log catch)=%.3f  corr=%.2f\n",
+            mse, suppressWarnings(cor(log10(mc), log10(yr$cat), use = "complete.obs"))))
 cat(sprintf("  catch mean: model=%.3f  obs=%.3f (g m-2 yr-1)\n", mean(mc, na.rm = TRUE), mean(yr$cat)))
 
 # optional: save the calibrated catch time series + stats (for batch plotting)
@@ -170,7 +214,7 @@ if (nzchar(Sys.getenv("SAVE_RDS"))) {
   cr <- suppressWarnings(cor(log10(mc), log10(yr$cat), use = "complete.obs"))
   reg <- if ("region_name" %in% names(di)) as.character(di$region_name[1]) else NA
   saveRDS(list(L = L, region = reg, year = yr$year, obs = yr$cat, model = mc,
-               Q = Qf, mse = o$objective, corr = cr, s_pel = s_pel, s_ben = s_ben,
-               depth = depth_mean),
+               Q = Qf, q_pel = qpf, q_ben = qbf, two_Q = two_Q, mse = mse, corr = cr,
+               s_pel = s_pel, s_ben = s_ben, depth = depth_mean),
           Sys.getenv("SAVE_RDS"))
 }
