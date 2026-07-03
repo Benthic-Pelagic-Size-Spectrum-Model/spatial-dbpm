@@ -35,7 +35,8 @@ typedef struct run_info{
         int col_depth;
         int col_residence_time;
         int col_export_attn;   //size-dependent detritus export (opt-in): particle of ln-mass m reaches
-        int col_export_gamma;  //the seafloor with fraction exp(-export_attn*exp(-export_gamma*m))
+        int col_export_gamma;  //the seafloor with fraction exp(-export_attn*exp(-export_gamma*max(m,export_magg)))
+        int col_export_magg;   //aggregation floor: production below export_magg (ln-mass) sinks as marine snow of that effective size
         double pel_tempeff;    //current surface-temperature multiplier (default 1)
         double ben_tempeff;    //current seafloor-temperature multiplier (default 1)
         double sinking_rate;   //current detritus sinking/export fraction (default 1)
@@ -43,6 +44,7 @@ typedef struct run_info{
         double residence_time; //detritus residence time tau (yr) for the alternative first-order pool loss W/tau (dimensionally clean; supplied via the residence_time channel). 0/absent = off
         double export_attn;    //size-dependent export: attenuation number A = k(T)*z/w0 (per-timestep, from export_attn channel; larger = more remineralisation = less export)
         double export_gamma;   //size-dependent export: allometric sinking-velocity exponent (w_s ~ mass^gamma); larger particles sink faster -> higher export
+        double export_magg;    //aggregation floor (ln-mass): small production coagulates into marine snow of this effective size before sinking; export uses max(m, export_magg). Default -1e30 = no floor (pure per-particle)
 
         } RUN;
 
@@ -1426,6 +1428,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      run->col_residence_time=-1;
      run->col_export_attn=-1;
      run->col_export_gamma=-1;
+     run->col_export_magg=-1;
      run->pel_tempeff=1.0;
      run->ben_tempeff=1.0;
      run->sinking_rate=1.0;
@@ -1433,6 +1436,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      run->residence_time=0.0;
      run->export_attn=0.0;
      run->export_gamma=0.0;
+     run->export_magg=-1e30;
      run->fptr_forcing=NULL;
      {
              char fname_forcing[256];
@@ -1457,6 +1461,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
                                      else if(strcmp(name,"residence_time")==0)  run->col_residence_time=col;
                                      else if(strcmp(name,"export_attn")==0)  run->col_export_attn=col;
                                      else if(strcmp(name,"export_gamma")==0)  run->col_export_gamma=col;
+                                     else if(strcmp(name,"export_magg")==0)  run->col_export_magg=col;
                                      col++;
                                      name=strtok(NULL,",");
                              }
@@ -2518,6 +2523,7 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                      if(run->col_residence_time>=0 && run->col_residence_time<nv) run->residence_time=vals[run->col_residence_time];
                      if(run->col_export_attn>=0 && run->col_export_attn<nv) run->export_attn=vals[run->col_export_attn];
                      if(run->col_export_gamma>=0 && run->col_export_gamma<nv) run->export_gamma=vals[run->col_export_gamma];
+                     if(run->col_export_magg>=0 && run->col_export_magg<nv) run->export_magg=vals[run->col_export_magg];
              }
              for(s=0 ; s<n ; s++){
                      community->pelagic[s].A    = community->pelagic[s].A_base    * run->pel_tempeff;
@@ -3324,7 +3330,8 @@ double g_det(int xspace, int yspace, RUN *run, GRID *grid, COMMUNITY *community)
                                          + community->pelagic[s].mu_s*((log10(exp(grid->m_values[i]))-log10(exp(community->pelagic[s].pelmin)))/((log10(exp(community->pelagic[s].pelmax))+community->pelagic[s].epsilon)-log10(exp(grid->m_values[i]))))*community->pelagic[s].u_values[i][xspace][yspace]*exp(grid->m_values[i])*grid->mstep;
                              if(size_dep){
                                      double faeces = (community->pelagic[s].Ex_pla*community->pelagic[s].pla_bio[i][xspace][yspace]+community->pelagic[s].Ex_pel*community->pelagic[s].pel_bio[i][xspace][yspace]+community->pelagic[s].Ex_ben*community->pelagic[s].ben_bio[i][xspace][yspace])*community->pelagic[s].u_values[i][xspace][yspace]*grid->mstep;
-                                     ans_surf += exp(-run->export_attn*exp(-run->export_gamma*grid->m_values[i]))*(faeces + dead);
+                                     double me = fmax(grid->m_values[i], run->export_magg);   /*aggregation floor: small stuff sinks as marine snow*/
+                                     ans_surf += exp(-run->export_attn*exp(-run->export_gamma*me))*(faeces + dead);
                              }else{
                                      ans_surf += dead;
                              }
@@ -3344,7 +3351,7 @@ double g_det(int xspace, int yspace, RUN *run, GRID *grid, COMMUNITY *community)
      for(i=community->plankton->iplamin ; i<(community->plankton->iplamax+1) ; i++){
              /*Rate of det biomass in from dead (sinking) plankton - surface origin*/
              double pdead = community->plankton->mu_0*exp(community->plankton->beta*grid->m_values[i])*community->plankton->u_values[i][xspace][yspace]*exp(grid->m_values[i])*grid->mstep;
-             if(size_dep) ans_surf += exp(-run->export_attn*exp(-run->export_gamma*grid->m_values[i]))*pdead;
+             if(size_dep) ans_surf += exp(-run->export_attn*exp(-run->export_gamma*fmax(grid->m_values[i], run->export_magg)))*pdead;
              else         ans_surf += pdead;
      }
 

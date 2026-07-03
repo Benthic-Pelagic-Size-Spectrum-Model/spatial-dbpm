@@ -120,9 +120,11 @@ runsim <- function(qp, qb) {
   di_in <- file.path("R", "Input"); dir.create(di_in, showWarnings = FALSE, recursive = TRUE)
   # detritus closure (env DET_CLOSURE): "burial" (default) -> Dunne via the depth channel;
   # "residence:TAU" -> first-order pool loss W/tau via residence_time;
-  # "export:GAMMA:ATTN0" -> SIZE-DEPENDENT export: a surface particle of ln-mass m reaches the
-  #   seafloor with fraction exp(-attn(t)*exp(-GAMMA*m)) (large carcasses/pellets sink faster).
-  #   attn(t) = ATTN0 * (dcorr/200) * exp(0.05*(tob(t)-mean tob))  (deeper/warmer -> more attenuation).
+  # "export:GAMMA:ATTN0:MAGG" -> SIZE-DEPENDENT export: a surface particle of ln-mass m reaches the
+  #   seafloor with fraction exp(-attn(t)*exp(-GAMMA*max(m, MAGG*ln10))) (large carcasses/pellets sink
+  #   faster). attn(t) = ATTN0*(dcorr/200)*exp(0.05*(tob(t)-mean tob)) (deeper/warmer -> more attenuation).
+  #   MAGG (log10 g, default -3) is the aggregation floor: production below it coagulates into marine
+  #   snow of that effective sinking size (so tiny plankton export via aggregates, not as single cells).
   cl <- Sys.getenv("DET_CLOSURE", "burial")
   if (grepl("^residence", cl)) {
     tau <- as.numeric(sub("^residence:?", "", cl)); if (is.na(tau)) tau <- 1
@@ -132,10 +134,11 @@ runsim <- function(qp, qb) {
     prm  <- as.numeric(strsplit(sub("^export:?", "", cl), ":")[[1]])
     gam  <- if (length(prm) >= 1 && !is.na(prm[1])) prm[1] else 0.4
     att0 <- if (length(prm) >= 2 && !is.na(prm[2])) prm[2] else 1
+    magg <- (if (length(prm) >= 3 && !is.na(prm[3])) prm[3] else -3) * LN10   # aggregation floor (ln-mass)
     tobt <- vapply(ts_t, function(t) tob[midx(t)], numeric(1)); tobt[ts_t < spin] <- tob1
     attn <- att0 * (dcorr / 200) * exp(0.05 * (tobt - mean(tob)))
-    hdr  <- "pel_tempeff,ben_tempeff,sinking_rate,export_attn,export_gamma"
-    rows <- sprintf("%.8g,%.8g,%.8g,%.8g,%.8g", tmat[1, ], tmat[2, ], smat, attn, gam)
+    hdr  <- "pel_tempeff,ben_tempeff,sinking_rate,export_attn,export_gamma,export_magg"
+    rows <- sprintf("%.8g,%.8g,%.8g,%.8g,%.8g,%.8g", tmat[1, ], tmat[2, ], smat, attn, gam, magg)
   } else {
     hdr <- "pel_tempeff,ben_tempeff,sinking_rate,depth"
     rows <- sprintf("%.8g,%.8g,%.8g,%.8g", tmat[1, ], tmat[2, ], smat, dcorr)
