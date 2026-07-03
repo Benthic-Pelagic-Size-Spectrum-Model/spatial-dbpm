@@ -143,6 +143,8 @@ runsim <- function(qp, qb) {
     hdr <- "pel_tempeff,ben_tempeff,sinking_rate,depth"
     rows <- sprintf("%.8g,%.8g,%.8g,%.8g", tmat[1, ], tmat[2, ], smat, dcorr)
   }
+  # DYNAMIC gravity: add the gravity channel so the C engine splits F by current biomass share
+  if (nzchar(Sys.getenv("GRAVITY"))) { hdr <- paste0(hdr, ",gravity"); rows <- paste0(rows, ",1") }
   writeLines(c(hdr, rows), file.path(di_in, "forcing_ts.txt"))
   if (fishing) {
     Setup.fishing(pe, run, grid, func = function(m, t, x, y) qp * as.numeric(m >= wsel) * eff_at(t))
@@ -161,19 +163,27 @@ u0 <- runsim(0, 0); fi <- u0$x >= 1; nT <- length(u0$tt)
 Bpel <- sum(u0$Um[nT, fi] * u0$w[fi] * u0$dm) * dcorr
 Bben <- sum(u0$Vm[nT, fi] * u0$w[fi] * u0$dm) * bhd
 s_pel <- Bpel / (Bpel + Bben); s_ben <- Bben / (Bpel + Bben)
-two_Q <- nzchar(Sys.getenv("TWO_Q"))   # TWO_Q set -> estimate q_pel, q_ben separately
-cat(sprintf("=== FAO-LME %d: %s + time-varying plankton ===\n", L,
-            if (two_Q) "per-group Q (q_pel,q_ben)" else "single-Q + gravity split"))
+two_Q <- nzchar(Sys.getenv("TWO_Q"))   # TWO_Q set  -> estimate q_pel, q_ben separately
+grav  <- nzchar(Sys.getenv("GRAVITY")) # GRAVITY set -> in-engine DYNAMIC gravity split (F_g ~ B_g/sumB)
+cat(sprintf("=== FAO-LME %d: %s%s + time-varying plankton ===\n", L,
+            if (two_Q) "per-group Q (q_pel,q_ben)" else "single-Q",
+            if (grav) " + DYNAMIC gravity (current biomass)" else " + static gravity split"))
 cat(sprintf("  unfished fishable biomass  pel=%.3g  ben=%.3g  -> shares  pel=%.2f  ben=%.2f\n",
             Bpel, Bben, s_pel, s_ben))
 
 # --- catch time series at catchabilities (qp,qb) + log-MSE objective ---
+# GRAVITY: runsim writes the `gravity` channel so the C engine scales F on each group by its
+# CURRENT areal fishable-biomass share; here we recompute that share from the fished spectra
+# (so the R catch matches the engine, and catch_g ~ B_g^2).
 catch_ts <- function(qp, qb) {
   r <- runsim(qp, qb); if (is.null(r)) return(rep(NA, nyr))
   k <- match(spin + (1:nyr), r$tt)
   sapply(k, function(kk) { e <- eff_at(r$tt[kk])
-    sum(qp * e * r$Um[kk, fi] * r$w[fi] * r$dm) * dcorr +
-    sum(qb * e * r$Vm[kk, fi] * r$w[fi] * r$dm) * bhd })
+    cp <- sum(r$Um[kk, fi] * r$w[fi] * r$dm) * dcorr    # areal fishable pelagic biomass
+    cb <- sum(r$Vm[kk, fi] * r$w[fi] * r$dm) * bhd       # areal fishable benthic biomass
+    if (grav) { s <- cp + cb; sp <- if (s > 0) cp/s else 0.5
+                qp * sp * e * cp + qb * (1 - sp) * e * cb }
+    else        qp * e * cp + qb * e * cb })
 }
 logmse <- function(m) { if (all(is.na(m))) return(1e6)
   ok <- is.finite(m) & m > 0 & yr$cat > 0
@@ -182,10 +192,13 @@ logmse <- function(m) { if (all(is.na(m))) return(1e6)
 # --- 2) calibrate to the observed catch time series (log-MSE) ---
 n <- 0; Qf <- NA_real_
 if (!two_Q) {
-  # single common Q, gravity split: q_pel = Q*s_pel, q_ben = Q*s_ben (1-D Brent)
-  o  <- optimise(function(Q) { n <<- n + 1; logmse(catch_ts(Q * s_pel, Q * s_ben)) },
+  # single common Q (1-D Brent). Static split: q_pel=Q*s_pel, q_ben=Q*s_ben. Dynamic gravity
+  # (GRAVITY): base q_pel=q_ben=Q and the engine applies the current-biomass split each step.
+  o  <- optimise(function(Q) { n <<- n + 1
+          logmse(if (grav) catch_ts(Q, Q) else catch_ts(Q * s_pel, Q * s_ben)) },
                  lower = 0, upper = 3, tol = 0.01)
-  Qf <- o$minimum; qpf <- Qf * s_pel; qbf <- Qf * s_ben; mse <- o$objective
+  Qf <- o$minimum; mse <- o$objective
+  if (grav) { qpf <- Qf; qbf <- Qf } else { qpf <- Qf * s_pel; qbf <- Qf * s_ben }
   cat(sprintf("  optimise[0,3]: evals=%d  Q=%.3f  ", n, Qf))
 } else {
   # per-group catchabilities. The objective is bimodal (yield-curve low-F / high-F
