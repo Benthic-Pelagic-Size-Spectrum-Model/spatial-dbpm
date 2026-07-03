@@ -102,6 +102,41 @@ test_that("size-dependent export: stronger attenuation lowers detritus-fed benth
   expect_lt(b_hi[["ben"]], b_lo[["ben"]])
 })
 
+# fished run; base_* = per-group base fishing mortality above 10 g; gravity toggles the
+# in-engine biomass-proportional split. Returns fishable areal pelagic/benthic biomass.
+run_fished <- function(base_pel, base_ben, gravity = FALSE) {
+  wsel <- 1 * LN10
+  wd <- tempfile("grav"); dir.create(wd); old <- setwd(wd); on.exit(setwd(old))
+  run  <- Setup.Run("R", 1, 1, 0, TRUE, 1)
+  grid <- Setup.Grid(run, tmax = 30, tstep = 1/48, toutstep = 1)
+  pl <- Setup.Plankton(run, filename = "plankton", u_0 = 10^(-0.5)/LN10, lambda = -1)
+  pe <- Setup.Pelagic(run, filename = "fish", A = 64, mu_0 = 0.2, K_pla = 0.2, R_pla = 0.1,
+                      Ex_pla = 0.5, rep_method = 2, fishing_flag = TRUE)
+  be <- Setup.Benthic(run, filename = "benthos", A = 6.4, mu_0 = 0.2, K_det = 0.1, R_det = 0.2,
+                      Ex_det = 0.4, rep_method = 2, fishing_flag = TRUE)
+  de <- Setup.Detritus(run, filename = "detritus")
+  Setup.fishing(pe, run, grid, func = function(m, t, x, y) base_pel * as.numeric(m >= wsel))
+  Setup.fishing(be, run, grid, func = function(m, t, x, y) base_ben * as.numeric(m >= wsel))
+  if (gravity) {
+    d <- file.path("R", "Input"); dir.create(d, showWarnings = FALSE, recursive = TRUE)
+    nst <- round(grid@tmax / grid@tstep) + 2
+    writeLines(c("gravity,depth", rep("1,200", nst)), file.path(d, "forcing_ts.txt"))
+  }
+  invisible(capture.output(SizeSpectrum(run, grid, pl, pe, be, de)))
+  f <- Read.In("R", "fish"); b <- Read.In("R", "benthos"); m <- f@mrange; dm <- diff(m)[1]
+  fi <- (m / LN10) >= 1
+  c(pel = sum(as.numeric(f@finaluvals[1, -(1:3)])[fi] * exp(m[fi]) * dm) * 200,
+    ben = sum(as.numeric(b@finaluvals[1, -(1:3)])[fi] * exp(m[fi]) * dm) * 20)
+}
+
+test_that("gravity fishing concentrates effort on the dominant group", {
+  # pelagic dominates the fishable biomass, so the gravity split (of a 0.4 budget) puts ~all
+  # effort on pelagic -> it is fished HARDER than an even split of the same budget.
+  even <- run_fished(0.2, 0.2, gravity = FALSE)   # even split: F = 0.2 each
+  grav <- run_fished(0.4, 0.4, gravity = TRUE)    # gravity splits 0.4 by current biomass share
+  expect_lt(grav[["pel"]], even[["pel"]])
+})
+
 test_that("residence-time closure: shorter tau -> less detritus -> less benthos, and is opt-in", {
   # first-order pool loss W/tau: shorter residence time removes detritus faster -> less benthos
   b_none  <- run_biomass(64, 6.4, 0.2, 0.2, forcing = NULL)                        # closure off

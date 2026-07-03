@@ -37,6 +37,7 @@ typedef struct run_info{
         int col_export_attn;   //size-dependent detritus export (opt-in): particle of ln-mass m reaches
         int col_export_gamma;  //the seafloor with fraction exp(-export_attn*exp(-export_gamma*max(m,export_magg)))
         int col_export_magg;   //aggregation floor: production below export_magg (ln-mass) sinks as marine snow of that effective size
+        int col_gravity;       //DBPM.md gravity fishing (opt-in): if present, calculate_fishing() scales F on each group by that group's CURRENT areal fishable-biomass share (F_g = base * B_g/sum B), recomputed per cell per timestep
         double pel_tempeff;    //current surface-temperature multiplier (default 1)
         double ben_tempeff;    //current seafloor-temperature multiplier (default 1)
         double sinking_rate;   //current detritus sinking/export fraction (default 1)
@@ -45,6 +46,7 @@ typedef struct run_info{
         double export_attn;    //size-dependent export: attenuation number A = k(T)*z/w0 (per-timestep, from export_attn channel; larger = more remineralisation = less export)
         double export_gamma;   //size-dependent export: allometric sinking-velocity exponent (w_s ~ mass^gamma); larger particles sink faster -> higher export
         double export_magg;    //aggregation floor (ln-mass): small production coagulates into marine snow of this effective size before sinking; export uses max(m, export_magg). Default -1e30 = no floor (pure per-particle)
+        double gravity;        //gravity channel value (unused; presence via col_gravity toggles gravity fishing)
 
         } RUN;
 
@@ -1429,6 +1431,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      run->col_export_attn=-1;
      run->col_export_gamma=-1;
      run->col_export_magg=-1;
+     run->col_gravity=-1;
      run->pel_tempeff=1.0;
      run->ben_tempeff=1.0;
      run->sinking_rate=1.0;
@@ -1437,6 +1440,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      run->export_attn=0.0;
      run->export_gamma=0.0;
      run->export_magg=-1e30;
+     run->gravity=0.0;
      run->fptr_forcing=NULL;
      {
              char fname_forcing[256];
@@ -1462,6 +1466,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
                                      else if(strcmp(name,"export_attn")==0)  run->col_export_attn=col;
                                      else if(strcmp(name,"export_gamma")==0)  run->col_export_gamma=col;
                                      else if(strcmp(name,"export_magg")==0)  run->col_export_magg=col;
+                                     else if(strcmp(name,"gravity")==0)  run->col_gravity=col;
                                      col++;
                                      name=strtok(NULL,",");
                              }
@@ -2524,6 +2529,7 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                      if(run->col_export_attn>=0 && run->col_export_attn<nv) run->export_attn=vals[run->col_export_attn];
                      if(run->col_export_gamma>=0 && run->col_export_gamma<nv) run->export_gamma=vals[run->col_export_gamma];
                      if(run->col_export_magg>=0 && run->col_export_magg<nv) run->export_magg=vals[run->col_export_magg];
+                     if(run->col_gravity>=0 && run->col_gravity<nv) run->gravity=vals[run->col_gravity];
              }
              for(s=0 ; s<n ; s++){
                      community->pelagic[s].A    = community->pelagic[s].A_base    * run->pel_tempeff;
@@ -3533,8 +3539,48 @@ void calculate_fishing(RUN *run, GRID *grid, COMMUNITY *community)
                      }
              }
      }
+
+     /* DBPM.md gravity fishing (opt-in via the `gravity` channel): replace the static per-group
+        catchability split with the true B_{t-1} feedback. For each cell, scale each group's fishing
+        mortality by that group's CURRENT areal fishable-biomass share,
+          F_g = F_base * A_g/(A_pel+A_ben),  A_g = sum_{fished sizes} u*exp(m)*mstep * thickness
+        (pelagic x run->depth = min(depth,200) m from the depth channel; benthic x 20 m). The base F
+        read above is the un-split Q*selectivity*effort, so this yields catch_g ~ B_g^2 (effort
+        concentrates where biomass is). Runs per cell -> ready for gridded. */
+     if(run->col_gravity>=0){
+             double bhd=20.0;                 /* benthic habitat depth (sizemodel default) */
+             double dcorr=run->depth;         /* pelagic column thickness (depth channel; 1 if absent) */
+             for(k=0 ; k<x ; k++){
+                     for(l=0 ; l<y ; l++){
+                             double Bpel=0.0, Bben=0.0;
+                             for(s=0 ; s<n ; s++){
+                                     if(community->pelagic[s].fishing_flag!=1) continue;
+                                     for(i=community->pelagic[s].ipelmin ; i<(community->pelagic[s].ipelmax+1) ; i++)
+                                             if(community->pelagic[s].mu_fish_values[i][k][l]>0.0)
+                                                     Bpel += community->pelagic[s].u_values[i][k][l]*exp(grid->m_values[i])*grid->mstep;
+                             }
+                             for(b=0 ; b<c ; b++){
+                                     if(community->benthic[b].fishing_flag!=1) continue;
+                                     for(i=community->benthic[b].ibenmin ; i<(community->benthic[b].ibenmax+1) ; i++)
+                                             if(community->benthic[b].mu_fish_values[i][k][l]>0.0)
+                                                     Bben += community->benthic[b].u_values[i][k][l]*exp(grid->m_values[i])*grid->mstep;
+                             }
+                             double Ap=Bpel*dcorr, Ab=Bben*bhd, tot=Ap+Ab;
+                             double sp = (tot>0.0) ? Ap/tot : 0.5;
+                             double sb = (tot>0.0) ? Ab/tot : 0.5;
+                             for(s=0 ; s<n ; s++)
+                                     if(community->pelagic[s].fishing_flag==1)
+                                             for(i=community->pelagic[s].ipelmin ; i<(community->pelagic[s].ipelmax+1) ; i++)
+                                                     community->pelagic[s].mu_fish_values[i][k][l] *= sp;
+                             for(b=0 ; b<c ; b++)
+                                     if(community->benthic[b].fishing_flag==1)
+                                             for(i=community->benthic[b].ibenmin ; i<(community->benthic[b].ibenmax+1) ; i++)
+                                                     community->benthic[b].mu_fish_values[i][k][l] *= sb;
+                     }
+             }
+     }
 }
-                                                             
+
 void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
 {
      int i,k,l,s,b;
