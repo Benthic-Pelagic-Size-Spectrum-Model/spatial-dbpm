@@ -59,7 +59,10 @@ Kl <- (1-dl)*Kv; Rl <- (1-dl)*(1-(Kv+AMv)); El <- (1-dl)*AMv
 dcorr <- min(p$depth[1], 200); bhd <- 20; wsel <- 1 * LN10   # 10 g knife-edge (fallback default)
 
 # --- obsclim forcing: annual effort/catch series + monthly plankton intercept/slope ---
-di <- read_parquet(Sys.glob(file.path(base, "dbpm_inputs",
+# INPUT_PARQUET_DIR overrides just the parquet directory (e.g. a copy augmented with the
+# per-spectrum min/max_fished_U/V columns); base still supplies equilibrium_runs/*.json etc.
+pq_dir <- Sys.getenv("INPUT_PARQUET_DIR", file.path(base, "dbpm_inputs"))
+di <- read_parquet(Sys.glob(file.path(pq_dir,
         sprintf("dbpm_clim-fish-inputs_fao_lme-%d_*.parquet", L)))[1]) |>
       filter(str_detect(scenario, "obsclim")) |> arrange(year, month)
 yr <- di |> group_by(year) |>
