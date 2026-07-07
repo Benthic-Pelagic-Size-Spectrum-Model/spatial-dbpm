@@ -31,6 +31,17 @@ biomass-*weighted* form `Σb²/Σb` is the opposite error — it over-weights ho
 share, over-predicts, and is *also* inconsistent with `Σcatch/Σarea` (it numerically blew up Gulf of
 Mexico at +1.6 dex). The consistent choice is the plain arithmetic mean of the plankton biomass.
 
+## CRITICAL: intercept and slope MUST use the same averaging (fit them together)
+The size spectrum is `N(m) = 10^intercept · exp(slope·m)` — intercept AND slope define it jointly. If the
+intercept is average-then-fit but the slope is fit-then-average (or vice versa), the two do not
+correspond to the same plankton spectrum and the spectrum is wrong. The only way to guarantee a matched
+pair is to **fit both together from the same averaged fields**: average the (whole-column,
+biomass-weighted) phyc/phypico across cells, then call `GetPPIntSlope` ONCE → intercept and slope come
+out matched by construction. Do NOT correct only the intercept (e.g. via a DINT offset while leaving the
+parquet slope) — that leaves them mismatched. Also: the vertical weighting is over the WHOLE water
+column (`∫phyc²·dz / ∫phyc·dz`), not surface and not only 0-200 m (note the pipeline's
+`integrating_phyto` currently uses `thresh_depth=200` — reconcile to whole-column).
+
 ## Corrected pipeline (average-then-fit)
 Per region:
 1. **Per cell — vertical** biomass-weighted integration of the plankton profile (unchanged; the
