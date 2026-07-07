@@ -1,0 +1,76 @@
+lme,mask_id,name,cells,int_bw,slope_bw
+1,160,East Bering Sea,187,-0.523,-0.9666
+2,104,Gulf of Alaska,210,-0.683,-0.9847
+3,110,California Current,216,-0.996,-1.0099
+4,120,Gulf of California,22,-0.632,-0.9714
+5,121,Gulf of Mexico,137,-0.964,-0.9976
+8,109,Scotian Shelf,33,-0.405,-0.9619
+9,105,Labrador - Newfoundland,113,-0.493,-0.9723
+10,124,Insular Pacific-Hawaiian,86,-2.575,-1.1292
+12,125,Caribbean Sea,275,-1.978,-1.0792
+13,136,Humboldt Current,252,-0.793,-1.0031
+14,145,Patagonian Shelf,135,-0.374,-0.9544
+15,143,South Brazil Shelf,52,-0.940,-0.9964
+16,135,East Brazil Shelf,91,-2.322,-1.1047
+17,131,North Brazil Shelf,83,-1.478,-1.0437
+19,152,Greenland Sea,352,-0.896,-0.9964
+20,154,Barents Sea,678,-0.784,-0.9797
+21,153,Norwegian Sea,231,-0.878,-0.9891
+22,103,North Sea,103,-0.208,-0.9384
+23,101,Baltic Sea,62,-0.173,-0.9383
+24,106,Celtic-Biscay Shelf,103,-0.608,-0.9699
+25,114,Iberian Coastal,36,-0.914,-0.9985
+26,113,Mediterranean Sea,257,-0.597,-0.9707
+27,117,Canary Current,101,-0.647,-0.9764
+28,132,Guinea Current,157,-1.017,-1.0003
+29,137,Benguela Current,135,-0.671,-0.9865
+30,140,Agulhas Current,231,-1.783,-1.0681
+31,133,Somali Coastal Current,68,-1.776,-1.0692
+33,123,Red Sea,41,-1.642,-1.0562
+34,127,Bay of Bengal,305,-1.150,-1.0085
+35,130,Gulf of Thailand,31,-0.457,-0.9555
+36,126,South China Sea,266,-0.743,-0.9772
+37,129,Sulu-Celebes Sea,82,-1.781,-1.0642
+38,134,Indonesian Sea,181,-0.972,-0.9941
+39,138,North Australian Shelf,66,-0.659,-0.9753
+40,139,Northeast Australian Shelf,109,-2.162,-1.0985
+41,142,East Central Australian Shelf,60,-1.397,-1.0398
+42,146,Southeast Australian Shelf,124,-0.907,-1.0000
+43,148,South West Australian Shelf,102,-1.344,-1.0349
+44,149,West Central Australian Shelf,51,-1.967,-1.0847
+45,141,Northwest Australian Shelf,76,-1.329,-1.0300
+46,144,New Zealand Shelf,100,-0.980,-1.0069
+47,118,East China Sea,77,-0.659,-0.9718
+48,116,Yellow Sea,48,0.104,-0.9141
+49,115,Kuroshio Current,124,-1.330,-1.0278
+50,107,Sea of Japan,102,-0.508,-0.9656
+51,108,Oyashio Current,61,-0.568,-0.9728
+52,102,Sea of Okhotsk,213,-0.421,-0.9591
+53,158,West Bering Sea,114,-0.641,-0.9779
+54,166,Northern Bering - Chukchi Seas,342,-0.443,-0.9497
+55,163,Beaufort Sea,296,-0.752,-0.9774
+56,157,East Siberian Sea,189,-0.544,-0.9508
+57,156,Laptev Sea,297,0.015,-0.9097
+58,155,Kara Sea,350,-0.292,-0.9376
+59,151,Iceland Shelf and Sea,103,-0.781,-0.9883
+60,150,Faroe Plateau,19,-0.706,-0.9802
+61,147,Antarctica,1306,-0.612,-0.9664
+62,111,Black Sea,50,-0.496,-0.9640
+63,162,Hudson Bay Complex,214,-0.796,-0.9824
+64,165,Central Arctic,3170,-1.263,-1.0092
+65,159,Aleutian Islands,30,-0.564,-0.9725
+121,21,,438,-0.832,-0.9912
+127,27,,835,-1.006,-1.0039
+131,31,,815,-2.203,-1.0956
+134,34,,930,-1.746,-1.0596
+141,41,,1441,-1.324,-1.0267
+147,47,,1586,-1.263,-1.0245
+151,51,,1989,-1.693,-1.0586
+157,57,,2344,-1.513,-1.0430
+158,58,,1817,-1.224,-1.0209
+161,61,,1295,-1.289,-1.0220
+167,67,,549,-0.976,-1.0075
+171,71,,2075,-2.060,-1.0841
+177,77,,3725,-1.651,-1.0537
+181,81,,2890,-1.412,-1.0355
+187,87,,2676,-1.423,-1.0378

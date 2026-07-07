@@ -139,16 +139,21 @@ cat(sprintf("FSIZE [%s] U %.2f..%.2f V %.2f..%.2f (last yr, log10 g)\n",
 #   2) INT_OFFSET=<x>  scalar fallback (emulation), default 0 (parquet fixed-200 m as-is).
 # The CSV values come from the exact FAO-LME-mask area-average of ISIMIP3a phyc/phypico
 # (int_biomass_weighted - int_fixed200); see ~/dbpm_compare_scratch/lme_dint.csv.
-int_off <- as.numeric(Sys.getenv("INT_OFFSET", "0"))
+int_off <- as.numeric(Sys.getenv("INT_OFFSET", "0")); slp_off <- 0
 dint_csv <- Sys.getenv("DINT_CSV", "")
 if (nzchar(dint_csv) && file.exists(dint_csv)) {
   dt <- read.csv(dint_csv); if ("lme" %in% names(dt) && L %in% dt$lme) {
-    int_off <- dt$dint[match(L, dt$lme)][1]
-    cat(sprintf("DINT_CSV: LME %d measured biomass-weighted intercept shift = %+0.2f\n", L, int_off))
+    i <- match(L, dt$lme)[1]
+    if (is.finite(dt$dint[i])) int_off <- dt$dint[i]
+    # DSLOPE: MATCHED slope correction (average-then-fit) applied with the intercept so the
+    # size spectrum 10^intercept * exp(slope*m) stays internally consistent (same averaging).
+    if ("dslope" %in% names(dt) && is.finite(dt$dslope[i])) slp_off <- dt$dslope[i]
+    cat(sprintf("DINT_CSV: LME %d intercept shift = %+0.2f  slope shift = %+0.3f\n", L, int_off, slp_off))
   }
 }
-intm <- di$intercept + int_off; slpm <- di$slope; nmon <- length(intm)
-int1 <- mean(di$intercept[di$year == min(di$year)]) + int_off; slp1 <- mean(di$slope[di$year == min(di$year)])
+intm <- di$intercept + int_off; slpm <- di$slope + slp_off; nmon <- length(intm)
+int1 <- mean(di$intercept[di$year == min(di$year)]) + int_off
+slp1 <- mean(di$slope[di$year == min(di$year)]) + slp_off
 pl_at <- function(t) { if (t < spin) return(c(int1, slp1))
   j <- max(1, min(nmon, floor((t - spin) * 12) + 1)); c(intm[j], slpm[j]) }
 # per-LN plankton spectrum, UNIT-MATCHED to dbpmr: (10^intercept/ln10) * exp(slope*m)
