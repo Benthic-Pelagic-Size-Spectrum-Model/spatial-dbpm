@@ -23,12 +23,13 @@ src <- Sys.getenv("CATCH_HISTSOC", "~/dbpm_compare_scratch/catch_histsoc.csv")
 out <- Sys.getenv("OUT_CSV",       "fished_size_UV_tv.csv")
 
 # invert [min FISHED, max] g. min floored ~10 g (gear retention) EXCEPT krill (fine-mesh, 1 g).
+# demersalmollusc is a mixed group -> 10 g floor.
 inv <- list(krill=c(1,2), shrimp=c(10,60), lobsterscrab=c(100,4000),
-            cephalopods=c(20,6000), demersalmollusc=c(20,500))
+            cephalopods=c(20,6000), demersalmollusc=c(10,500))
 Vgrp <- c("shrimp","lobsterscrab","demersalmollusc")
-# cm_lo = realistic MINIMUM FISHED length (cm) -- smallest classes anchored at 10 cm (~10 g via
-# 0.01*L^3) = typical small-pelagic gear onset (anchovy/sardine), NOT 4 cm (larvae, 0.6 g).
-cm_lo <- function(g) if(grepl("<30cm",g))10 else if(grepl("30-90cm",g))30 else if(grepl(">=90cm",g))90 else if(grepl("<90cm",g))10 else NA
+# cm_lo = realistic MINIMUM FISHED length (cm). <30cm small pelagics anchored at 5 cm (~1.25 g via
+# W=0.01*L^3) since anchovy/sardine are graded/caught under 10 cm; <90cm larger taxa at 10 cm.
+cm_lo <- function(g) if(grepl("<30cm",g))5 else if(grepl("30-90cm",g))30 else if(grepl(">=90cm",g))90 else if(grepl("<90cm",g))10 else NA
 cm_hi <- function(g) if(grepl("<30cm",g))30 else if(grepl("30-90cm",g))90 else if(grepl(">=90cm",g))200 else if(grepl("<90cm",g))90 else NA
 grp_lohi <- function(g){ if(!is.null(inv[[g]])) inv[[g]] else { l<-cm_lo(g); h<-cm_hi(g); if(is.na(l)) c(NA,NA) else 0.01*c(l,h)^3 } }
 
