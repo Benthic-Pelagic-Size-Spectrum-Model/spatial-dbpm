@@ -168,10 +168,22 @@ at the SAME workflow step that makes the fish window:
   biomass: `B_U^fish = ∫U over [minU,maxU]`, `B_V^fish = ∫V over [minV,maxV]`, then the gravity/
   effort split uses `q_pel·B_U^fish + q_ben·B_V^fish`. tier1's `catch_ts` already integrates each
   spectrum over its own window; the gridded driver's attractiveness `a_i` needs the same restriction.
-- **Known tension (not a bug):** realistic size windows can *worsen* small-pelagic LMEs (California)
-  where the fishery targets sizes at/below the derived min — the coarse `<30cm` FGroup can't resolve
-  anchovy, and Reg's fine size data is fish-only. Two-Q + finer sizes are the next step; judge net
-  effect on the full re-run, not per-LME.
+- **HYBRID max (Julia): parquet/Reg max + FGroup min.** Reg's `min_fished_weight_class` is a BINNING-
+  FLOOR artifact (WtClass 1 = 50 g; his "SizSpectrum" VB program partitions each taxon's catch DOWN
+  from a real `WtMax` across fixed 100 g-wide bins with a 50 g floor — so min=50 g is structural, not
+  observed), but his `max` IS a real length-weight `WtMax`. So: `max_fished_U` <- parquet
+  `max_fished_weight_class` (real large-fish max); `max_fished_V` <- FGroup invert max (the fish-
+  dominated parquet max over-extends benthos); `min_fished_U/V` <- FGroup. Applied in script 04
+  (`mutate(max_fished_U = max_fished_weight_class)`) and, for laptop runs, `augment_parquets_uv.R`
+  (writes U/V cols into copies of the DBPM_dev parquets; read via `INPUT_PARQUET_DIR`).
+- **Per-group size sourcing:** fish min from the real FishMIP cm-class (`<30cm` etc.) via `W=0.01*L^3`;
+  invert ranges are caught-size estimates (krill 1-2 g, shrimp 3-60 g, ...) cross-checked against
+  Reg's real per-taxon `WtMax`/`SLCom` in `CheckWtLen.xlsx` (which confirms they sit below the species
+  maxima, as expected). A fully data-derived per-FGroup size needs the Access `TaxCat` taxon->FGroup
+  crosswalk (`mdbtools`), not available on the laptop.
+- **Known tension (not a bug):** realistic size windows can *worsen* small-pelagic LMEs (California:
+  min ~49 g excludes anchovy; the hybrid max extension is harmless there). Two-Q + finer sizes next;
+  judge net effect on the full re-run, not per-LME.
 
 --------------------------------------------------------------------------------
 ## 6. Reproduce from scratch (commands)
