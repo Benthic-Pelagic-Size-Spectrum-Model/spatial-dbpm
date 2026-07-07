@@ -69,8 +69,27 @@ yr <- di |> group_by(year) |>
       summarise(eff = mean(total_nom_active_area_m2, na.rm = TRUE),
                 cat = mean(catch_tonnes_area_m2, na.rm = TRUE) * 1e6, .groups = "drop") |>
       arrange(year)
-effn <- yr$eff / max(yr$eff); nyr <- nrow(yr); spin <- 40; tmax <- spin + nyr
-eff_at <- function(t) { i <- floor(t) - spin + 1; if (i < 1) effn[1] else if (i > nyr) effn[nyr] else effn[i] }
+nyr <- nrow(yr); spin <- 40; tmax <- spin + nyr
+# --- v2 TWO-GROUP: per-spectrum effort drivers (U/V) + observed catch split (see CALIB_v2_METHODS.md)
+# effort_split_lme.csv / catch_split_lme.csv: LME,Year,class(U/V),{effort|catch}, region=LME or fao+100.
+EFF_SPLIT   <- Sys.getenv("EFFORT_SPLIT_CSV", "~/dbpm_compare_scratch/effort_split_lme.csv")
+CATCH_SPLIT <- Sys.getenv("CATCH_SPLIT_CSV",  "~/dbpm_compare_scratch/catch_split_lme.csv")
+rd_split <- function(f, val) {   # -> matrix cols U,V aligned to yr$year (0 where absent)
+  x <- read.csv(path.expand(f)); x <- x[x$LME == L, ]
+  key <- paste(x$Year, x$class)
+  gv <- function(cl) { v <- x[[val]][match(paste(yr$year, cl), key)]; v[!is.finite(v)] <- 0; v }
+  cbind(U = gv("U"), V = gv("V"))
+}
+es <- rd_split(EFF_SPLIT, "effort"); cs <- rd_split(CATCH_SPLIT, "catch")
+# two effort drivers, each normalised to its OWN maximum (q absorbs absolute level)
+effU_n <- if (max(es[, "U"]) > 0) es[, "U"] / max(es[, "U"]) else es[, "U"] * 0
+effV_n <- if (max(es[, "V"]) > 0) es[, "V"] / max(es[, "V"]) else es[, "V"] * 0
+eidx    <- function(t) max(1, min(nyr, floor(t) - spin + 1))
+effU_at <- function(t) effU_n[eidx(t)]
+effV_at <- function(t) effV_n[eidx(t)]
+# observed catch: fraction from the split x parquet total (units g m-2 yr-1); series sum to yr$cat
+ctot <- cs[, "U"] + cs[, "V"]; pel_frac <- ifelse(ctot > 0, cs[, "U"] / ctot, NA_real_)
+obs_pel <- yr$cat * pel_frac; obs_ben <- yr$cat * (1 - pel_frac)
 # --- TIME-VARYING PER-SPECTRUM fished-size WINDOW (log10 g) from the parquet ------------
 # U (pelagic) window from min/max_fished_U, V (benthic) from min/max_fished_V -- the columns
 # script 04 derives from the FGroup catch (fish+krill+ceph = U; shrimp/lobster/mollusc = V).
@@ -209,8 +228,8 @@ runsim <- function(qp, qb) {
   if (fishing) {
     selU <- function(m, t) { w <- winU_at(t); ml <- m / LN10; as.numeric(ml >= w[1] & ml <= w[2]) }
     selV <- function(m, t) { w <- winV_at(t); ml <- m / LN10; as.numeric(ml >= w[1] & ml <= w[2]) }
-    Setup.fishing(pe, run, grid, func = function(m, t, x, y) qp * selU(m, t) * eff_at(t))
-    Setup.fishing(be, run, grid, func = function(m, t, x, y) qb * selV(m, t) * eff_at(t))
+    Setup.fishing(pe, run, grid, func = function(m, t, x, y) qp * selU(m, t) * effU_at(t))
+    Setup.fishing(be, run, grid, func = function(m, t, x, y) qb * selV(m, t) * effV_at(t))
   }
   ok <- tryCatch({ invisible(capture.output(SizeSpectrum(run, grid, pl, pe, be, de))); TRUE },
                  error = function(e) { message(conditionMessage(e)); FALSE })
@@ -220,86 +239,87 @@ runsim <- function(qp, qb) {
        x = f@mrange / LN10, w = exp(f@mrange), dm = diff(f@mrange)[1])
 }
 
-# --- 1) unfished equilibrium -> fishable-biomass shares (DBPM.md gravity split) ---
+# --- 1) unfished equilibrium (fishable-biomass shares reported for info only) ---
 u0 <- runsim(0, 0); nT <- length(u0$tt)
-fiU <- u0$x >= wU_ref[1] & u0$x <= wU_ref[2]     # U fishable index (reference window)
-fiV <- u0$x >= wV_ref[1] & u0$x <= wV_ref[2]     # V fishable index (its own, smaller window)
+fiU <- u0$x >= wU_ref[1] & u0$x <= wU_ref[2]
+fiV <- u0$x >= wV_ref[1] & u0$x <= wV_ref[2]
 Bpel <- sum(u0$Um[nT, fiU] * u0$w[fiU] * u0$dm) * dcorr
 Bben <- sum(u0$Vm[nT, fiV] * u0$w[fiV] * u0$dm) * bhd
 s_pel <- Bpel / (Bpel + Bben); s_ben <- Bben / (Bpel + Bben)
-two_Q <- nzchar(Sys.getenv("TWO_Q"))   # TWO_Q set  -> estimate q_pel, q_ben separately
-grav  <- nzchar(Sys.getenv("GRAVITY")) # GRAVITY set -> in-engine DYNAMIC gravity split (F_g ~ B_g/sumB)
-cat(sprintf("=== FAO-LME %d: %s%s + time-varying plankton ===\n", L,
-            if (two_Q) "per-group Q (q_pel,q_ben)" else "single-Q",
-            if (grav) " + DYNAMIC gravity (current biomass)" else " + static gravity split"))
-cat(sprintf("  unfished fishable biomass  pel=%.3g  ben=%.3g  -> shares  pel=%.2f  ben=%.2f\n",
-            Bpel, Bben, s_pel, s_ben))
+# v2: which groups are identifiable (>=3 non-zero observed years)?
+fitP <- sum(is.finite(obs_pel) & obs_pel > 0) >= 3
+fitB <- sum(is.finite(obs_ben) & obs_ben > 0) >= 3
+cat(sprintf("=== FAO-LME %d: TWO-GROUP (q_pel,q_ben) + time-varying plankton ===\n", L))
+cat(sprintf("  fit groups: pelagic=%s benthic=%s | obs benthic frac (mean)=%.2f\n",
+            fitP, fitB, mean(1 - pel_frac, na.rm = TRUE)))
 
-# --- catch time series at catchabilities (qp,qb) + log-MSE objective ---
-# GRAVITY: runsim writes the `gravity` channel so the C engine scales F on each group by its
-# CURRENT areal fishable-biomass share; here we recompute that share from the fished spectra
-# (so the R catch matches the engine, and catch_g ~ B_g^2).
+# --- TWO modelled catch series (pelagic, benthic); C_g = q_g * E_g(t) * B_g^fished(t) ---
 catch_ts <- function(qp, qb) {
-  r <- runsim(qp, qb); if (is.null(r)) return(rep(NA, nyr))
-  k <- match(spin + (1:nyr), r$tt)
-  sapply(k, function(kk) { e <- eff_at(r$tt[kk])
-    wu <- winU_at(r$tt[kk]); fu <- r$x >= wu[1] & r$x <= wu[2]   # per-spectrum time-varying windows
+  r <- runsim(qp, qb); if (is.null(r)) return(list(pel = rep(NA, nyr), ben = rep(NA, nyr)))
+  k <- match(spin + (1:nyr), r$tt); cp <- numeric(nyr); cb <- numeric(nyr)
+  for (i in seq_len(nyr)) { kk <- k[i]
+    wu <- winU_at(r$tt[kk]); fu <- r$x >= wu[1] & r$x <= wu[2]
     wv <- winV_at(r$tt[kk]); fv <- r$x >= wv[1] & r$x <= wv[2]
-    cp <- sum(r$Um[kk, fu] * r$w[fu] * r$dm) * dcorr    # areal fishable pelagic biomass (U window)
-    cb <- sum(r$Vm[kk, fv] * r$w[fv] * r$dm) * bhd       # areal fishable benthic biomass (V window)
-    if (grav) { s <- cp + cb; sp <- if (s > 0) cp/s else 0.5
-                qp * sp * e * cp + qb * (1 - sp) * e * cb }
-    else        qp * e * cp + qb * e * cb })
+    bU <- sum(r$Um[kk, fu] * r$w[fu] * r$dm) * dcorr   # areal fishable pelagic biomass (U window)
+    bV <- sum(r$Vm[kk, fv] * r$w[fv] * r$dm) * bhd      # areal fishable benthic biomass (V window)
+    cp[i] <- qp * effU_at(r$tt[kk]) * bU
+    cb[i] <- qb * effV_at(r$tt[kk]) * bV }
+  list(pel = cp, ben = cb)
 }
-logmse <- function(m) { if (all(is.na(m))) return(1e6)
-  ok <- is.finite(m) & m > 0 & is.finite(yr$cat) & yr$cat > 0   # NA-safe (sparse-catch LMEs)
-  if (sum(ok) < 3) return(1e6); mean((log10(m[ok]) - log10(yr$cat[ok]))^2) }
+# catch-volume-weighted log-MSE for one group (weight each year by that group's observed catch).
+# Evaluated over observed>0 years; the model is FLOORED (not dropped) so a q->0 zero-catch
+# prediction is penalised as a large under-shoot rather than escaping via NA.
+wlogmse <- function(m, obs) {
+  ok <- is.finite(obs) & obs > 0 & is.finite(m)
+  if (sum(ok) < 3) return(NA_real_)
+  mfl <- pmax(m[ok], 1e-9); w <- obs[ok] / sum(obs[ok])
+  sum(w * (log10(mfl) - log10(obs[ok]))^2) }
+wcor <- function(m, obs) { ok <- is.finite(m) & m > 0 & is.finite(obs) & obs > 0
+  if (sum(ok) < 3) return(NA_real_); suppressWarnings(cor(log10(m[ok]), log10(obs[ok]))) }
 
-# --- 2) calibrate to the observed catch time series (log-MSE) ---
-# QMAX: upper bound on catchability. Raised from 3 to 4 so heavily-fished LMEs whose observed
-# catch demanded a ceiling-pinned Q (e.g. California) are not artificially capped. Override QMAX=<x>.
-qmax <- as.numeric(Sys.getenv("QMAX", "4"))
-n <- 0; Qf <- NA_real_
-if (!two_Q) {
-  # single common Q (1-D Brent). Static split: q_pel=Q*s_pel, q_ben=Q*s_ben. Dynamic gravity
-  # (GRAVITY): base q_pel=q_ben=Q and the engine applies the current-biomass split each step.
-  o  <- optimise(function(Q) { n <<- n + 1
-          logmse(if (grav) catch_ts(Q, Q) else catch_ts(Q * s_pel, Q * s_ben)) },
-                 lower = 0, upper = qmax, tol = 0.01)
-  Qf <- o$minimum; mse <- o$objective
-  if (grav) { qpf <- Qf; qbf <- Qf } else { qpf <- Qf * s_pel; qbf <- Qf * s_ben }
-  cat(sprintf("  optimise[0,%g]: evals=%d  Q=%.3f  ", qmax, n, Qf))
-} else {
-  # per-group catchabilities. The objective is bimodal (yield-curve low-F / high-F
-  # basins) and non-smooth (knife-edge selectivity), so use a coarse grid seed to find
-  # the global basin, then a BOUNDED derivative-free polish. nloptr:
-  #   TWO_Q_OPT=grid_bobyqa (default) grid seed + NLOPT_LN_BOBYQA (bounded local)
-  #   TWO_Q_OPT=directL               NLOPT_GN_DIRECT_L (deterministic global)
-  obj2 <- function(q) { n <<- n + 1; logmse(catch_ts(q[1], q[2])) }
-  alg  <- Sys.getenv("TWO_Q_OPT", "grid_bobyqa")
-  if (alg == "directL") {
-    res <- nloptr::nloptr(c(1, 1), obj2, lb = c(0, 0), ub = c(qmax, qmax),
-             opts = list(algorithm = "NLOPT_GN_DIRECT_L", maxeval = 80, xtol_rel = 1e-3))
-  } else {
-    qs <- seq(0.05, qmax, length.out = 5); G <- expand.grid(qp = qs, qb = qs)
-    seed <- as.numeric(G[which.min(apply(G, 1, function(q) obj2(as.numeric(q)))), ])
-    res  <- nloptr::nloptr(seed, obj2, lb = c(0, 0), ub = c(qmax, qmax),
-             opts = list(algorithm = "NLOPT_LN_BOBYQA", maxeval = 40, xtol_rel = 1e-3))
-  }
-  qpf <- res$solution[1]; qbf <- res$solution[2]; mse <- res$objective
-  cat(sprintf("  %s: evals=%d  q_pel=%.3f  q_ben=%.3f  ", alg, n, qpf, qbf))
-}
-mc <- catch_ts(qpf, qbf)
-cat(sprintf("MSE(log catch)=%.3f  corr=%.2f\n",
-            mse, suppressWarnings(cor(log10(mc), log10(yr$cat), use = "complete.obs"))))
-cat(sprintf("  catch mean: model=%.3f  obs=%.3f (g m-2 yr-1)\n", mean(mc, na.rm = TRUE), mean(yr$cat)))
+# --- 2) estimate (q_pel, q_ben): joint two-series objective, grid seed + BOBYQA ---
+qmax <- as.numeric(Sys.getenv("QMAX", "4")); n <- 0
+obj2 <- function(q) { n <<- n + 1; r <- catch_ts(q[1], q[2])
+  parts <- c(if (fitP) wlogmse(r$pel, obs_pel) else NA,
+             if (fitB) wlogmse(r$ben, obs_ben) else NA)
+  parts <- parts[is.finite(parts)]; if (length(parts) == 0) 1e6 else sum(parts) }
+qs <- seq(0.05, qmax, length.out = 5); G <- expand.grid(qp = qs, qb = qs)
+seed <- as.numeric(G[which.min(apply(G, 1, function(q) obj2(as.numeric(q)))), ])
+res  <- nloptr::nloptr(seed, obj2, lb = c(0, 0), ub = c(qmax, qmax),
+          opts = list(algorithm = "NLOPT_LN_BOBYQA", maxeval = 60, xtol_rel = 1e-3))
+qpf <- if (fitP) res$solution[1] else NA_real_
+qbf <- if (fitB) res$solution[2] else NA_real_
+J   <- res$objective
 
-# optional: save the calibrated catch time series + stats (for batch plotting)
+# --- per-group fit + report ---
+mfit  <- catch_ts(if (is.na(qpf)) 0 else qpf, if (is.na(qbf)) 0 else qbf)
+if (is.na(qpf)) mfit$pel[] <- NA
+if (is.na(qbf)) mfit$ben[] <- NA
+mse_p <- wlogmse(mfit$pel, obs_pel); mse_b <- wlogmse(mfit$ben, obs_ben)
+cor_p <- wcor(mfit$pel, obs_pel);   cor_b <- wcor(mfit$ben, obs_ben)
+cat(sprintf("  evals=%d  q_pel=%s  q_ben=%s  J=%.3f\n", n,
+            if (is.na(qpf)) "NA" else sprintf("%.3f", qpf),
+            if (is.na(qbf)) "NA" else sprintf("%.3f", qbf), J))
+cat(sprintf("  PELAGIC  wMSE=%s corr=%s  model=%.3g obs=%.3g\n",
+            if (is.na(mse_p)) "NA" else sprintf("%.3f", mse_p),
+            if (is.na(cor_p)) "NA" else sprintf("%.2f", cor_p),
+            mean(mfit$pel, na.rm = TRUE), mean(obs_pel, na.rm = TRUE)))
+cat(sprintf("  BENTHIC  wMSE=%s corr=%s  model=%.3g obs=%.3g\n",
+            if (is.na(mse_b)) "NA" else sprintf("%.3f", mse_b),
+            if (is.na(cor_b)) "NA" else sprintf("%.2f", cor_b),
+            mean(mfit$ben, na.rm = TRUE), mean(obs_ben, na.rm = TRUE)))
+
+# --- save (per-group series + stats; total for backward-compatible plotting) ---
 if (nzchar(Sys.getenv("SAVE_RDS"))) {
-  cr <- suppressWarnings(cor(log10(mc), log10(yr$cat), use = "complete.obs"))
   reg <- if ("region_name" %in% names(di)) as.character(di$region_name[1]) else NA
-  saveRDS(list(L = L, region = reg, year = yr$year, obs = yr$cat, model = mc,
-               Q = Qf, q_pel = qpf, q_ben = qbf, two_Q = two_Q, mse = mse, corr = cr,
-               s_pel = s_pel, s_ben = s_ben, depth = depth_mean),
+  mtot <- rowSums(cbind(ifelse(is.na(mfit$pel), 0, mfit$pel),
+                        ifelse(is.na(mfit$ben), 0, mfit$ben)), na.rm = TRUE)
+  saveRDS(list(L = L, region = reg, year = yr$year,
+               obs = yr$cat, model = mtot, obs_pel = obs_pel, obs_ben = obs_ben,
+               model_pel = mfit$pel, model_ben = mfit$ben,
+               q_pel = qpf, q_ben = qbf, two_Q = TRUE, J = J,
+               mse_pel = mse_p, mse_ben = mse_b, corr_pel = cor_p, corr_ben = cor_b,
+               mse = J, corr = wcor(mtot, yr$cat),
+               fitP = fitP, fitB = fitB, s_pel = s_pel, s_ben = s_ben, depth = depth_mean),
           Sys.getenv("SAVE_RDS"))
 }
