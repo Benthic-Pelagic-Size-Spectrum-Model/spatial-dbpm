@@ -4,7 +4,9 @@
 # and OBSERVED catch TIME SERIES (log MSE), given the model + forcing:
 #   F_g(x,t) = Q * s(x) * (B_g/sum_g B) * effort_norm(t)
 # where
-#   s(x)            knife-edge selectivity, 1 for w >= 10 g (log10 w = 1),
+#   s(x,t)          min-max WINDOW selectivity, 1 for min_fished(t) <= w <= max_fished(t),
+#                   read TIME-VARYING per year from the parquet's min_fished_weight_class /
+#                   max_fished_weight_class (log10 g) columns (FSIZE=knife reverts to 10 g knife-edge),
 #   effort_norm(t)  nominal effort normalised to [0,1] over the LME series,
 #   (B_g/sum_g B)   biomass-proportional effort split across functional groups
 #                   (DBPM.md "gravity": effort ~ biomass, so catch ~ biomass^2),
@@ -40,8 +42,10 @@ base <- Sys.getenv("DBPM_DATA",
 L <- as.integer(c(commandArgs(TRUE), "14")[1])
 
 # --- biology params (equilibrium init json) + Boltzmann-Arrhenius temperature ---
-p  <- fromJSON(file.path(base, "equilibrium_runs",
-        sprintf("init_dbpm_nonspatial_fao_lme-%d_searchvol_12.8.json", L)))$params
+# glob the init json regardless of the searchvol suffix (most LMEs are 12.8; some, e.g. Arabian
+# Sea LME-32, are 6.4) so every region resolves without hardcoding the coefficient.
+p  <- fromJSON(Sys.glob(file.path(base, "equilibrium_runs",
+        sprintf("init_dbpm_nonspatial_fao_lme-%d_searchvol_*.json", L)))[1])$params
 # tempeffect(T) multiplies feeding (A) and background mortality (mu_0). It is now
 # TIME-VARYING via dbpmr's temperature driver (temperature_ts.txt, read each timestep)
 # rather than folded into constant A/mu_0 - so A/mu_0 below are the BASE (unscaled) rates.
@@ -52,7 +56,7 @@ Ku <- p$growth_pred[1];        AMu <- p$energy_pred[1]
 Kv <- p$growth_detritivore[1]; AMv <- p$energy_detritivore[1]
 Kp <- (1-dh)*Ku; Rp <- (1-dh)*(1-(Ku+AMu)); Ep <- (1-dh)*AMu
 Kl <- (1-dl)*Kv; Rl <- (1-dl)*(1-(Kv+AMv)); El <- (1-dl)*AMv
-dcorr <- min(p$depth[1], 200); bhd <- 20; wsel <- 1 * LN10   # knife-edge at 10 g (ln units)
+dcorr <- min(p$depth[1], 200); bhd <- 20; wsel <- 1 * LN10   # 10 g knife-edge (fallback default)
 
 # --- obsclim forcing: annual effort/catch series + monthly plankton intercept/slope ---
 di <- read_parquet(Sys.glob(file.path(base, "dbpm_inputs",
@@ -64,10 +68,63 @@ yr <- di |> group_by(year) |>
       arrange(year)
 effn <- yr$eff / max(yr$eff); nyr <- nrow(yr); spin <- 40; tmax <- spin + nyr
 eff_at <- function(t) { i <- floor(t) - spin + 1; if (i < 1) effn[1] else if (i > nyr) effn[nyr] else effn[i] }
-# INT_OFFSET: additive log10 shift on the plankton intercept, to emulate the MLD-aware
-# phyto averaging (deep columns gain ~log10(200/MLD) ~ +0.3..0.6) before the upstream
-# preprocessing is re-run. Default 0 (use the parquet's fixed-200 m intercept as-is).
+# --- TIME-VARYING PER-SPECTRUM fished-size WINDOW (log10 g) from the parquet ------------
+# U (pelagic) window from min/max_fished_U, V (benthic) from min/max_fished_V -- the columns
+# script 04 derives from the FGroup catch (fish+krill+ceph = U; shrimp/lobster/mollusc = V).
+# A single fish-derived window applied to both spectra guts the small-bodied benthic fishery,
+# so U and V are kept separate. Degenerate (hi<=lo) -> open the top; NA U -> 10 g knife-edge;
+# NA V -> spectrum not fished that year (empty window). Fallbacks in priority order:
+#   FSIZE=knife            -> both spectra fixed 10 g..Inf (reproduce v1)
+#   parquet min/max_fished_U/_V columns present -> use them (protocol)
+#   FSIZE_UV_CSV=<file>    -> region,year,min_fished_U,max_fished_U,min_fished_V,max_fished_V
+#   single min/max_fished_weight_class present -> both spectra = that one window
+#   else                   -> knife-edge
+fmode <- Sys.getenv("FSIZE", "parquet"); uvcsv <- Sys.getenv("FSIZE_UV_CSV", "")
+mkwin <- function(lo, hi, na_open) {                 # align to yr$year, tidy degenerate/NA
+  hi <- ifelse(is.finite(hi) & hi > lo, hi, ifelse(is.finite(lo), Inf, NA))
+  bad <- !is.finite(lo)
+  if (na_open) { lo[bad] <- 1; hi[bad] <- Inf }      # U: NA -> 10 g knife-edge
+  else         { lo[bad] <- Inf; hi[bad] <- Inf }    # V: NA -> not fished (empty)
+  list(lo = lo, hi = hi) }
+have_uv <- fmode != "knife" &&
+           all(c("min_fished_U","max_fished_U","min_fished_V","max_fished_V") %in% names(di))
+if (fmode == "knife") {
+  Uw <- list(lo = rep(1, nyr), hi = rep(Inf, nyr)); Vw <- Uw; src <- "knife 10g..Inf"
+} else if (have_uv) {
+  fs <- di |> group_by(year) |> summarise(ul=min_fished_U[1], uh=max_fished_U[1],
+        vl=min_fished_V[1], vh=max_fished_V[1], .groups="drop") |> arrange(year)
+  m <- match(yr$year, fs$year)
+  Uw <- mkwin(fs$ul[m], fs$uh[m], TRUE); Vw <- mkwin(fs$vl[m], fs$vh[m], FALSE); src <- "parquet U/V"
+} else if (nzchar(uvcsv) && file.exists(uvcsv)) {
+  cs <- read.csv(uvcsv); cs <- cs[cs$region == L, ]; m <- match(yr$year, cs$year)
+  Uw <- mkwin(cs$min_fished_U[m], cs$max_fished_U[m], TRUE)
+  Vw <- mkwin(cs$min_fished_V[m], cs$max_fished_V[m], FALSE); src <- paste("UV csv", basename(uvcsv))
+} else if (all(c("min_fished_weight_class","max_fished_weight_class") %in% names(di))) {
+  fs <- di |> group_by(year) |> summarise(l=min_fished_weight_class[1],
+        h=max_fished_weight_class[1], .groups="drop") |> arrange(year)
+  m <- match(yr$year, fs$year); Uw <- mkwin(fs$l[m], fs$h[m], TRUE); Vw <- Uw
+  src <- "single parquet min/max_fished_weight_class (both spectra)"
+} else { Uw <- list(lo=rep(1,nyr), hi=rep(Inf,nyr)); Vw <- Uw; src <- "knife (no cols)" }
+winU_at <- function(t) { i <- max(1, min(nyr, floor(t)-spin+1)); c(Uw$lo[i], Uw$hi[i]) }  # log10 g
+winV_at <- function(t) { i <- max(1, min(nyr, floor(t)-spin+1)); c(Vw$lo[i], Vw$hi[i]) }
+wU_ref <- winU_at(spin+nyr-1); wV_ref <- winV_at(spin+nyr-1)   # ref windows for the gravity split
+cat(sprintf("FSIZE [%s] U %.2f..%.2f V %.2f..%.2f (last yr, log10 g)\n",
+            src, wU_ref[1], wU_ref[2], wV_ref[1], wV_ref[2]))
+# INT_OFFSET: additive log10 shift on the plankton intercept. It corrects the parquet's
+# fixed-0..200 m mean phyto to a biomass-weighted vertical average (deep upwelling columns
+# gain ~+0.5, broad shelves ~+0.2). Preference order for this LME:
+#   1) DINT_CSV=<file> with columns lme,dint -> use the measured Delta for LME `L`
+#   2) INT_OFFSET=<x>  scalar fallback (emulation), default 0 (parquet fixed-200 m as-is).
+# The CSV values come from the exact FAO-LME-mask area-average of ISIMIP3a phyc/phypico
+# (int_biomass_weighted - int_fixed200); see ~/dbpm_compare_scratch/lme_dint.csv.
 int_off <- as.numeric(Sys.getenv("INT_OFFSET", "0"))
+dint_csv <- Sys.getenv("DINT_CSV", "")
+if (nzchar(dint_csv) && file.exists(dint_csv)) {
+  dt <- read.csv(dint_csv); if ("lme" %in% names(dt) && L %in% dt$lme) {
+    int_off <- dt$dint[match(L, dt$lme)][1]
+    cat(sprintf("DINT_CSV: LME %d measured biomass-weighted intercept shift = %+0.2f\n", L, int_off))
+  }
+}
 intm <- di$intercept + int_off; slpm <- di$slope; nmon <- length(intm)
 int1 <- mean(di$intercept[di$year == min(di$year)]) + int_off; slp1 <- mean(di$slope[di$year == min(di$year)])
 pl_at <- function(t) { if (t < spin) return(c(int1, slp1))
@@ -147,8 +204,10 @@ runsim <- function(qp, qb) {
   if (nzchar(Sys.getenv("GRAVITY"))) { hdr <- paste0(hdr, ",gravity"); rows <- paste0(rows, ",1") }
   writeLines(c(hdr, rows), file.path(di_in, "forcing_ts.txt"))
   if (fishing) {
-    Setup.fishing(pe, run, grid, func = function(m, t, x, y) qp * as.numeric(m >= wsel) * eff_at(t))
-    Setup.fishing(be, run, grid, func = function(m, t, x, y) qb * as.numeric(m >= wsel) * eff_at(t))
+    selU <- function(m, t) { w <- winU_at(t); ml <- m / LN10; as.numeric(ml >= w[1] & ml <= w[2]) }
+    selV <- function(m, t) { w <- winV_at(t); ml <- m / LN10; as.numeric(ml >= w[1] & ml <= w[2]) }
+    Setup.fishing(pe, run, grid, func = function(m, t, x, y) qp * selU(m, t) * eff_at(t))
+    Setup.fishing(be, run, grid, func = function(m, t, x, y) qb * selV(m, t) * eff_at(t))
   }
   ok <- tryCatch({ invisible(capture.output(SizeSpectrum(run, grid, pl, pe, be, de))); TRUE },
                  error = function(e) { message(conditionMessage(e)); FALSE })
@@ -159,9 +218,11 @@ runsim <- function(qp, qb) {
 }
 
 # --- 1) unfished equilibrium -> fishable-biomass shares (DBPM.md gravity split) ---
-u0 <- runsim(0, 0); fi <- u0$x >= 1; nT <- length(u0$tt)
-Bpel <- sum(u0$Um[nT, fi] * u0$w[fi] * u0$dm) * dcorr
-Bben <- sum(u0$Vm[nT, fi] * u0$w[fi] * u0$dm) * bhd
+u0 <- runsim(0, 0); nT <- length(u0$tt)
+fiU <- u0$x >= wU_ref[1] & u0$x <= wU_ref[2]     # U fishable index (reference window)
+fiV <- u0$x >= wV_ref[1] & u0$x <= wV_ref[2]     # V fishable index (its own, smaller window)
+Bpel <- sum(u0$Um[nT, fiU] * u0$w[fiU] * u0$dm) * dcorr
+Bben <- sum(u0$Vm[nT, fiV] * u0$w[fiV] * u0$dm) * bhd
 s_pel <- Bpel / (Bpel + Bben); s_ben <- Bben / (Bpel + Bben)
 two_Q <- nzchar(Sys.getenv("TWO_Q"))   # TWO_Q set  -> estimate q_pel, q_ben separately
 grav  <- nzchar(Sys.getenv("GRAVITY")) # GRAVITY set -> in-engine DYNAMIC gravity split (F_g ~ B_g/sumB)
@@ -179,27 +240,32 @@ catch_ts <- function(qp, qb) {
   r <- runsim(qp, qb); if (is.null(r)) return(rep(NA, nyr))
   k <- match(spin + (1:nyr), r$tt)
   sapply(k, function(kk) { e <- eff_at(r$tt[kk])
-    cp <- sum(r$Um[kk, fi] * r$w[fi] * r$dm) * dcorr    # areal fishable pelagic biomass
-    cb <- sum(r$Vm[kk, fi] * r$w[fi] * r$dm) * bhd       # areal fishable benthic biomass
+    wu <- winU_at(r$tt[kk]); fu <- r$x >= wu[1] & r$x <= wu[2]   # per-spectrum time-varying windows
+    wv <- winV_at(r$tt[kk]); fv <- r$x >= wv[1] & r$x <= wv[2]
+    cp <- sum(r$Um[kk, fu] * r$w[fu] * r$dm) * dcorr    # areal fishable pelagic biomass (U window)
+    cb <- sum(r$Vm[kk, fv] * r$w[fv] * r$dm) * bhd       # areal fishable benthic biomass (V window)
     if (grav) { s <- cp + cb; sp <- if (s > 0) cp/s else 0.5
                 qp * sp * e * cp + qb * (1 - sp) * e * cb }
     else        qp * e * cp + qb * e * cb })
 }
 logmse <- function(m) { if (all(is.na(m))) return(1e6)
-  ok <- is.finite(m) & m > 0 & yr$cat > 0
+  ok <- is.finite(m) & m > 0 & is.finite(yr$cat) & yr$cat > 0   # NA-safe (sparse-catch LMEs)
   if (sum(ok) < 3) return(1e6); mean((log10(m[ok]) - log10(yr$cat[ok]))^2) }
 
 # --- 2) calibrate to the observed catch time series (log-MSE) ---
+# QMAX: upper bound on catchability. Raised from 3 to 4 so heavily-fished LMEs whose observed
+# catch demanded a ceiling-pinned Q (e.g. California) are not artificially capped. Override QMAX=<x>.
+qmax <- as.numeric(Sys.getenv("QMAX", "4"))
 n <- 0; Qf <- NA_real_
 if (!two_Q) {
   # single common Q (1-D Brent). Static split: q_pel=Q*s_pel, q_ben=Q*s_ben. Dynamic gravity
   # (GRAVITY): base q_pel=q_ben=Q and the engine applies the current-biomass split each step.
   o  <- optimise(function(Q) { n <<- n + 1
           logmse(if (grav) catch_ts(Q, Q) else catch_ts(Q * s_pel, Q * s_ben)) },
-                 lower = 0, upper = 3, tol = 0.01)
+                 lower = 0, upper = qmax, tol = 0.01)
   Qf <- o$minimum; mse <- o$objective
   if (grav) { qpf <- Qf; qbf <- Qf } else { qpf <- Qf * s_pel; qbf <- Qf * s_ben }
-  cat(sprintf("  optimise[0,3]: evals=%d  Q=%.3f  ", n, Qf))
+  cat(sprintf("  optimise[0,%g]: evals=%d  Q=%.3f  ", qmax, n, Qf))
 } else {
   # per-group catchabilities. The objective is bimodal (yield-curve low-F / high-F
   # basins) and non-smooth (knife-edge selectivity), so use a coarse grid seed to find
@@ -209,12 +275,12 @@ if (!two_Q) {
   obj2 <- function(q) { n <<- n + 1; logmse(catch_ts(q[1], q[2])) }
   alg  <- Sys.getenv("TWO_Q_OPT", "grid_bobyqa")
   if (alg == "directL") {
-    res <- nloptr::nloptr(c(1, 1), obj2, lb = c(0, 0), ub = c(3, 3),
+    res <- nloptr::nloptr(c(1, 1), obj2, lb = c(0, 0), ub = c(qmax, qmax),
              opts = list(algorithm = "NLOPT_GN_DIRECT_L", maxeval = 80, xtol_rel = 1e-3))
   } else {
-    qs <- seq(0.05, 3, length.out = 5); G <- expand.grid(qp = qs, qb = qs)
+    qs <- seq(0.05, qmax, length.out = 5); G <- expand.grid(qp = qs, qb = qs)
     seed <- as.numeric(G[which.min(apply(G, 1, function(q) obj2(as.numeric(q)))), ])
-    res  <- nloptr::nloptr(seed, obj2, lb = c(0, 0), ub = c(3, 3),
+    res  <- nloptr::nloptr(seed, obj2, lb = c(0, 0), ub = c(qmax, qmax),
              opts = list(algorithm = "NLOPT_LN_BOBYQA", maxeval = 40, xtol_rel = 1e-3))
   }
   qpf <- res$solution[1]; qbf <- res$solution[2]; mse <- res$objective

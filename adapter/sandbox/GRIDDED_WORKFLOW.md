@@ -48,6 +48,14 @@ Variable definitions: FishMIP2.0 protocol Table 6 (github.com/Fish-MIP/FishMIP2.
 - **Biomass-weighted plankton intercept**: `DINT_CSV=lme_dint_all.csv` shifts each LME's plankton
   intercept by its measured biomass-weighted value (∫phyc²/∫phyc vs fixed 0-200 m mean;
   `all_int.R` over the FAO-LME mask). Median +0.38 dex; de-saturates Q in upwelling/polar LMEs.
+  Skill vs the fixed 0-200 m intercept (`plot_200m_vs_bw.R` → `calib_200m_vs_bw.pdf`, for Denisse):
+  median corr 0.46→0.51, median RMSE(log10) 0.28→0.23; 56% of LMEs improve correlation.
+  - **CAVEAT — this is a "proxied" static offset, not a fully per-timestep series.** `dint` is ONE
+    number per LME (int_bw − int200 from the `phyc` climatology) added to the parquet's fixed-200 m
+    *time-varying* series. The temporal variation is still the fixed-200 m signal; only the mean level
+    is biomass-weighted. The protocol-faithful **v2** change is to re-derive the intercept per timestep
+    from `phyc` via new_features `integrating_phyto(mode="biomass_weighted")` + `GetPPIntSlope`, so both
+    level AND temporal shape are biomass-weighted. Same distinction applies to the gridded driver.
 - **Model selection** (`aic_select.R`): per LME, ΔAIC = n·ln(MSE₂Q/MSE₁Q)+2; pick two-Q only if
   ΔAIC<0 AND correlation not worsened (guard — plain ΔAIC over-selects on ~50-yr autocorrelated
   series). Final: 40 two-Q / 40 single-Q. Writes `calib_final/`.
@@ -135,11 +143,35 @@ anomalies LME-centered (preserves q consistency). Biology/q per-LME; forcing per
    matches obs; over-prediction is CPUE/biomass).
 3. **Krill uncatchable** — 1-2 g, below the 10 g knife-edge → FAO 48 (83% krill) uncalibratable.
 
-**v2 (staged, data in hand):** split observed catch into pelagic (fish + krill) vs benthic
-(shrimp, lobster/crab, mollusc, cephalopod) using `catch_histsoc` + `TaxGrps.xlsx`; calibrate
-q_pel/q_ben against the two series separately (properly identified); **region-specific per-spectrum
-min fished size** (`fished_size_UV.csv`: ~1 g krill … 270 g toothfish), not a 10 g knife-edge.
-Resolves the oligotrophic/reef bias, the krill gap, and the single-Q-pin/two-Q-overfit at once.
+**v2 (staged, data in hand):** split observed catch into pelagic (fish + krill + cephalopod) vs
+benthic (shrimp, lobster/crab, mollusc) using `catch_histsoc` + `TaxGrps.xlsx`; calibrate
+q_pel/q_ben against the two series separately (properly identified). Resolves the oligotrophic/reef
+bias, the krill gap, and the single-Q-pin/two-Q-overfit at once.
+
+**Fished size — PER-SPECTRUM (U/V), time-varying, derived UPSTREAM (protocol).** The parquet's
+single `min/max_fished_weight_class` is fish-derived and taxon-less; applied to both spectra it
+excludes krill (U end) and the small-bodied benthic fishery (shrimp 3–60 g, mollusc 2–500 g; V end),
+which guts benthos (California s_ben 0.24→0.05, corr→−0.16). Fix = per-spectrum U/V window derived
+at the SAME workflow step that makes the fish window:
+- **Upstream:** `lme-workflow/scripts/04_processing_effort_fishing_inputs.R` (`uv_summ` block) now
+  derives `min/max_fished_U` and `min/max_fished_V` from the FGroup catch (`catch_histsoc`, already
+  loaded there): FGroup→gram range + class MIDPOINT (matches the parquet's `log10mid_wt`; edges
+  over-extend into the huge small-size tail); window = [min mid, max mid] over FGroups ≥0.5% of that
+  spectrum-year catch, single-group years widen to [lo,hi]; U = fish+krill+ceph, V = shrimp/lobster/
+  mollusc. These columns flow into the parquet via the existing merge. FAO 48 U: 7290–80000 g (1970,
+  finfish) → 1–2 g (2010, krill); California U min ≈49 g (≈ the fish-derived 50 g), V 13–632 g.
+- **Downstream:** `tier1_fishing_calib.R` reads them per (region, year) with fallback chain
+  `FSIZE=knife` → parquet U/V cols → `FSIZE_UV_CSV` → single `min/max_fished_weight_class` → knife.
+  Committed interim CSV for laptop runs (before the parquet is regenerated on Gadi):
+  `fished_size_UV_tv.csv` (built by `build_fished_size_uv.R`, mirrors the script-04 logic).
+- **GRAVITY (0-D and gridded) must use per-GROUP fishable biomass WITHIN each window**, not total
+  biomass: `B_U^fish = ∫U over [minU,maxU]`, `B_V^fish = ∫V over [minV,maxV]`, then the gravity/
+  effort split uses `q_pel·B_U^fish + q_ben·B_V^fish`. tier1's `catch_ts` already integrates each
+  spectrum over its own window; the gridded driver's attractiveness `a_i` needs the same restriction.
+- **Known tension (not a bug):** realistic size windows can *worsen* small-pelagic LMEs (California)
+  where the fishery targets sizes at/below the derived min — the coarse `<30cm` FGroup can't resolve
+  anchovy, and Reg's fine size data is fish-only. Two-Q + finer sizes are the next step; judge net
+  effect on the full re-run, not per-LME.
 
 --------------------------------------------------------------------------------
 ## 6. Reproduce from scratch (commands)
