@@ -22,14 +22,15 @@ suppressMessages({library(dplyr); library(readr); library(tidyr)})
 src <- Sys.getenv("CATCH_HISTSOC", "~/dbpm_compare_scratch/catch_histsoc.csv")
 out <- Sys.getenv("OUT_CSV",       "fished_size_UV_tv.csv")
 
-inv <- list(krill=c(1,2), shrimp=c(3,60), lobsterscrab=c(100,4000),
-            cephalopods=c(20,6000), demersalmollusc=c(2,500))
+# invert [min FISHED, max] g. min floored ~10 g (gear retention) EXCEPT krill (fine-mesh, 1 g).
+inv <- list(krill=c(1,2), shrimp=c(10,60), lobsterscrab=c(100,4000),
+            cephalopods=c(20,6000), demersalmollusc=c(20,500))
 Vgrp <- c("shrimp","lobsterscrab","demersalmollusc")
-cm_lo <- function(g) if(grepl("<30cm",g))4 else if(grepl("30-90cm",g))30 else if(grepl(">=90cm",g))90 else if(grepl("<90cm",g))4 else NA
+# cm_lo = realistic MINIMUM FISHED length (cm) -- smallest classes anchored at 10 cm (~10 g via
+# 0.01*L^3) = typical small-pelagic gear onset (anchovy/sardine), NOT 4 cm (larvae, 0.6 g).
+cm_lo <- function(g) if(grepl("<30cm",g))10 else if(grepl("30-90cm",g))30 else if(grepl(">=90cm",g))90 else if(grepl("<90cm",g))10 else NA
 cm_hi <- function(g) if(grepl("<30cm",g))30 else if(grepl("30-90cm",g))90 else if(grepl(">=90cm",g))200 else if(grepl("<90cm",g))90 else NA
 grp_lohi <- function(g){ if(!is.null(inv[[g]])) inv[[g]] else { l<-cm_lo(g); h<-cm_hi(g); if(is.na(l)) c(NA,NA) else 0.01*c(l,h)^3 } }
-grp_mid  <- function(g){ if(!is.null(inv[[g]])) sqrt(inv[[g]][1]*inv[[g]][2])
-                         else { l<-cm_lo(g); if(is.na(l)) NA else 0.01*mean(c(l,cm_hi(g)))^3 } }
 
 d <- read_csv(src, show_col_types=FALSE,
               col_select=c("Year","fao_area","LME","Reported","IUU","FGroup"))
@@ -38,16 +39,14 @@ d <- d[is.finite(d$catch) & d$catch>0, ]
 d$region <- ifelse(d$LME>0, d$LME, d$fao_area+100)
 grps <- unique(d$FGroup); lohi <- t(sapply(grps, grp_lohi)); rownames(lohi)<-grps
 d$lo <- lohi[d$FGroup,1]; d$hi <- lohi[d$FGroup,2]
-d$mid <- sapply(d$FGroup, grp_mid)
 d$sp  <- ifelse(d$FGroup %in% Vgrp, "V", "U")
 d <- d[is.finite(d$lo),]
 
+# window = [LOWER edge of smallest fished group, UPPER edge of largest] over groups >=0.5% of
+# that spectrum-year catch. min = lower edge (smallest FISHED size), not the midpoint.
 w <- d |> group_by(region, Year, sp) |>
   mutate(frac = catch/sum(catch)) |> filter(frac >= 0.005) |>
-  summarise(ng=n_distinct(FGroup), lom=min(mid), him=max(mid),
-            loe=min(lo), hie=max(hi), .groups="drop") |>
-  mutate(mn = if_else(ng==1 | him<=lom, log10(loe), log10(lom)),
-         mx = if_else(ng==1 | him<=lom, log10(hie), log10(him))) |>
+  summarise(mn = log10(min(lo)), mx = log10(max(hi)), .groups="drop") |>
   select(region, year=Year, sp, mn, mx) |>
   pivot_wider(names_from=sp, values_from=c(mn,mx)) |>
   rename(min_fished_U=mn_U, max_fished_U=mx_U, min_fished_V=mn_V, max_fished_V=mx_V) |>

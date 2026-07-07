@@ -176,11 +176,19 @@ at the SAME workflow step that makes the fish window:
   dominated parquet max over-extends benthos); `min_fished_U/V` <- FGroup. Applied in script 04
   (`mutate(max_fished_U = max_fished_weight_class)`) and, for laptop runs, `augment_parquets_uv.R`
   (writes U/V cols into copies of the DBPM_dev parquets; read via `INPUT_PARQUET_DIR`).
-- **Per-group size sourcing:** fish min from the real FishMIP cm-class (`<30cm` etc.) via `W=0.01*L^3`;
-  invert ranges are caught-size estimates (krill 1-2 g, shrimp 3-60 g, ...) cross-checked against
-  Reg's real per-taxon `WtMax`/`SLCom` in `CheckWtLen.xlsx` (which confirms they sit below the species
-  maxima, as expected). A fully data-derived per-FGroup size needs the Access `TaxCat` taxon->FGroup
-  crosswalk (`mdbtools`), not available on the laptop.
+- **min = min FISHED size = LOWER edge of the smallest fished group** (NOT midpoint, NOT larval min).
+  `WtMax`/SeaLifeBase/rfishbase only give the MAX size (biological min is larval ~1 mg, irrelevant);
+  the min FISHED size is a gear/fishery property. Rule: ~**10 g gear-retention floor** (fish smallest
+  cm-class anchored 10 cm; inverts floored 10-20 g) EXCEPT **krill = 1 g** (fine mesh). Region-specific
+  from the catch composition (0.5% threshold drops trace bycatch): small-pelagic LMEs ~10 g (California
+  U min 10 g -> recovers the good fit, mse 0.08 corr 0.44), toothfish FAO 58 ~270 g, krill FAO 48 1 g.
+  max is the hybrid (parquet real `WtMax`). Invert ranges cross-checked vs Reg's `CheckWtLen.xlsx`
+  `WtMax`/`SLCom` (species maxima, so caught min sits below - consistent). Fully data-derived per-FGroup
+  size would need the Access `TaxCat` taxon->FGroup crosswalk (`mdbtools`, not on the laptop).
+- **VALIDATION (Julia):** Reg's `SSStats.csv` = observed CATCH size-spectrum slope/intercept per
+  LME/year (from `Plot Size Data 9_Stats.R`). These are NOT model inputs (the DBPM plankton
+  intercept/slope come from `phyc`). Use them to VALIDATE MODEL OUTPUTS in the validation paper:
+  compare the DBPM predicted catch size spectrum (slope/intercept) against Reg's observed per LME/year.
 - **Known tension (not a bug):** realistic size windows can *worsen* small-pelagic LMEs (California:
   min ~49 g excludes anchovy; the hybrid max extension is harmless there). Two-Q + finer sizes next;
   judge net effect on the full re-run, not per-LME.
