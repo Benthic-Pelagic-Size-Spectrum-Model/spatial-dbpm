@@ -176,6 +176,7 @@ depth_mean <- p$depth[1]; pref_ben_depth <- 0.8 * exp(-depth_mean / coupling_sca
 # single-Q gravity split is qp = Q*s_pel, qb = Q*s_ben; two_Q frees them.
 runsim <- function(qp, qb) {
   wd <- tempfile("tv"); dir.create(wd); old <- setwd(wd)
+  on.exit({ setwd(old); unlink(wd, recursive = TRUE, force = TRUE) }, add = TRUE)  # clean per-run scratch
   run  <- Setup.Run("R", 1, 1, 0, TRUE, 1)
   grid <- Setup.Grid(run, tmax = tmax, tstep = 1/48, toutstep = 1)
   pl   <- Setup.Plankton(run, filename = "plankton", lambda = slp1, ts_flag = TRUE)
