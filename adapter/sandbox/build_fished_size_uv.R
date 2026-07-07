@@ -24,7 +24,7 @@ out <- Sys.getenv("OUT_CSV",       "fished_size_UV_tv.csv")
 
 # invert [min FISHED, max] g. min floored ~10 g (gear retention) EXCEPT krill (fine-mesh, 1 g).
 # demersalmollusc is a mixed group -> 10 g floor.
-inv <- list(krill=c(1,2), shrimp=c(10,60), lobsterscrab=c(100,4000),
+inv <- list(krill=c(1,2), shrimp=c(5,60), lobsterscrab=c(100,4000),
             cephalopods=c(20,6000), demersalmollusc=c(10,500))
 Vgrp <- c("shrimp","lobsterscrab","demersalmollusc")
 # cm_lo = realistic MINIMUM FISHED length (cm). <30cm small pelagics anchored at 5 cm (~1.25 g via
