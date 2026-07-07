@@ -284,12 +284,16 @@ obj2 <- function(q) { n <<- n + 1; r <- catch_ts(q[1], q[2])
   parts <- c(if (fitP) wlogmse(r$pel, obs_pel) else NA,
              if (fitB) wlogmse(r$ben, obs_ben) else NA)
   parts <- parts[is.finite(parts)]; if (length(parts) == 0) 1e6 else sum(parts) }
-qs <- seq(0.05, qmax, length.out = 5); G <- expand.grid(qp = qs, qb = qs)
-seed <- as.numeric(G[which.min(apply(G, 1, function(q) obj2(as.numeric(q)))), ])
-res  <- nloptr::nloptr(seed, obj2, lb = c(0, 0), ub = c(qmax, qmax),
-          opts = list(algorithm = "NLOPT_LN_BOBYQA", maxeval = 60, xtol_rel = 1e-3))
-qpf <- if (fitP) res$solution[1] else NA_real_
-qbf <- if (fitB) res$solution[2] else NA_real_
+# optimise on LOG10(q) so q can span orders of magnitude (high-productivity regions need q~1e-4)
+qmin <- as.numeric(Sys.getenv("QMIN", "1e-4"))
+obj2L <- function(lq) obj2(10^lq)
+lg <- seq(log10(qmin), log10(qmax), length.out = 7); GL <- expand.grid(lqp = lg, lqb = lg)
+seedL <- as.numeric(GL[which.min(apply(GL, 1, function(q) obj2L(as.numeric(q)))), ])
+res   <- nloptr::nloptr(seedL, obj2L, lb = c(log10(qmin), log10(qmin)),
+          ub = c(log10(qmax), log10(qmax)),
+          opts = list(algorithm = "NLOPT_LN_BOBYQA", maxeval = 80, xtol_rel = 1e-3))
+qpf <- if (fitP) 10^res$solution[1] else NA_real_
+qbf <- if (fitB) 10^res$solution[2] else NA_real_
 J   <- res$objective
 
 # --- per-group fit + report ---
