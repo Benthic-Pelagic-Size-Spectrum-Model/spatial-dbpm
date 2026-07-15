@@ -162,6 +162,9 @@ typedef struct pelagic_info{
         double gamma_comp;     //compeititon exponent
         
         int rep_method;        //reproduction method; 0-fixed amount , 1-biomass dependent
+        double imm_frac;       //connectivity/immigration recruitment floor as a fraction of unfished recruitment (0=off)
+        double rec0;           //running-peak (unfished) recruitment density at the smallest size
+        int rec0_frozen;       //freeze rec0 at first bind so the subsidy cannot inflate its own reference
         int initial_flag;
         int ts_flag;
         int fishing_flag;      //flag for fishing; 0-off, 1-on
@@ -819,6 +822,7 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
      
      /*Pelagic Species Flags and Methods*/
      pelagic->rep_method=rep_method;
+     {char *e=getenv("PEL_IMM_FRAC"); pelagic->imm_frac = e ? atof(e) : 0.0; pelagic->rec0 = 0.0; pelagic->rec0_frozen = 0;}
      pelagic->initial_flag=initial_flag;
      pelagic->ts_flag=ts_flag;
      pelagic->fishing_flag=fishing_flag;
@@ -2531,13 +2535,22 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                      if(run->col_export_magg>=0 && run->col_export_magg<nv) run->export_magg=vals[run->col_export_magg];
                      if(run->col_gravity>=0 && run->col_gravity<nv) run->gravity=vals[run->col_gravity];
              }
+             /* TEMP_ON_MORT (env, default 1): whether temperature scales background mortality.
+                =0 -> temperature drives FEEDING only; mu_0 held at base. Rationale: the model does
+                not resolve metabolic maintenance costs (respiration) or their temperature response,
+                so mu_0*tempeff is a lone, unbalanced "cost of warmth"; feeding has a clean
+                encounter-rate justification, mortality does not. Read once. */
+             static int tom = -1;
+             if(tom < 0){ char *e = getenv("TEMP_ON_MORT"); tom = e ? atoi(e) : 1; }
              for(s=0 ; s<n ; s++){
                      community->pelagic[s].A    = community->pelagic[s].A_base    * run->pel_tempeff;
-                     community->pelagic[s].mu_0 = community->pelagic[s].mu_0_base * run->pel_tempeff;
+                     community->pelagic[s].mu_0 = tom ? community->pelagic[s].mu_0_base * run->pel_tempeff
+                                                      : community->pelagic[s].mu_0_base;
              }
              for(b=0 ; b<c ; b++){
                      community->benthic[b].A    = community->benthic[b].A_base    * run->ben_tempeff;
-                     community->benthic[b].mu_0 = community->benthic[b].mu_0_base * run->ben_tempeff;
+                     community->benthic[b].mu_0 = tom ? community->benthic[b].mu_0_base * run->ben_tempeff
+                                                      : community->benthic[b].mu_0_base;
              }
      }
 
@@ -3631,6 +3644,20 @@ void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
                                              ben+=community->pelagic[s].ben_bio[i][k][l]*community->pelagic[s].u_values[i][k][l]*grid->mstep;
                                      }
                                      community->pelagic[s].reproduction[k][l]=((community->pelagic[s].R_pla*pla+community->pelagic[s].R_pel*pel+community->pelagic[s].R_ben*ben)*grid->tstep)/(grid->mstep*exp(community->pelagic[s].pelmin));
+                                     /*Connectivity/immigration floor (0-D): recruitment cannot fall below imm_frac of the
+                                       unfished-peak recruitment (external larval subsidy for open oligotrophic systems). rec0
+                                       tracks the running peak of NATURAL recruitment, frozen the instant the floor first binds,
+                                       so the subsidy can never inflate its own reference (no positive feedback).*/
+                                     if(community->pelagic[s].imm_frac>0){
+                                             if(!community->pelagic[s].rec0_frozen &&
+                                                community->pelagic[s].reproduction[k][l]>community->pelagic[s].rec0)
+                                                     community->pelagic[s].rec0=community->pelagic[s].reproduction[k][l];
+                                             double fl=community->pelagic[s].imm_frac*community->pelagic[s].rec0;
+                                             if(community->pelagic[s].reproduction[k][l]<fl){
+                                                     community->pelagic[s].reproduction[k][l]=fl;
+                                                     community->pelagic[s].rec0_frozen=1;
+                                             }
+                                     }
                              }
                      }
              }
