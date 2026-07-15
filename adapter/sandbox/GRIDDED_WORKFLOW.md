@@ -10,14 +10,16 @@ All compute runs on a laptop (Apple M3 Pro, 12 cores). Scripts live in `~/dbpm_c
 The ocean is tiled into **83 FAO-LME regions** (66 LMEs + 17 FAO high-seas areas; mask =
 `FAO-LME-corrected_1degmask_DBPM`, 1° grid). For each region:
 1. **Calibrate** the 0-D size-spectrum model (`dbpmr`) to the region's observed catch → q_pel, q_ben.
-2. **Grid it**: run every 1° ocean cell in the region as an independent 0-D `dbpmr` column with
-   its own forcing, coupled only through an annual **spatial gravity** re-allocation of the
-   region's total fishing effort.
+2. **Grid it**: run every 1° ocean cell in the region as an independent 0-D `dbpmr` column with its
+   own PER-CELL, PER-TIMESTEP, VERTICALLY BIOMASS-WEIGHTED forcing (spatiotemporal — no climatology),
+   using the region's **0-D calibrated q**, coupled only through an annual **spatial gravity**
+   re-allocation of the region's total fishing effort.
 3. **Stitch** all regions into global fields; validate against observed catch and Global Fishing
    Watch / Clawson effort.
 
 Engine: `dbpmr` (compiled C size-spectrum solver; two spectra — U = pelagic+demersal predators,
-V = benthic detritivores — plus a detritus pool). Fishing minimum size = 10 g knife-edge (v1).
+V = benthic detritivores — plus a detritus pool). Fishing selectivity = per-spectrum (U/V), time-varying
+size window (§5). Calibration recipe A3: A÷3, μ₀=0.1, connectivity floor 0.15, spin-80, 1841–2010.
 
 --------------------------------------------------------------------------------
 ## 1. Data inputs
@@ -27,8 +29,8 @@ V = benthic detritivores — plus a detritus pool). Fishing minimum size = 10 g 
 | DBPM region inputs `dbpm_clim-fish-inputs_fao_lme-<L>_*.parquet` | ISIMIP3a preprocessing (`DBPM_dev/dbpm_inputs`) | LME monthly plankton intercept/slope, tos, tob, export_ratio, effort, catch |
 | Equilibrium init `init_dbpm_nonspatial_fao_lme-<L>_searchvol_*.json` | `DBPM_dev/equilibrium_runs` | biology params (global constants), depth |
 | 1° FAO-LME mask CSV | portal.sf.utas.edu.au THREDDS `masks/FAO-LME_masks` | region → cells; keying |
-| `phyc`, `phypico` (per-level) | ISIMIP3a THREDDS OPeNDAP | per-cell biomass-weighted plankton intercept |
-| `tos`, `tob`, `expc-bot`, `intpp`, `phyc-vint` | ISIMIP3a THREDDS OPeNDAP | per-cell temperature, export, plankton-temporal |
+| `phyc`, `phypico`, `thetao` (**per-level, all timesteps**), `thkcello` | ISIMIP3a THREDDS OPeNDAP | per-cell, per-timestep VERTICALLY BIOMASS-WEIGHTED plankton intercept+slope AND experienced temperature ⟨thetao⟩_phyc (weights = phyc·Δz over 0–200 m) |
+| `tob`, `expc-bot`, `intpp` | ISIMIP3a THREDDS OPeNDAP | per-cell, per-timestep bottom temperature + export ratio |
 | `siconc` (monthly) | ISIMIP3a THREDDS OPeNDAP | per-cell time-varying sea-ice gate |
 | `gfw_static_spatial_measures.csv` (elevation, dist-to-shore/port) | GFW / Clawson `effort_manuscript` repo | per-cell depth + accessibility |
 | Clawson gridded effort (Zenodo 19600603) | data.mapping-global-fishing.cloud.edu.au | effort validation |
@@ -61,19 +63,35 @@ Variable definitions: FishMIP2.0 protocol Table 6 (github.com/Fish-MIP/FishMIP2.
   series). Final: 40 two-Q / 40 single-Q. Writes `calib_final/`.
 - Batch: `run_all` style loop over the 80 LMEs; the 3 gaps (32,148,188) calibrated separately.
 
-### Stage B — per-cell forcing assembly (OPeNDAP)
-- `all_int.R` / `prep_lme.R <L>` → per-cell biomass-weighted intercept `int_lme<L>.csv`;
-  per-cell annual `siconc_lme<L>.csv` (high-lat only). Dateline-safe (per contiguous lon-run), retried.
-- `pull_tempexport_global.R` + `build_forcing_percell.R` → `tempexport_percell.csv`
-  (per-cell tos, tob, export_ratio=expc-bot/intpp, phyc-vint clim) + `phycvint_annual.rds` (temporal).
-- `gfw_static.csv` (depth, dist-to-shore) downloaded once.
+### Stage B — per-cell forcing assembly (OPeNDAP), VERTICALLY BIOMASS-WEIGHTED, per timestep
+Build the full spatiotemporal per-cell forcing (NO climatology, NO depth-weighting). For every cell &
+timestep, pull the vertically resolved `phyc`, `phypico`, `thetao` (+ `thkcello`) and integrate over
+0–200 m weighted by `phyc·Δz`:
+- `build_percell_bw.R <L>` (biomass-weighted port of `integrating_phyto`+`GetPPIntSlope`) →
+  `percell_bw_lme<L>.parquet` with per-cell per-timestep `intercept(t), slope(t), T_exp(t)=⟨thetao⟩_phyc`.
+  Small/large phyto for the slope = phypico-weighted and (phyc−phypico)-weighted (cb, pb above).
+- `tob(t)`, `export_ratio(t)=expc-bot/intpp`, `siconc(t)` per cell per timestep (same pull).
+- Each series LME-centered on the biomass-weighted regional aggregate so it matches the 0-D calibration
+  input series (`lme_dint_hbw_all.csv`) → q stays valid. `gfw_static.csv` (depth, shore) downloaded once.
+- **MONTHLY** resolution: 12 biomass-weighted values per cell per year, 600 months over 1961–2010
+  (matches the gridded phyc/thetao; the seasonal cycle is retained, gravity/effort still annual).
+- **Spin-up 1841–1960**: no gridded obsclim exists, so build per-cell spin forcing from the 1961–2010
+  fields via `gridded_spinup` (detrend + cycle, Python `gridded_spinup`), i.e. spin-up is ALSO per-cell
+  spatiotemporal (not an LME-mean fallback).
+- Dateline-safe (per contiguous lon-run), retried, resumable one file per region.
+- NOTE: the earlier `fao58_percell.csv` / `build_percell_global.R` produce a SINGLE climatology period —
+  superseded (they violate the no-climatology requirement); kept only for the static 0-D `dint` offset.
 
-### Stage C — gridded dynamic run  →  `grid_v2/` (or `grid_all/`)
-`gridded_gravity_dynamic.R <L> --ncell=0 --spinyr=30 --cores=10 --int_csv=int_lme<L>.csv
-   --qpel=.. --qben=.. [--siconc_csv=siconc_lme<L>.csv]`
-Orchestrated by `run_all_v2.sh` (resumable, small-region-first, `caffeinate`, TMPDIR on a RAM disk).
-- Reads q from `calib_final/lme<L>.rds`; per-cell forcing auto-loaded from `tempexport_percell.csv`.
-- Loop per year 1961-2010: gravity-allocate effort → run every cell 1 model-year via **warm-restart**.
+### Stage C — gridded dynamic run  →  `grid_A3/`
+`gridded_A3.R <L> --spinyr=80 --cores=10` (TMPDIR on a RAM disk; loads the floor `dbpmr` from
+`dbpmrlib`). Orchestrated by a resumable small-region-first runner (`caffeinate`, per-region logs).
+- **q from the 0-D calibration** `calib_A3/lme<L>.rds` (q_pel, q_ben) — carried DIRECTLY, no gridded refit.
+- Per-cell forcing = Stage-B `percell_bw_lme<L>.parquet` (per-cell, per-timestep, biomass-weighted
+  intercept/slope/T_exp/tob/export/siconc). Engine recipe = the A3 calibration: A÷3, μ₀=0.1, connectivity
+  floor 0.15, spin-80 (unfished) → fished from equilibrium, forcing 1841–2010 (spinup+obsclim).
+- Selectivity = per-spectrum time-varying U/V window (§5) from the `_uv` parquet; gravity/effort split
+  uses the fishable biomass WITHIN each window.
+- Loop per year 1841–2010: gravity-allocate the LME effort → run every cell 1 model-year via **warm-restart**.
 
 ### Stage D — synthesis & validation
 - `render_global.R` (or `render_global_dir.R` with `GRID_DIR`): stitches cells → global catch
@@ -100,10 +118,38 @@ initial state (detritus = scalar `@biomass`).
 - allocation      e_i = E_tot(year) · a_i / Σ_j a_j   (total effort conserved; mean cell effort = E_tot)
 - inertia (opt)   e_i(t+1) = (1-α)e_i(t) + α·e_i^IFD  (α=1 default = instant)
 
-**Per-cell forcing factorization** (keeps LME-mean = parquet series so calibrated q stays valid):
-- plankton  intercept_i(t) = LME_intercept(t) + (int_bw_i − LME_mean) + log10(phyc-vint_i(t)/clim)_centered
-- temp      tos_i(t) = LME_tos(t) + (tos_clim_i − LME_mean);  tob likewise
-- export    er_i(t)  = LME_er(t)  + (er_clim_i − LME_mean)
+**Per-cell forcing — VERTICALLY BIOMASS-WEIGHTED, per timestep (SPATIOTEMPORAL; no climatology, no
+depth-weighting).** Predators feed through the water column where the food is, so every plankton and
+temperature input is a vertical average over 0–200 m weighted by phytoplankton carbon `phyc(z,t)`
+(NOT by layer thickness), computed PER CELL, PER TIMESTEP from the gridded GFDL-MOM6-COBALT2 fields:
+
+  ⟨X⟩_i(t) = Σ_z X_i(z,t)·phyc_i(z,t)·Δz_i(z) / Σ_z phyc_i(z,t)·Δz_i(z)          (0–200 m)
+
+- plankton: biomass-weighted concentrations `cb_i(t)=⟨phyc⟩ (=Σphyc²Δz/ΣphycΔz)`,
+  `pb_i(t)=⟨phypico⟩ (=Σphypico·phycΔz/ΣphycΔz)` → `intercept_i(t), slope_i(t) = GetPPIntSlope(cb,pb)`
+  via `integrating_phyto(mode="biomass_weighted")` (weights `phyc·Δz`, not `thkcello`) run per timestep.
+- experienced temperature: `T_exp,i(t) = ⟨thetao⟩` (phyc-weighted) — temperature AT THE FOOD, not SST;
+  replaces tos in the pelagic tempeffect. tob (seafloor) drives the benthic tempeffect as before.
+- export ratio `er_i(t)`: `getExportRatio` per cell per timestep. sea-ice `ice_i(t)`: siconc per month.
+
+**q consistency (LME-centering retained).** Each per-cell series is centered so the BIOMASS-WEIGHTED
+horizontal regional aggregate (Σ_i b_i·X_i / Σ_i b_i, the same operator the 0-D calibration used, see
+`lme_dint_hbw_all.csv`) equals the LME series the 0-D q was fit against — so per-cell spatiotemporal
+detail is added WITHOUT moving the regional mean, and the calibrated q_pel/q_ben stay valid.
+
+> **Note — the horizontal biomass-weighting is a cell-AGGREGATION scheme, not a temporal signal, and
+> the 0-D workflow runs entirely on its CLIMATOLOGY form.** It defines only *how cells combine* into the
+> LME-representative value (weight each cell by its plankton carbon). In the **0-D (non-spatial)**
+> calibration there are no cells to run: the scheme collapses to a single **static offset per LME**,
+> `dint = int_bw − int_200m` computed from the `phyc` **climatology** (`lme_dint_hbw_all.csv`), added
+> onto the parquet's time-varying LME series. No per-timestep horizontal aggregation is needed and the
+> 0-D calibration operates fully on this climatology weighting. The **gridded** run applies the *same*
+> weighting per timestep ONLY to extract each cell's deviation from the regional mean, then re-anchors
+> those deviations onto the 0-D static-climatology target. So whether the horizontal weighting is read
+> as a climatology (0-D) or refined per-timestep (gridded), the LME mean the q was calibrated against is
+> identical — the two are consistent and q transfers. A future refinement could re-derive `dint` per
+> timestep (fully biomass-weighted LME series) and recalibrate; that is optional and does NOT affect
+> whether either workflow runs.
 
 --------------------------------------------------------------------------------
 ## 4. ASSUMPTIONS — resolution of every variable
@@ -112,14 +158,15 @@ initial state (detritus = scalar `@biomass`).
 |---|---|---|
 | Depth, accessibility (depth+shore) | **per-cell** | GFW static layers |
 | Sea-ice gate | **per-cell, per-year** | real siconc, hard 15% |
-| Plankton — spatial | **per-cell** | biomass-weighted intercept |
-| Plankton — temporal | **per-cell** | phyc-vint annual (v2) |
-| Temperature tos/tob | **per-cell** | climatology anomaly (v2) |
-| Export ratio | **per-cell** | expc-bot/intpp anomaly (v2) |
+| Plankton intercept+slope | **per-cell, per-timestep** | vertically BIOMASS-weighted (⟨·⟩ phyc·Δz), GetPPIntSlope per timestep — NOT climatology, NOT depth-weighted |
+| Experienced temperature T_exp (pelagic) | **per-cell, per-timestep** | vertically BIOMASS-weighted ⟨thetao⟩ (temperature at the food) |
+| Bottom temperature tob (benthic) | **per-cell, per-timestep** | seafloor thetao |
+| Export ratio | **per-cell, per-timestep** | getExportRatio (expc-bot/intpp) |
+| Sea-ice gate | **per-cell, per-month** | real siconc, hard 15% |
 | Biomass state | **per-cell** | warm-restart |
 | Allocated effort | **per-cell** | gravity share |
 | **Total effort** | **per-LME** | fleet total; per-cell only via gravity — *correct, not an artifact* |
-| **q_pel, q_ben** | **per-LME** | calibrated to region catch; cannot be per-cell without per-cell catch → causes the residual boundary "rectangles" |
+| **q_pel, q_ben** | **per-LME, from 0-D calibration** | carried DIRECTLY into the gridded run (no gridded refit): validated to transfer — the r 0.66→0.89 gain is spatial-structure and q-invariant, per-cell aggregate level within ~1.4× (`calib_A3/lme<L>.rds`) |
 | Biology params (metabolic exponent 0.82, natural mort 0.20, growth/energy K/R/Ex, reproduction, senescence, c1/E/Boltzmann) | **global constants** | identical across LMEs → no blocks |
 | Search volume A.u=64 (pelagic), A.v=6.4 (benthic) | **global** | hardcoded; JSON `searchvol` label unused |
 | Fishing min size | **global 10 g** knife-edge (v1) | → per-region per-spectrum in v2 |
