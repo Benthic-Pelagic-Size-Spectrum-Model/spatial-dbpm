@@ -100,14 +100,50 @@ Reuse the forcing-plugin architecture (the `forcing_ts.txt` pattern already adde
 - **Delivers:** the core 2014 result (complexity → size-structured predation refuge → non-linear spectra
   and productivity sensitivity) inside dbpmr, as an honest reduced form of the reef model.
 
-## 7. Deferred to Phase 2 (structural)
+## 7. Phase 2 — herbivores + algae, via the existing multi-species engine (NOT a rewrite)
 
-**Honest caveat:** even the 2014 base model was DBPM **+ a herbivore spectrum** (before adding the
-vulnerability function), so Phase-1 (2-spectrum U/V + refuge) is a *reduced form* — it isolates and
-validates the refuge mechanism, but the competitor pool is U-only rather than U+H.
+**Honest caveat first:** even the 2014 base model was DBPM **+ a herbivore spectrum** (before the
+vulnerability function), so Phase-1 (2-spectrum U/V + refuge) is a *reduced form* — it isolates the
+refuge mechanism but with a U-only competitor pool rather than U+H.
 
-Full fidelity — and the two 2018 results (fisheries productivity under progressive degradation; refuge
-availability → predator-overfishing vulnerability) — needs the reef model's **herbivore spectrum (H)**
-and **algae pool (A)**: the `U+H` competitor pool and the algae→herbivore→predator pathway. That is a
-3rd dynamic spectrum + 2nd resource in the C engine (new advection-reaction solve, cross-feeding terms,
-recruitment, efficiencies) — a separate scoped "reef mode", designed after Phase 1 validates the core.
+**Key realisation (revises the earlier "structural rewrite" framing).** In the reef repos the extra
+groups are literally **copies** of existing state variables: `H`/`V`/`U` are the *same* McKendrick–von
+Foerster advection–reaction solve repeated (diffs are whitespace/comments), and algae `A` is a scalar
+ODE structurally identical to detritus `W`. dbpmr is **already multi-species** — `setup_pelagic`/
+`setup_benthic` run in a loop over species (`community.pelagic[s]`, `benthic[b]`; group-vs-group
+predation `mu_pel_pred(s,ss,...)`). So the "extra spectrum" is **not** new C machinery — it is **one
+more `Setup.Benthic`/`Setup.Pelagic` instance** (an R-side config) with its feeding preferences pointed
+at the right food. Herbivores = a detritivore *copy* grazing algae; predators are already present and
+eat them via the existing `pref_ben`/`pref_pel` coupling.
+
+**The ONLY genuine structural change: pluralise the resource pool.** dbpmr has a *single* detritus pool
+`W` (and a single, prescribed plankton). Algae is "a copy of detritus" with a different input, so the
+pool machinery must go from one → N: add a second detritus-like pool with an **autotrophic logistic
+input** (`alr`→capacity `AK`, from the reef code) instead of the dead-body/sinking input, and let a
+consumer group graze it (a `K_alg`/`pref_alg` link to the new pool).
+
+**Phase-2 task list (small, mostly config):**
+1. **Pluralise `DETRITUS`** → support ≥2 pools; add an algae pool with logistic input + grazing loss. *(the one real C change)*
+2. **Instantiate a herbivore species** — an extra `Setup.Benthic` (detritivore copy) feeding on the algae pool. *(config)*
+3. **Predators eat herbivores** via the existing `pref_ben` (or `pref_pel`) coupling. *(likely free — verify §8)*
+4. **Extend the refuge competitor pool to `U+H`** (Phase-1 `a(w)` uses predators + herbivores). *(tie-in)*
+
+**Staging:**
+- **Phase 2a (cheapest):** herbivore species + a *prescribed* macroalgae resource (plankton-style, fixed).
+  Gets herbivores into the food web and the `U+H` competitor pool. Algae is exogenous — no degradation
+  feedback, but nothing new structural beyond a second prescribed resource.
+- **Phase 2b (full):** promote algae to a *dynamic* second pool (detritus-style + logistic input +
+  grazing depletion) → unlocks the algae↔herbivore feedback the 2018 degradation / predator-overfishing
+  results depend on.
+
+Because every group stays on the *same* DBPM code path (just more instances), this keeps the reef
+model low-divergence — it is "more `Setup` calls + one plural resource pool", not a fork of the engine.
+
+## 8. Open items to verify at implementation
+
+- **Cross-species predation coupling:** confirm `pref_pel`/`pref_ben` let a predator species eat *all*
+  species of that type (so predators automatically eat the new herbivore group), vs a single-target link.
+- **State units** (abundance vs biomass density) for the refuge `competitor(w)` ratio (§3).
+- **Consumer→pool feeding**: current benthic feeds one pool (detritus); confirm the cleanest way to point
+  a consumer at a *second* pool (and, for herbivores, at algae **and** detritus as in the reef code).
+- **Recruitment/reproduction** of the herbivore instance reuses the existing spectrum `rep_method`.
