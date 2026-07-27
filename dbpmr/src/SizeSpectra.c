@@ -20,7 +20,34 @@ typedef struct run_info{
         char fname_summ[40];
         FILE *fptr_summ;
 
-        
+        /* --- Environmental forcing plugin (auto-detected <run>/Input/forcing_ts.txt) ---
+           A header line names the channels (any subset/order), one data row per timestep.
+           Recognised channels: pel_tempeff, ben_tempeff (surface/seafloor Boltzmann-Arrhenius
+           multipliers on feeding A + background mortality mu_0) and sinking_rate (fraction of
+           surface-origin detritus reaching the seafloor). Add a forcing = add a column name +
+           a col_* index + an apply hook. Missing channels fall back to the neutral defaults. */
+        int forcing_flag;      //time-varying forcing driver active
+        FILE *fptr_forcing;    //forcing time-series file ptr
+        int forcing_ncol;      //number of columns in each data row
+        int col_pel_tempeff;   //column index of each channel (-1 if absent)
+        int col_ben_tempeff;
+        int col_sinking_rate;
+        int col_depth;
+        int col_residence_time;
+        int col_export_attn;   //size-dependent detritus export (opt-in): particle of ln-mass m reaches
+        int col_export_gamma;  //the seafloor with fraction exp(-export_attn*exp(-export_gamma*max(m,export_magg)))
+        int col_export_magg;   //aggregation floor: production below export_magg (ln-mass) sinks as marine snow of that effective size
+        int col_gravity;       //DBPM.md gravity fishing (opt-in): if present, calculate_fishing() scales F on each group by that group's CURRENT areal fishable-biomass share (F_g = base * B_g/sum B), recomputed per cell per timestep
+        double pel_tempeff;    //current surface-temperature multiplier (default 1)
+        double ben_tempeff;    //current seafloor-temperature multiplier (default 1)
+        double sinking_rate;   //current detritus sinking/export fraction (default 1)
+        double depth;          //water-column depth (m); read+available. Supplying the channel toggles Dunne burial ON (col_depth>=0); the value is NOT used to rescale the burial flux (sizemodel applies burial to the per-volume flux directly)
+        double residence_time; //detritus residence time tau (yr) for the alternative first-order pool loss W/tau (dimensionally clean; supplied via the residence_time channel). 0/absent = off
+        double export_attn;    //size-dependent export: attenuation number A = k(T)*z/w0 (per-timestep, from export_attn channel; larger = more remineralisation = less export)
+        double export_gamma;   //size-dependent export: allometric sinking-velocity exponent (w_s ~ mass^gamma); larger particles sink faster -> higher export
+        double export_magg;    //aggregation floor (ln-mass): small production coagulates into marine snow of this effective size before sinking; export uses max(m, export_magg). Default -1e30 = no floor (pure per-particle)
+        double gravity;        //gravity channel value (unused; presence via col_gravity toggles gravity fishing)
+
         } RUN;
 
 /*Contains all information regarding grid discretisation*/
@@ -101,7 +128,11 @@ typedef struct pelagic_info{
         double mu_s;           //senesence mortality coefficient
         double epsilon;        //senesence mortality constant
 
-        double u_0;            //initial intercept and abundance        
+        double A_base;         //un-temperature-scaled search coefficient (temp driver)
+        double mu_0_base;      //un-temperature-scaled background mortality (temp driver)
+        double tempeff;        //current-timestep temperature multiplier (1 if no temp driver)
+
+        double u_0;            //initial intercept and abundance
         double lambda;         //primary production slope
         
         double K_pla;          //growth efficiency (proportion of plankton food to growth)
@@ -131,6 +162,9 @@ typedef struct pelagic_info{
         double gamma_comp;     //compeititon exponent
         
         int rep_method;        //reproduction method; 0-fixed amount , 1-biomass dependent
+        double imm_frac;       //connectivity/immigration recruitment floor as a fraction of unfished recruitment (0=off)
+        double rec0;           //running-peak (unfished) recruitment density at the smallest size
+        int rec0_frozen;       //freeze rec0 at first bind so the subsidy cannot inflate its own reference
         int initial_flag;
         int ts_flag;
         int fishing_flag;      //flag for fishing; 0-off, 1-on
@@ -194,7 +228,11 @@ typedef struct benthic_info{
         double mu_0;           //intrinsic (juvenile) mortality coefficient
         double epsilon;        //senesence mortality constant
         double mu_s;           //senesence mortality coefficient
-        
+
+        double A_base;         //un-temperature-scaled search coefficient (temp driver)
+        double mu_0_base;      //un-temperature-scaled background mortality (temp driver)
+        double tempeff;        //current-timestep temperature multiplier (1 if no temp driver)
+
         double lambda;         //primary production slope
         double u_0;            //initial intercept and abundance
         
@@ -736,6 +774,9 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
      pelagic->alpha=pel_params[4];      //Volume search allometry
      pelagic->mu_0=pel_params[5];        //natural mortality rate
      pelagic->beta=pel_params[6];      //natural mortality allometry
+     pelagic->A_base=pelagic->A;         //temp driver: base (unscaled) search rate
+     pelagic->mu_0_base=pelagic->mu_0;   //temp driver: base (unscaled) background mortality
+     pelagic->tempeff=1.0;               //temp driver: neutral until a temperature series is read
      pelagic->mu_s=pel_params[7];        //senescence mortality rate
      pelagic->epsilon=pel_params[8];     //senescece mortality constant
      pelagic->u_0=pel_params[9];         //initial intercept
@@ -781,6 +822,7 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
      
      /*Pelagic Species Flags and Methods*/
      pelagic->rep_method=rep_method;
+     {char *e=getenv("PEL_IMM_FRAC"); pelagic->imm_frac = e ? atof(e) : 0.0; pelagic->rec0 = 0.0; pelagic->rec0_frozen = 0;}
      pelagic->initial_flag=initial_flag;
      pelagic->ts_flag=ts_flag;
      pelagic->fishing_flag=fishing_flag;
@@ -1046,6 +1088,9 @@ void setup_benthic(RUN *run, GRID *grid, BENTHIC *benthic, double *ben_params, c
      benthic->alpha=ben_params[4];      //Volume search allometry
      benthic->mu_0=ben_params[5];       //natural mortality rate
      benthic->beta=ben_params[6];       //natural mortality allometry
+     benthic->A_base=benthic->A;         //temp driver: base (unscaled) search rate
+     benthic->mu_0_base=benthic->mu_0;   //temp driver: base (unscaled) background mortality
+     benthic->tempeff=1.0;               //temp driver: neutral until a temperature series is read
      benthic->mu_s=ben_params[7];       //senescence mortality rate
      benthic->epsilon=ben_params[8];    //senescece mortality constant
      benthic->u_0=ben_params[9];        //initial intercept
@@ -1375,7 +1420,65 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      y=grid->ynum;
      n=run->no_pelagic;
      c=run->no_benthic;
-     
+
+     /*Optional environmental-forcing plugin: auto-detect <run>/Input/forcing_ts.txt, whose
+       first line names the channels present (comma-separated) and each subsequent line gives
+       one timestep's values. We map the recognised channel names to column indices here; the
+       per-timestep read + apply happens in mass_solver(). Absent file/channels -> neutral.*/
+     run->forcing_flag=0;
+     run->forcing_ncol=0;
+     run->col_pel_tempeff=-1;
+     run->col_ben_tempeff=-1;
+     run->col_sinking_rate=-1;
+     run->col_depth=-1;
+     run->col_residence_time=-1;
+     run->col_export_attn=-1;
+     run->col_export_gamma=-1;
+     run->col_export_magg=-1;
+     run->col_gravity=-1;
+     run->pel_tempeff=1.0;
+     run->ben_tempeff=1.0;
+     run->sinking_rate=1.0;
+     run->depth=1.0;
+     run->residence_time=0.0;
+     run->export_attn=0.0;
+     run->export_gamma=0.0;
+     run->export_magg=-1e30;
+     run->gravity=0.0;
+     run->fptr_forcing=NULL;
+     {
+             char fname_forcing[256];
+             snprintf(fname_forcing, sizeof(fname_forcing), "%s/Input/forcing_ts.txt", run->filename);
+             run->fptr_forcing=fopen(fname_forcing,"r");
+             if(run->fptr_forcing!=NULL){
+                     run->forcing_flag=1;
+                     char hdr[512];
+                     if(fgets(hdr,sizeof(hdr),run->fptr_forcing)!=NULL){
+                             /*strip trailing newline*/
+                             size_t hl=strlen(hdr);
+                             while(hl>0 && (hdr[hl-1]=='\n'||hdr[hl-1]=='\r'||hdr[hl-1]==' ')){ hdr[hl-1]='\0'; hl--; }
+                             int col=0;
+                             char *name=strtok(hdr,",");
+                             while(name!=NULL){
+                                     /*trim leading spaces*/
+                                     while(*name==' ') name++;
+                                     if(strcmp(name,"pel_tempeff")==0)  run->col_pel_tempeff=col;
+                                     else if(strcmp(name,"ben_tempeff")==0)  run->col_ben_tempeff=col;
+                                     else if(strcmp(name,"sinking_rate")==0)  run->col_sinking_rate=col;
+                                     else if(strcmp(name,"depth")==0)  run->col_depth=col;
+                                     else if(strcmp(name,"residence_time")==0)  run->col_residence_time=col;
+                                     else if(strcmp(name,"export_attn")==0)  run->col_export_attn=col;
+                                     else if(strcmp(name,"export_gamma")==0)  run->col_export_gamma=col;
+                                     else if(strcmp(name,"export_magg")==0)  run->col_export_magg=col;
+                                     else if(strcmp(name,"gravity")==0)  run->col_gravity=col;
+                                     col++;
+                                     name=strtok(NULL,",");
+                             }
+                             run->forcing_ncol=col;
+                     }
+             }
+     }
+
      /*Create temporary arrays for timestepping process*/
      double ***temp_plankton;
      double ****temp_pelagic;
@@ -1678,6 +1781,9 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      /*Close ts files*/
      if(community->plankton->ts_flag==1){
              fclose(community->plankton->fptr_ts);
+     }
+     if(run->forcing_flag==1){
+             fclose(run->fptr_forcing);
      }
      for(s=0 ; s<n ; s++){
              if(community->pelagic[s].ts_flag==1){
@@ -2403,7 +2509,51 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
      y=grid->ynum;
      n=run->no_pelagic;
      c=run->no_benthic;
-     
+
+     /*Advance the environmental-forcing plugin one timestep (if active), in lockstep with the
+       plankton re-read below. Parse this timestep's row into the recognised channels, then:
+         - rescale every species' feeding (A) and background mortality (mu_0) from their stored
+           base values by pel/ben_tempeff - the growth, predation-mortality and reproduction
+           integrals computed in calculate_g_and_mu() (after this solve) then carry the
+           temperature effect, matching sizemodel(): feeding & other-mortality are temperature-
+           scaled; senescence (mu_s) and fishing are not;
+         - store sinking_rate on run for use in g_det() (detritus input).*/
+     if(run->forcing_flag==1){
+             char fline[1024];
+             if(fgets(fline,sizeof(fline),run->fptr_forcing)!=NULL){
+                     double vals[64];
+                     int nv=0;
+                     char *tok=strtok(fline,",");
+                     while(tok!=NULL && nv<64){ vals[nv++]=atof(tok); tok=strtok(NULL,","); }
+                     if(run->col_pel_tempeff>=0 && run->col_pel_tempeff<nv) run->pel_tempeff=vals[run->col_pel_tempeff];
+                     if(run->col_ben_tempeff>=0 && run->col_ben_tempeff<nv) run->ben_tempeff=vals[run->col_ben_tempeff];
+                     if(run->col_sinking_rate>=0 && run->col_sinking_rate<nv) run->sinking_rate=vals[run->col_sinking_rate];
+                     if(run->col_depth>=0 && run->col_depth<nv) run->depth=vals[run->col_depth];
+                     if(run->col_residence_time>=0 && run->col_residence_time<nv) run->residence_time=vals[run->col_residence_time];
+                     if(run->col_export_attn>=0 && run->col_export_attn<nv) run->export_attn=vals[run->col_export_attn];
+                     if(run->col_export_gamma>=0 && run->col_export_gamma<nv) run->export_gamma=vals[run->col_export_gamma];
+                     if(run->col_export_magg>=0 && run->col_export_magg<nv) run->export_magg=vals[run->col_export_magg];
+                     if(run->col_gravity>=0 && run->col_gravity<nv) run->gravity=vals[run->col_gravity];
+             }
+             /* TEMP_ON_MORT (env, default 1): whether temperature scales background mortality.
+                =0 -> temperature drives FEEDING only; mu_0 held at base. Rationale: the model does
+                not resolve metabolic maintenance costs (respiration) or their temperature response,
+                so mu_0*tempeff is a lone, unbalanced "cost of warmth"; feeding has a clean
+                encounter-rate justification, mortality does not. Read once. */
+             static int tom = -1;
+             if(tom < 0){ char *e = getenv("TEMP_ON_MORT"); tom = e ? atoi(e) : 1; }
+             for(s=0 ; s<n ; s++){
+                     community->pelagic[s].A    = community->pelagic[s].A_base    * run->pel_tempeff;
+                     community->pelagic[s].mu_0 = tom ? community->pelagic[s].mu_0_base * run->pel_tempeff
+                                                      : community->pelagic[s].mu_0_base;
+             }
+             for(b=0 ; b<c ; b++){
+                     community->benthic[b].A    = community->benthic[b].A_base    * run->ben_tempeff;
+                     community->benthic[b].mu_0 = tom ? community->benthic[b].mu_0_base * run->ben_tempeff
+                                                      : community->benthic[b].mu_0_base;
+             }
+     }
+
      /*Used for calculating detritus updates*/
      double **temp_det_g;
      double **temp_det_mu;
@@ -2572,9 +2722,33 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                                         timestep stability limit on the detritus pool. */
                                      {
                                        double W0 = temp_detritus[k][l];
-                                       double In = community->detritus->g_values[k][l];        /* input rate I */
+                                       double In = community->detritus->g_values[k][l];        /* gross input rate I */
+                                       /* Dunne et al. (2007) eq.3 burial: a fraction of the incoming detrital
+                                          flux is buried (permanently lost) before joining the pool, EXACTLY as
+                                          sizemodel does: burial = input_w*(0.013+0.53*iw^2/(7+iw)^2) applied to
+                                          the model's native input_w. dbpmr's densities (like sizemodel's) are
+                                          per-VOLUME - anchored to the depth-averaged plankton concentration - so
+                                          input_w is a per-volume flux and the Dunne fraction is applied to it
+                                          DIRECTLY, with no areal (x depth) rescale, matching sizemodel. Burial is
+                                          OPT-IN: only when a `depth` forcing channel is supplied (col_depth>=0),
+                                          so existing runs without the forcing plugin keep their original dynamics. */
+                                       if(run->col_depth>=0){
+                                               double bfrac = 0.013 + 0.53*In*In/((7.0+In)*(7.0+In));
+                                               In = In * (1.0 - bfrac);                         /* net of burial   */
+                                       }
                                        double loss = community->detritus->mu_values[k][l];     /* = kappa*W0   */
                                        double kappa = (W0 > 1e-30) ? loss / W0 : 0.0;
+                                       /* Alternative/opt-in residence-time closure: a first-order loss W/tau on the
+                                          detritus POOL (remineralisation/export from the benthic layer), added to the
+                                          detritivory rate. Dimensionally clean in dbpmr's per-volume units - no areal
+                                          ambiguity - and the exact integrator below absorbs it (K = kappa + 1/tau, so
+                                          the equilibrium is W* = In/(kappa+1/tau); with negligible detritivory that is
+                                          the classic W* = In*tau). Supplied via the residence_time channel (yr); an
+                                          alternative to Dunne burial (Julia's commented CMIP5 variant made this loss
+                                          proportional to W). Off when the channel is absent or tau<=0. */
+                                       if(run->col_residence_time>=0 && run->residence_time>0.0){
+                                               kappa += 1.0/run->residence_time;
+                                       }
                                        if(kappa > 1e-30){
                                                double Wstar = In / kappa;
                                                community->detritus->w_values[k][l] = Wstar + (W0 - Wstar)*exp(-kappa*dt);
@@ -3141,30 +3315,83 @@ double g_ben(int species, int size, int xspace, int yspace, RUN *run, GRID *grid
 
 double g_det(int xspace, int yspace, RUN *run, GRID *grid, COMMUNITY *community)
 {
-     int i,s;
-     int n;
+     int i,s,b;
+     int n,c;
 
      n=run->no_pelagic;
-     
-     double ans=0;
-     
+     c=run->no_benthic;
+
+     double ans_surf=0;   /*surface-origin inputs (sink to the seafloor -> scaled by sinking_rate)*/
+     double ans_bed=0;    /*seafloor-origin inputs (dead benthos, already on the bed -> no sinking)*/
+
+     /* Size-dependent export closure (opt-in): when the export_attn channel is supplied, each
+        surface particle of ln-mass m reaches the seafloor with fraction
+          export(m) = exp( -export_attn * exp(-export_gamma*m) ),
+        from an allometric sinking speed w_s ~ mass^export_gamma and an attenuation number
+        export_attn = k(T)*z/w0 - so large carcasses/pellets sink faster and are recycled less
+        than small ones. Replaces the flat sinking_rate. Default (channel absent): flat export. */
+     int size_dep = (run->col_export_attn>=0);
+
      if(run->coupled_flag==1){
-             for(s=0 ; s<n ; s++){     
-                     /*This is the rate of det biomass in from pelagic defecation*/
-                     ans+=(community->pelagic[s].Ex_pla*community->pelagic[s].pla_total[xspace][yspace]+community->pelagic[s].Ex_pel*community->pelagic[s].pel_total[xspace][yspace]+community->pelagic[s].Ex_ben*community->pelagic[s].ben_total[xspace][yspace]);
+             for(s=0 ; s<n ; s++){
+                     /*Rate of det biomass in from pelagic defecation (faeces follow the
+                       temperature-scaled feeding, as sizemodel's defbypred does). Flat export uses
+                       the pre-summed *_total; size-dependent export reconstructs faeces per predator
+                       size (pla_bio/pel_bio/ben_bio) so export(m) can weight each size class.*/
+                     if(!size_dep){
+                             ans_surf+=(community->pelagic[s].Ex_pla*community->pelagic[s].pla_total[xspace][yspace]+community->pelagic[s].Ex_pel*community->pelagic[s].pel_total[xspace][yspace]+community->pelagic[s].Ex_ben*community->pelagic[s].ben_total[xspace][yspace]);
+                     }
                      for(i=community->pelagic[s].ipelmin ; i<(community->pelagic[s].ipelmax+1) ; i++){
-                             /*This is the rate of det biomass in from dead pelagic stuff*/
-                             ans+=community->pelagic[s].mu_0*exp(community->pelagic[s].beta*grid->m_values[i])*community->pelagic[s].u_values[i][xspace][yspace]*exp(grid->m_values[i])*grid->mstep;
-                             ans+=community->pelagic[s].mu_s*((log10(exp(grid->m_values[i]))-log10(exp(community->pelagic[s].pelmin)))/((log10(exp(community->pelagic[s].pelmax))+community->pelagic[s].epsilon)-log10(exp(grid->m_values[i]))))*community->pelagic[s].u_values[i][xspace][yspace]*exp(grid->m_values[i])*grid->mstep;
+                             /*Dead pelagic stuff. Use the BASE (un-temperature-scaled) background
+                               mortality: sizemodel removes temperature from the mortality feeding
+                               the detritus pool.*/
+                             double dead = community->pelagic[s].mu_0_base*exp(community->pelagic[s].beta*grid->m_values[i])*community->pelagic[s].u_values[i][xspace][yspace]*exp(grid->m_values[i])*grid->mstep
+                                         + community->pelagic[s].mu_s*((log10(exp(grid->m_values[i]))-log10(exp(community->pelagic[s].pelmin)))/((log10(exp(community->pelagic[s].pelmax))+community->pelagic[s].epsilon)-log10(exp(grid->m_values[i]))))*community->pelagic[s].u_values[i][xspace][yspace]*exp(grid->m_values[i])*grid->mstep;
+                             if(size_dep){
+                                     double faeces = (community->pelagic[s].Ex_pla*community->pelagic[s].pla_bio[i][xspace][yspace]+community->pelagic[s].Ex_pel*community->pelagic[s].pel_bio[i][xspace][yspace]+community->pelagic[s].Ex_ben*community->pelagic[s].ben_bio[i][xspace][yspace])*community->pelagic[s].u_values[i][xspace][yspace]*grid->mstep;
+                                     double me = fmax(grid->m_values[i], run->export_magg);   /*aggregation floor: small stuff sinks as marine snow*/
+                                     ans_surf += exp(-run->export_attn*exp(-run->export_gamma*me))*(faeces + dead);
+                             }else{
+                                     ans_surf += dead;
+                             }
+                     }
+                     /*Dead benthos (detritivore background + senescence mortality). These bodies
+                       are already on/in the seafloor, so they DO NOT get the sinking_rate factor -
+                       matching sizemodel's benthic terms outside the sinking_rate multiplier. Uses
+                       base (un-temperature-scaled) background mortality, as for the pelagic.*/
+                     for(b=0 ; b<c ; b++){
+                             for(i=community->benthic[b].ibenmin ; i<(community->benthic[b].ibenmax+1) ; i++){
+                                     ans_bed+=community->benthic[b].mu_0_base*exp(community->benthic[b].beta*grid->m_values[i])*community->benthic[b].u_values[i][xspace][yspace]*exp(grid->m_values[i])*grid->mstep;
+                                     ans_bed+=community->benthic[b].mu_s*((log10(exp(grid->m_values[i]))-log10(exp(community->benthic[b].benmin)))/((log10(exp(community->benthic[b].benmax))+community->benthic[b].epsilon)-log10(exp(grid->m_values[i]))))*community->benthic[b].u_values[i][xspace][yspace]*exp(grid->m_values[i])*grid->mstep;
+                             }
                      }
              }
      }
      for(i=community->plankton->iplamin ; i<(community->plankton->iplamax+1) ; i++){
-             /*This is the rate of det biomass in from dead plankton*/
-             ans+=community->plankton->mu_0*exp(community->plankton->beta*grid->m_values[i])*community->plankton->u_values[i][xspace][yspace]*exp(grid->m_values[i])*grid->mstep;
+             /*Rate of det biomass in from dead (sinking) plankton - surface origin*/
+             double pdead = community->plankton->mu_0*exp(community->plankton->beta*grid->m_values[i])*community->plankton->u_values[i][xspace][yspace]*exp(grid->m_values[i])*grid->mstep;
+             if(size_dep) ans_surf += exp(-run->export_attn*exp(-run->export_gamma*fmax(grid->m_values[i], run->export_magg)))*pdead;
+             else         ans_surf += pdead;
      }
-     
-     return(ans);
+
+     /*Surface-origin inputs sink: scale by the time-varying sinking_rate (= export ratio),
+       exactly as sizemodel multiplies its pelagic detritus inputs by sinking_rate[i]. Seafloor
+       (dead-benthos) inputs are added unscaled. Default sinking_rate 1.
+
+       REFERENCE-THICKNESS NOTE (matches sizemodel by design): DBPM densities are per-VOLUME,
+       but the pelagic groups are referenced to the productive column (min(depth,200) m) and the
+       benthic groups to the benthic-habitat layer (20 m) - the output areal conversions differ
+       accordingly (predators x min(depth,200), detritivores x 20). Here the two per-volume
+       fluxes are summed into the (20 m-referenced) detritus pool WITHOUT an inter-reference
+       conversion, so the sinking pelagic input is effectively under-weighted by ~min(depth,200)/20
+       (~8-10x). This is an inherent DBPM simplification, reproduced here identically to sizemodel
+       (its coupled input_w mixes the per-volume terms the same way); it is partly absorbed by the
+       search-volume calibration. A dimensionally-consistent alternative (areal-referenced sinking
+       + areal Dunne burial) would deviate from sizemodel and require recalibration - deliberately
+       not done.*/
+     /* size-dependent export already applied export(m) per size class inside ans_surf, so it
+        replaces the flat sinking_rate; otherwise scale the aggregated surface flux by sinking_rate */
+     return((size_dep ? ans_surf : run->sinking_rate * ans_surf) + ans_bed);
 }
 
 double mu_det(int xspace, int yspace, RUN *run, GRID *grid, COMMUNITY *community)
@@ -3325,8 +3552,48 @@ void calculate_fishing(RUN *run, GRID *grid, COMMUNITY *community)
                      }
              }
      }
+
+     /* DBPM.md gravity fishing (opt-in via the `gravity` channel): replace the static per-group
+        catchability split with the true B_{t-1} feedback. For each cell, scale each group's fishing
+        mortality by that group's CURRENT areal fishable-biomass share,
+          F_g = F_base * A_g/(A_pel+A_ben),  A_g = sum_{fished sizes} u*exp(m)*mstep * thickness
+        (pelagic x run->depth = min(depth,200) m from the depth channel; benthic x 20 m). The base F
+        read above is the un-split Q*selectivity*effort, so this yields catch_g ~ B_g^2 (effort
+        concentrates where biomass is). Runs per cell -> ready for gridded. */
+     if(run->col_gravity>=0){
+             double bhd=20.0;                 /* benthic habitat depth (sizemodel default) */
+             double dcorr=run->depth;         /* pelagic column thickness (depth channel; 1 if absent) */
+             for(k=0 ; k<x ; k++){
+                     for(l=0 ; l<y ; l++){
+                             double Bpel=0.0, Bben=0.0;
+                             for(s=0 ; s<n ; s++){
+                                     if(community->pelagic[s].fishing_flag!=1) continue;
+                                     for(i=community->pelagic[s].ipelmin ; i<(community->pelagic[s].ipelmax+1) ; i++)
+                                             if(community->pelagic[s].mu_fish_values[i][k][l]>0.0)
+                                                     Bpel += community->pelagic[s].u_values[i][k][l]*exp(grid->m_values[i])*grid->mstep;
+                             }
+                             for(b=0 ; b<c ; b++){
+                                     if(community->benthic[b].fishing_flag!=1) continue;
+                                     for(i=community->benthic[b].ibenmin ; i<(community->benthic[b].ibenmax+1) ; i++)
+                                             if(community->benthic[b].mu_fish_values[i][k][l]>0.0)
+                                                     Bben += community->benthic[b].u_values[i][k][l]*exp(grid->m_values[i])*grid->mstep;
+                             }
+                             double Ap=Bpel*dcorr, Ab=Bben*bhd, tot=Ap+Ab;
+                             double sp = (tot>0.0) ? Ap/tot : 0.5;
+                             double sb = (tot>0.0) ? Ab/tot : 0.5;
+                             for(s=0 ; s<n ; s++)
+                                     if(community->pelagic[s].fishing_flag==1)
+                                             for(i=community->pelagic[s].ipelmin ; i<(community->pelagic[s].ipelmax+1) ; i++)
+                                                     community->pelagic[s].mu_fish_values[i][k][l] *= sp;
+                             for(b=0 ; b<c ; b++)
+                                     if(community->benthic[b].fishing_flag==1)
+                                             for(i=community->benthic[b].ibenmin ; i<(community->benthic[b].ibenmax+1) ; i++)
+                                                     community->benthic[b].mu_fish_values[i][k][l] *= sb;
+                     }
+             }
+     }
 }
-                                                             
+
 void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
 {
      int i,k,l,s,b;
@@ -3377,6 +3644,20 @@ void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
                                              ben+=community->pelagic[s].ben_bio[i][k][l]*community->pelagic[s].u_values[i][k][l]*grid->mstep;
                                      }
                                      community->pelagic[s].reproduction[k][l]=((community->pelagic[s].R_pla*pla+community->pelagic[s].R_pel*pel+community->pelagic[s].R_ben*ben)*grid->tstep)/(grid->mstep*exp(community->pelagic[s].pelmin));
+                                     /*Connectivity/immigration floor (0-D): recruitment cannot fall below imm_frac of the
+                                       unfished-peak recruitment (external larval subsidy for open oligotrophic systems). rec0
+                                       tracks the running peak of NATURAL recruitment, frozen the instant the floor first binds,
+                                       so the subsidy can never inflate its own reference (no positive feedback).*/
+                                     if(community->pelagic[s].imm_frac>0){
+                                             if(!community->pelagic[s].rec0_frozen &&
+                                                community->pelagic[s].reproduction[k][l]>community->pelagic[s].rec0)
+                                                     community->pelagic[s].rec0=community->pelagic[s].reproduction[k][l];
+                                             double fl=community->pelagic[s].imm_frac*community->pelagic[s].rec0;
+                                             if(community->pelagic[s].reproduction[k][l]<fl){
+                                                     community->pelagic[s].reproduction[k][l]=fl;
+                                                     community->pelagic[s].rec0_frozen=1;
+                                             }
+                                     }
                              }
                      }
              }
