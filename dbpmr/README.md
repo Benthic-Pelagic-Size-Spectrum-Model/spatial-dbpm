@@ -33,6 +33,13 @@ Plus cell **area** (m²) for aggregating per-cell densities. Derivations: `inter
 biomass-weighted method; the standard method can instead use the ESM's vertically-integrated
 `phyc-vint`/`phypico-vint` (mol m⁻²) with surface `tos`.
 
+## Citation and references
+
+When using dbpmr, please cite the underlying DBPM model. For the full list of DBPM
+publications, previous model versions, and related extensions, see the project homepage:
+
+**https://benthic-pelagic-size-spectrum-model.github.io/**
+
 ## Legacy package name
 
 This package was historically named `SizeSpectra` and has been renamed to `dbpmr` for consistency with DBPM usage.
