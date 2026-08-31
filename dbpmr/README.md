@@ -8,6 +8,59 @@ R implementation of the Dynamic Benthic Pelagic Model (DBPM) with spatial size-s
 drive the size-structured dynamics of pelagic predators and benthic detritivores, shaping biomass flows,
 fish production, and ecosystem responses.*
 
+## Installation
+
+Installing from source compiles the bundled C engine, so a **C toolchain** is
+required (Rtools on Windows, Xcode command-line tools on macOS, `r-base-dev` on
+Debian/Ubuntu). Install straight from GitHub — note the package lives in the
+`dbpmr/` sub-directory of the repository:
+
+```r
+# install.packages("remotes")
+remotes::install_github(
+  "Benthic-Pelagic-Size-Spectrum-Model/spatial-dbpm",
+  subdir = "dbpmr"
+)
+```
+
+See the [repository README](https://github.com/Benthic-Pelagic-Size-Spectrum-Model/spatial-dbpm#installation)
+for local-clone installation and full system requirements.
+
+## Quick start
+
+A minimal, aspatial (0-D) coupled benthic–pelagic run with one pelagic and one
+benthic species, reading the results back and plotting the final pelagic size
+spectrum. Output files are written under a new `MyRun/` directory.
+
+```r
+library(dbpmr)
+
+setwd(tempdir())   # the model writes output files to the working directory
+
+# 1. Configure the run and the mass/time grid
+run  <- Setup.Run("MyRun", no_pelagic = 1, no_benthic = 1,
+                  spatial_dim = 0, coupled_flag = TRUE, diff_method = 1)
+grid <- Setup.Grid(run, tmax = 10)          # integrate for 10 years
+
+# 2. Configure the plankton resource, the two species and the detritus pool
+plankton <- Setup.Plankton(run, filename = "plankton")
+pelagic  <- Setup.Pelagic(run,  filename = "fish")
+benthic  <- Setup.Benthic(run,  filename = "benthos")
+detritus <- Setup.Detritus(run, filename = "detritus")
+
+# 3. Run the simulation (calls the C engine; writes output under MyRun/)
+files <- SizeSpectrum(run, grid, plankton, pelagic, benthic, detritus)
+
+# 4. Read the pelagic results back and plot the final size spectrum
+fish <- Read.In("MyRun", "fish")
+snap <- Extract.Time(fish, time = max(fish@trange))
+Plot.Spectrum(snap, type = "l",
+              xlab = "log body mass", ylab = "log abundance",
+              main = "Pelagic size spectrum")
+```
+
+See `vignette("dbpmr")` for a fuller walk-through.
+
 ## Forcing inputs (Earth System Model variables)
 
 DBPM is driven by outputs from an Earth System Model (ESM; e.g. GFDL-MOM6-COBALT2 in ISIMIP3a/FishMIP,
