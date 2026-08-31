@@ -31,15 +31,48 @@ and the submodule's R deps (arrow, dplyr, …).
 ## Status
 - [x] Submodule import + `engine=` switch runs both engines on one LME (aspatial,
       stable-spin, no fishing). **Proven** (LME-14). — `tier1_engine_swap.R`
-- [x] **Fishing + single-Q transient calibration** — `F=Q·s(x)·effort_norm(t)`,
+- [x] **Fishing + single-Q transient calibration** — `F_g=Q·s(x)·(B_g/ΣB)·effort_norm(t)`,
       knife-edge at 10 g, effort normalised [0,1], catch-time-series log-MSE
-      objective, `Q∈[0,3]`, `A=64` fixed. **Proven** (LME-14: `optimise` 13 evals,
-      `Q=0.018`, catch-time-series corr 0.95). — `tier1_fishing_calib.R`
-- [ ] Time-varying **environmental** forcing (temperature/plankton) — currently
-      held constant; needs the in-memory column driver (#5/#11).
-- [ ] Reconcile magnitudes vs sizemodel (apply ln(10) PR #14 to submodule +
-      density convention) — for like-for-like comparison (not required to run).
-- [ ] Gravity effort split across groups (∝ biomass) + creep + sectors (DBPM.md).
+      objective, `Q∈[0,3]`, `A=64` fixed. — `tier1_fishing_calib.R`
+- [x] **Gravity effort split across groups** (∝ fishable biomass, DBPM.md):
+      effort split pel/ben by share, `F_g=Q·(B_g/ΣB)·s(x)·effort`.
+      **Proven** (LME-14: shares 0.93/0.07). — `tier1_fishing_calib.R`
+- [x] **Environmental forcing PLUGIN** (#11) — NEW dbpmr C-engine forcing driver:
+      auto-detected `<run>/Input/forcing_ts.txt` with a **header-named channel** line
+      + one row per timestep, read each step. Channels (extensible — add a column):
+      `pel_tempeff`/`ben_tempeff` scale feeding `A` + background mortality `mu_0`
+      from stored base values (as sizemodel's `pel/ben_tempeffect`; senescence/fishing
+      unscaled); `sinking_rate` scales surface-origin detritus inputs in `g_det`
+      (detritus mortality kept un-temperatured, per sizemodel); `depth` enables the
+      Dunne-2007 burial loss (opt-in — absent ⇒ original detritus dynamics). Plankton
+      stays on the `ts_flag` spectrum input. All fed from obsclim (`tos`/`tob`,
+      `export_ratio`, `intercept`/`slope`) + `depth`→`pref_benthos=0.8·exp(-depth/250)`.
+      Verified: constant temp channel reproduces folded `A=S·pt`; `sinking_rate<1` and
+      burial lower benthos; unit tests in `test-temperature.R`. **Proven** (LME-14:
+      `Q=0.095`, catch corr 0.95). — `dbpmr/src/SizeSpectra.c`, `tier1_fishing_calib.R`
+- [x] **Full detritus match to sizemodel** — `g_det` now adds dead benthos (background +
+      senescence mortality, NO sinking — already on the bed) alongside the sinking
+      surface inputs, and the pool loses the Dunne-2007 burial fraction. Both engines
+      now use the same detritus forcings. — `dbpmr/src/SizeSpectra.c`
+- [x] **Engine adapter uses the same forcings** — `dbpmr_engine.R` sets
+      `pref_benthos` from depth and writes a constant `sinking_rate`/`depth`
+      `forcing_ts.txt` (stable-spin), so the engine-swap comparison is like-for-like on
+      the environment. — `dbpmr_engine.R`
+- [x] **ln-vs-log10 units audited/fixed** — (a) plankton intercept is per-log10;
+      dbpmr wants per-ln, so `u_0=10^intercept/ln10` (was 2.3× too high);
+      (b) engine biomass integral had a spurious ×ln(10). Verified against the C
+      engine's own integrals (SizeSpectra.c:2263/2293/2336). — `dbpmr_engine.R`
+- [x] **Per-volume units + reference thickness reconciled** — DBPM state is
+      per-VOLUME (g m⁻³; the plankton intercept is a depth-weighted-mean
+      concentration). Output areal conversion matches sizemodel exactly: predators
+      ×`min(depth,200)`, detritivores ×`20` (`useful_functions.R:793-814`). The
+      coupled detritus `input_w` mixes pelagic-(≤200 m) and benthic-(20 m)
+      per-volume fluxes without an inter-reference conversion — an inherent DBPM
+      simplification (~8-10× under-weight of the sinking pelagic input) reproduced
+      **identically to sizemodel by design**; documented in `g_det`. A
+      dimensionally-consistent mode was considered and deliberately not adopted
+      (would deviate from sizemodel + need recalibration).
+- [ ] Gravity refinements: creep (annual Q increase) + sectors (DBPM.md).
 - [ ] Fold `engine=` / the calibration into the LME repo as a PR (#24).
 
 ## Scope
