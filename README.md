@@ -187,6 +187,10 @@ size-spectrum model described in:
 
 Run `citation("dbpmr")` for these references in BibTeX form.
 
+For the full list of DBPM publications, previous model versions, and related model
+extensions, see the project homepage:
+<https://benthic-pelagic-size-spectrum-model.github.io/>.
+
 ## Authors
 
 Julia Blanchard and Matthew Castle.
