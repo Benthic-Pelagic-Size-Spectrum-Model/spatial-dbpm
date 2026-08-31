@@ -2,6 +2,12 @@
 
 R implementation of the Dynamic Benthic Pelagic Model (DBPM) with spatial size-spectrum capabilities.
 
+<img src="man/figures/DBPM-0-01.svg" alt="DBPM model diagram" width="100%">
+
+*Schematic of the Dynamic Benthic-Pelagic Size Spectrum Model (DBPM): environmental inputs (top left)
+drive the size-structured dynamics of pelagic predators and benthic detritivores, shaping biomass flows,
+fish production, and ecosystem responses.*
+
 ## Forcing inputs (Earth System Model variables)
 
 DBPM is driven by outputs from an Earth System Model (ESM; e.g. GFDL-MOM6-COBALT2 in ISIMIP3a/FishMIP,
