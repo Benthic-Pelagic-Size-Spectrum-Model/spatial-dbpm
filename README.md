@@ -13,6 +13,12 @@ benthic organisms are treated as sedentary. See [References](#references).
 
 The R package lives in the [`dbpmr/`](dbpmr) directory.
 
+<img src="dbpmr/man/figures/DBPM-0-01.svg" alt="DBPM model diagram" width="100%">
+
+*Schematic of the coupled benthic–pelagic size-spectrum model: a pelagic
+predator spectrum and a benthic detritivore spectrum, linked through predation
+and a shared detritus pool, forced by plankton and temperature.*
+
 ## Installation
 
 Installing from source compiles the bundled C engine, so a C toolchain is
