@@ -1,0 +1,216 @@
+---
+title: "Running the gridded model for a region using FishMIP inputs (Kerguelen)"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Running the gridded model for a region using FishMIP inputs (Kerguelen)}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 7, fig.height = 4.5,
+                      fig.align = "center")
+```
+
+This vignette shows how to drive `dbpmr` **cell by cell over a region**, forced by
+FishMIP Earth System Model (ESM) inputs. The worked example is the **Kerguelen
+Plateau** (a sub-Antarctic FishMIP regional-model domain in the Indian sector of
+the Southern Ocean). Each 1° cell runs an independent coupled benthic–pelagic
+size-spectrum model driven by its own local plankton spectrum and temperature.
+
+To keep the example self-contained and laptop-friendly it is **unfished**: it maps
+the equilibrium biomass the ESM forcing supports, with no fishing or calibration.
+Adding fishing effort and calibrating catchability is a further step — see
+*Going further* at the end.
+
+## 1. Where the inputs come from
+
+Two ingredients define a regional run:
+
+* **The region boundary.** FishMIP publishes a shapefile of all regional-model
+  domains at [Fish-MIP/FishMIP_regions](https://github.com/Fish-MIP/FishMIP_regions)
+  (`outputs/FishMIP_regional_models.zip`). We used the **"Kerguelen Mizer"**
+  polygon and kept the 1° cell centres inside it — **84 cells**.
+* **The ESM forcing.** Per-region gridded forcing (temperature, phytoplankton
+  carbon, export, …) can be downloaded from the
+  [FishMIP Regional Climate Forcing Data Explorer](https://fishmip.global-ecosystem-model.cloud.edu.au/shiny/FishMIP_Input_Explorer/)
+  (gridded `.zarr` for 3-D variables, tabular `.parquet` for summaries), or taken
+  directly from the ISIMIP3a GFDL-MOM6-COBALT2 obsclim outputs.
+
+From those raw fields we derive, **per cell and per month**, the two things the
+engine needs as plankton forcing — the size-spectrum **intercept** and **slope** —
+plus the **experienced** (vertically biomass-weighted) water-column temperature,
+the sea-floor temperature, and the export ratio. That processing is summarised
+below (not run here; it needs the full ESM netCDFs) and is described in full in
+the package's gridded workflow:
+
+```{r eval = FALSE}
+# Sketch of the offline forcing build (per cell, per month), from the ESM fields:
+#   intercept, slope <- GetPPIntSlope(<phyc>, <phypico>)   # <.> = vertical biomass-weighted mean, 0-200 m
+#   texp             <- <thetao>                            # phyc-weighted experienced temperature
+#   tob              <- sea-floor temperature
+#   export           <- expc-bot / intpp
+# The result is one row per (cell, year, month) — exactly what we bundle below.
+```
+
+The processed forcing for Kerguelen ships with the package so this vignette runs
+without any downloads.
+
+## 2. Load the bundled example inputs
+
+```{r}
+library(dbpmr)
+
+ex     <- function(f) system.file("extdata", f, package = "dbpmr")
+cells  <- read.csv(ex("kerguelen_cells.csv"))                 # lon, lat, depth (m)
+forc   <- readRDS(ex("kerguelen_forcing.rds"))                # per cell x month forcing
+params <- jsonlite::fromJSON(ex("kerguelen_biology_params.json"))$params  # global biology constants
+
+nrow(cells)                                                   # 84 cells
+range(forc$year)                                              # 1961-2010, monthly
+head(forc, 3)
+```
+
+Each cell's forcing is a monthly series; we reshape it into `months × cells`
+matrices for convenient indexing.
+
+```{r}
+ckey <- paste(round(forc$lon), round(forc$lat))
+cid  <- match(paste(round(cells$lon), round(cells$lat)), unique(ckey))
+nmo  <- nrow(forc) / nrow(cells)
+mat  <- function(v) matrix(forc[[v]], nmo, nrow(cells))
+Pint <- mat("intercept"); Pslp <- mat("slope"); Ptex <- mat("texp")
+Ptob <- mat("tob");       Pexp <- mat("export")
+yr1  <- 1:12                                                   # first-year month columns
+```
+
+## 3. A single-cell run
+
+The helper below runs **one cell**, unfished, for `nyr` years, driven by that
+cell's 12 monthly forcing values. It is a thin wrapper around the standard
+`Setup.*` → `SizeSpectrum()` calls: a plankton spectrum whose intercept/slope come
+from the forcing (`ts_flag = TRUE`), a temperature/`export` forcing table, and one
+pelagic + one benthic size class. Passing a `state` warm-restarts from a previous
+year.
+
+```{r}
+LN10 <- log(10)
+Sys.setenv(PEL_IMM_FRAC = "0.15")        # connectivity/recruitment floor (engine env var)
+ascl <- 1/3; mu0s <- 0.5                 # search-volume scaling A/3, natural-mortality scaling
+dh <- params$defecate_prop; dl <- params$def_low
+Kp <- (1-dh)*params$growth_pred; Rp <- (1-dh)*(1-(params$growth_pred+params$energy_pred)); Ep <- (1-dh)*params$energy_pred
+Kl <- (1-dl)*params$growth_detritivore; Rl <- (1-dl)*(1-(params$growth_detritivore+params$energy_detritivore)); El <- (1-dl)*params$energy_detritivore
+te <- function(T) exp(params$c1 - params$activation_energy/(params$boltzmann*(T+273)))
+
+run_cell <- function(depth, cint, cslp, ctex, ctob, cexp, nyr, state = NULL) {
+  wd <- tempfile("cell"); dir.create(wd); old <- setwd(wd)
+  on.exit({ setwd(old); unlink(wd, recursive = TRUE, force = TRUE) }, add = TRUE)
+  dcorr <- min(depth, 200); prefben <- 0.8 * exp(-depth/1500)
+  mon   <- function(t) (floor(t*12) %% 12) + 1
+  plfun <- function(m, t, x, y) { j <- mon(t); (10^cint[j]/LN10) * exp(cslp[j]*m) }
+  run  <- Setup.Run("R", 1, 1, 0, TRUE, 1)
+  grid <- Setup.Grid(run, tmax = nyr, tstep = 1/48, toutstep = 1)
+  pl   <- Setup.Plankton(run, filename = "plankton", lambda = cslp[1], ts_flag = TRUE)
+  Setup.ts(pl, run, grid, func = plfun)
+  pe <- Setup.Pelagic(run, filename = "fish", mmin = -3*LN10, mmat = 2*LN10, mmax = 6*LN10,
+                      alpha = params$metabolic_req_pred, A = 64*ascl, mu_0 = params$natural_mort*mu0s,
+                      pref_ben = prefben, K_pla = Kp, R_pla = Rp, Ex_pla = Ep, K_pel = Kp, R_pel = Rp,
+                      Ex_pel = Ep, K_ben = Kl, R_ben = Rl, Ex_ben = El, rep_method = 2, fishing_flag = FALSE)
+  be <- Setup.Benthic(run, filename = "benthos", mmin = -3*LN10, mmat = 1*LN10, mmax = 4*LN10,
+                      alpha = params$metabolic_req_detritivore, A = 6.4*ascl, mu_0 = params$natural_mort*mu0s,
+                      K_det = Kl, R_det = Rl, Ex_det = El, rep_method = 2, fishing_flag = FALSE)
+  de <- Setup.Detritus(run, filename = "detritus")
+  din <- file.path("R", "Input"); dir.create(din, showWarnings = FALSE, recursive = TRUE)
+  nst <- round(nyr/(1/48)) + 2; jm <- ((floor(seq_len(nst)*(1/48)*12)) %% 12) + 1
+  writeLines(c("pel_tempeff,ben_tempeff,sinking_rate,depth",
+               sprintf("%.8g,%.8g,%.8g,%.8g", te(ctex[jm]), te(ctob[jm]), pmax(cexp[jm], 0), dcorr)),
+             file.path(din, "forcing_ts.txt"))
+  if (!is.null(state)) { pe@initial_flag <- TRUE; be@initial_flag <- TRUE; de@initial_flag <- TRUE
+    writeLines(paste(state$U, collapse = ","), file.path(din, "fish_ts.txt"))
+    writeLines(paste(state$V, collapse = ","), file.path(din, "benthos_ts.txt"))
+    writeLines(paste(state$W, collapse = ","), file.path(din, "detritus_ts.txt")) }
+  invisible(utils::capture.output(SizeSpectrum(run, grid, pl, pe, be, de)))
+  f <- Read.In("R", "fish"); b <- Read.In("R", "benthos"); d <- Read.In("R", "detritus")
+  m <- f@mrange; dm <- diff(m)[1]
+  U <- as.numeric(f@finaluvals[1, -(1:3)]); V <- as.numeric(b@finaluvals[1, -(1:3)]); W <- tail(as.numeric(d@biomass), 1)
+  list(state = list(U = U, V = V, W = W), m = m, U = U, V = V,
+       BU = sum(U*exp(m)*dm)*dcorr, BV = sum(V*exp(m)*dm)*20)   # depth-integrated pelagic / benthic biomass
+}
+```
+
+Let's spin a handful of cells (a north–south transect) to equilibrium and look at
+the pelagic and benthic biomass they support:
+
+```{r}
+sel <- cells[order(cells$lat), ][round(seq(1, nrow(cells), length.out = 5)), ]
+demo <- lapply(seq_len(nrow(sel)), function(i) {
+  co <- which(round(cells$lon) == round(sel$lon[i]) & round(cells$lat) == round(sel$lat[i]))[1]
+  run_cell(cells$depth[co], Pint[yr1, co], Pslp[yr1, co], Ptex[yr1, co], Ptob[yr1, co], Pexp[yr1, co],
+           nyr = 25)
+})
+data.frame(lon = sel$lon, lat = sel$lat, depth = round(sel$depth),
+           pelagic_B = round(sapply(demo, `[[`, "BU"), 1),
+           benthic_B = round(sapply(demo, `[[`, "BV"), 1))
+```
+
+Running all 84 cells and stepping them through the full 1961–2010 monthly forcing
+(warm-restarting each year) is the same call in a loop — it takes a few minutes on
+a laptop. We ship the finished output so the maps below render instantly.
+
+## 4. Region result
+
+```{r fig.height = 4}
+res <- readRDS(ex("kerguelen_run_result.rds"))
+ce  <- res$cells
+
+par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+draw <- function(z, ttl) {
+  pal <- hcl.colors(64, "YlGnBu", rev = TRUE)
+  plot(ce$lon, ce$lat, pch = 15, cex = 2.2, col = pal[as.integer(cut(z, 64))],
+       xlab = "Longitude", ylab = "Latitude", main = ttl)
+  points(c(69.2, 73.5), c(-49.3, -53.1), pch = 17)            # Kerguelen & Heard Is.
+}
+draw(ce$BU_recent, "Pelagic biomass")
+draw(ce$BV_recent, "Benthic biomass")
+```
+
+Pelagic biomass peaks over the **northern plateau** near the islands — where the
+ESM forcing carries the most phytoplankton — and declines into the colder, less
+productive south.
+
+```{r fig.height = 4}
+par(mfrow = c(1, 1), mar = c(4, 4, 2, 1))
+matplot(res$yrs, cbind(colMeans(res$BU, na.rm = TRUE), colMeans(res$BV, na.rm = TRUE)),
+        type = "l", lty = 1, lwd = 2, col = c("#1f78b4", "#b2570b"),
+        xlab = "Year", ylab = expression("Regional mean biomass (g m"^-2*")"))
+legend("right", c("Pelagic predators", "Benthic detritivores"),
+       col = c("#1f78b4", "#b2570b"), lwd = 2, bty = "n")
+```
+
+And the size spectra the model produces in a productive (northern) versus a
+cooler (southern) cell:
+
+```{r fig.height = 4}
+ok <- which(vapply(res$spec, is.list, logical(1)))
+iN <- ok[which.max(ce$lat[ok])]; iS <- ok[which.min(ce$lat[ok])]
+sN <- res$spec[[iN]]; sS <- res$spec[[iS]]
+plot(sN$m/LN10, log10(pmax(sN$U, 1e-30)), type = "l", lwd = 2, col = "#1f78b4", ylim = c(-30, 5),
+     xlab = expression(log[10]~"body mass (g)"), ylab = expression(log[10]~"abundance density"))
+lines(sN$m/LN10, log10(pmax(sN$V, 1e-30)), lwd = 2, col = "#b2570b")
+lines(sS$m/LN10, log10(pmax(sS$U, 1e-30)), lwd = 2, lty = 2, col = "#1f78b4")
+lines(sS$m/LN10, log10(pmax(sS$V, 1e-30)), lwd = 2, lty = 2, col = "#b2570b")
+legend("topright", c("pelagic (north)", "benthic (north)", "pelagic (south)", "benthic (south)"),
+       col = c("#1f78b4", "#b2570b", "#1f78b4", "#b2570b"), lty = c(1, 1, 2, 2), lwd = 2, bty = "n", cex = 0.85)
+```
+
+## Going further
+
+* **Fishing & calibration.** This run is unfished. A calibrated run adds gridded
+  fishing effort (redistributed across cells by a spatial-gravity model) and fits
+  catchability `q` so aggregated modelled catch matches observations. That full
+  pipeline — per-cell forcing → LME-centering → gridded `q` calibration → fished
+  run — is documented in the package's gridded workflow (`GRIDDED_WORKFLOW.md`).
+* **Another region.** Swap in any FishMIP regional boundary from
+  [Fish-MIP/FishMIP_regions](https://github.com/Fish-MIP/FishMIP_regions), pull its
+  forcing from the [FishMIP Input Explorer](https://fishmip.global-ecosystem-model.cloud.edu.au/shiny/FishMIP_Input_Explorer/),
+  and reuse exactly the `run_cell()` loop above.
