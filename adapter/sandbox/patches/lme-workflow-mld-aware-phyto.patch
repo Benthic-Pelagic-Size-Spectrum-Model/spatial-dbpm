@@ -1,0 +1,195 @@
+diff --git a/scripts/00_processing_dbpm_global_inputs.py b/scripts/00_processing_dbpm_global_inputs.py
+index 112bf57..fe7225c 100644
+--- a/scripts/00_processing_dbpm_global_inputs.py
++++ b/scripts/00_processing_dbpm_global_inputs.py
+@@ -34,7 +34,10 @@ if __name__ == '__main__':
+     resolutions = ['1deg', '025deg']
+ 
+     #Define variables of interest
+-    dbpm_var = ['phyc', 'phypico', 'siconc', 'deptho', 'expc-bot', 'tob', 'tos']
++    # mlotst-0125 (mixed-layer depth, 0.125 kg m-3 criterion) is required by the
++    # MLD-aware phyto averaging in integrating_phyto()/get_threshold_depth().
++    dbpm_var = ['phyc', 'phypico', 'siconc', 'deptho', 'expc-bot', 'tob', 'tos',
++                'mlotst-0125']
+     
+     #Loop through experiments and resolutions
+     for res in resolutions:
+@@ -81,8 +84,14 @@ if __name__ == '__main__':
+                 os.path.join(gfdl_out, base_fn.replace('_var_', '_input-w20m_')), 
+                 consolidated = True, mode = 'w')
+ 
+-            # Vertically integrate phytoplankton inputs up to threshold depth
+-            phyc, phypico = uf.integrating_phyto(gfdl_out, exp, thresh_depth = 200)
++            # Reduce the depth-resolved phyto to a per-cell concentration.
++            # averaging: 'biomass_weighted' (recommended - de-biased, threshold-free,
++            # matches a food-tracking vertical migrator) | 'mld' | 'cumulative90' |
++            # 'fixed200' (legacy). Output file name kept ('*-vint200m') for
++            # compatibility with getExportRatio/GetPPIntSlope, though the content is
++            # now the chosen concentration, not a 0-200 m integral.
++            phyc, phypico = uf.integrating_phyto(gfdl_out, exp, thresh_depth = 200,
++                                                 averaging = 'biomass_weighted')
+             #Save outputs
+             phyc.to_zarr(
+                 os.path.join(gfdl_out, base_fn.replace('_var_', '_phyc-vint200m_')), 
+@@ -132,7 +141,7 @@ if __name__ == '__main__':
+                 #lowest latitude area where sea ice forms each winter according to NASA's 
+                 #Earth Observatory
+                 da_mask_north = (xr.where(da_mask.lat > 42, da_mask, False).
+-                    isel(lat = slice(None, None, -1)).cumsum('lat')))
++                    isel(lat = slice(None, None, -1)).cumsum('lat'))
+                 #Sea ice kept from 52S towards the south pole as 55S is the lowest latitude area
+                 # where sea ice forms each winter according to NASA's Earth Observatory
+                 da_mask_south = xr.where(da_mask.lat <= -52, da_mask, False).cumsum('lat')
+diff --git a/scripts/useful_functions.R b/scripts/useful_functions.R
+index 2ef902b..57c9d13 100644
+--- a/scripts/useful_functions.R
++++ b/scripts/useful_functions.R
+@@ -86,9 +86,16 @@ sizeparam <- function(dbpm_inputs, fishing_params, dx = 0.1, xmin = -12,
+     
+     # set predator coupling to benthos, depth dependent - 0.75 above 500 m, 0.5
+     # between 500-1800 and 0 below 	1800m (suggestions of values from Clive
+-    # Trueman based on stable isotope work, and proportion of biomass, 	Rockall 
++    # Trueman based on stable isotope work, and proportion of biomass, 	Rockall
+     # Trough studies) (pref.ben)
+-    param$pref_benthos <- 0.8*exp(-1/250*param$depth)
++    # The decay length is a vertical-MIGRATION scale (~1500 m: mesopelagic + deep
++    # migrators), NOT the passive sinking length. The former 0.8*exp(-depth/250)
++    # reused the sinking attenuation length, giving ~0 coupling by 1 km (0.14 at
++    # 500 m, 7e-4 at 1800 m) - contradicting the Trueman values above and
++    # collapsing the whole pelagic spectrum in deep LMEs (it is the only benthic
++    # food subsidy holding a low-productivity pelagic above its persistence
++    # threshold). /1500 gives 0.57 at 500 m, 0.24 at 1800 m, 0.08 at 3437 m.
++    param$pref_benthos <- 0.8*exp(-1/1500*param$depth)
+     
+     # preference for pelagic prey (pref.pel)
+     param$pref_pelagic <- 1-param$pref_benthos 
+diff --git a/scripts/useful_functions.py b/scripts/useful_functions.py
+index 02cd353..eb97508 100644
+--- a/scripts/useful_functions.py
++++ b/scripts/useful_functions.py
+@@ -405,47 +405,92 @@ def detrital_input_seafloor(folder_gridded_data, gfdl_exp, benthic_habitat_depth
+     
+ 
+ # Integrating (mean) phytoplankton inputs to threshold depth
+-def integrating_phyto(folder_gridded_data, gfdl_exp, thresh_depth = 200):
++def integrating_phyto(folder_gridded_data, gfdl_exp, thresh_depth = 200,
++                      averaging = 'biomass_weighted'):
+     '''
++    Reduce the depth-resolved phytoplankton profiles (total `phyc`, small
++    `phypico`) to one per-cell, per-timestep concentration each (mol m-3), used to
++    anchor the DBPM plankton size-spectrum slope + intercept.
++
+     Inputs:
+-    - folder_gridded_data (character) File path pointing to folder containing
+-    zarr files with vertically resolved phytopklankton outputs (`phyc` and `phypico`) 
+-    from GFDL
+-    - gfdl_exp (character) Select GFDL experiment 'ctrl_clim' or 'obs_clim'
+-    - thresh_depth (numeric) Default is 200 (m) Maximum depth in meters to be considered 
+-    when processing DBPM phytoplankton inputs
++    - folder_gridded_data (character) Folder with the phyc, phypico and thkcello zarr.
++    - gfdl_exp (character) 'obsclim' or 'ctrlclim'.
++    - thresh_depth (numeric) Default 200 m. Cap used by the 'fixed200'/'mld' modes.
++    - averaging (character) Default 'biomass_weighted'. How to collapse the depth
++      dimension (see below).
++
++    The averaging DEPTH is the key lever. A fixed `thresh_depth` (200 m) weights
++    every metre equally, so phyto-poor water below the euphotic zone dilutes deep,
++    productive columns - deep LMEs then look ~10x more oligotrophic than shallow
++    ones (corr(depth, intercept) ~ -0.45) and their pelagic under-produces. BOTH
++    size fractions are reduced with the SAME depth weight, so their ratio - which
++    sets the spectrum slope in GetPPIntSlope (lphy = phyc - phypico) - and the
++    intercept stay consistent.
++
++    averaging:
++      'fixed200'         thickness-weighted mean over the top thresh_depth
++                         (legacy behaviour; depth-biased).
++      'mld'              thickness-weighted mean over the mixed layer
++                         (get_threshold_depth). De-biases but truncates a DCM.
++      'cumulative90'     mean over the layer holding 90% of the column-integrated
++                         TOTAL phyto biomass (threshold-free productive layer).
++      'biomass_weighted' (default) TOTAL-phyto-biomass-weighted mean concentration
++                         over the whole column:
++                           phyc    -> sum(phyc^2 * thk)     / sum(phyc * thk)
++                           phypico -> sum(phypico*phyc*thk) / sum(phyc * thk)
++                         = (column biomass) / (effective productive thickness
++                         H_eff = (int phyc)^2 / int phyc^2). Threshold- and
++                         light-free; the common (total-phyto) weight keeps small
++                         and large fractions on the same layer. Best matches the
++                         food density a vertically-migrating, food-tracking pelagic
++                         forager experiences - captures surface + deep chlorophyll
++                         maximum, ignores phyto-poor water it passes through but
++                         does not feed in.
+ 
+     Outputs:
+-    - phyc (data array) Contains integrated phytoplankton values up to threshold depth.
+-    - phypico (data array) Contains integrated picophytoplankton values up to threshold
+-    depth.
++    - phyc_weighted, phypico_weighted (data arrays, mol m-3).
+     '''
+-
+-    #load depth
+-    depth = (xr.open_zarr(glob(os.path.join(folder_gridded_data, 
+-                                            f'*_thkcello_*'))[0])['thkcello'].
+-        drop_vars('time').squeeze().sel(lev = slice(None, thresh_depth)).fillna(0))
+-    
+-    #Load phypico
+-    phypico = (xr.open_zarr(glob(
+-        os.path.join(folder_gridded_data, f'*{gfdl_exp}_phypico_*'))[0])['phypico'].
+-        sel(lev = slice(None, thresh_depth)))
+-    phypico_weighted = phypico.weighted(depth).mean('lev')
+-    phypico_weighted = phypico_weighted.assign_attrs(
+-        {'standard_name': 'mean_mole_concentration_of_picophytoplankton_expressed_as_carbon_in_sea_water',
+-         'long_name': 'Depth Weighted Mean of Picophytoplankton Carbon Concentration', 
+-         'units': 'mol m-3'})
+-    
+-    #Load phyc
++    #full-column layer thickness (m); NaN (below seafloor/land) -> 0
++    thk = (xr.open_zarr(glob(os.path.join(folder_gridded_data,
++                                          f'*_thkcello_*'))[0])['thkcello'].
++        drop_vars('time').squeeze().fillna(0))
+     phyc = (xr.open_zarr(glob(
+-        os.path.join(folder_gridded_data, f'*{gfdl_exp}_phyc_*'))[0])['phyc'].
+-        sel(lev = slice(None, thresh_depth)))
+-    phyc_weighted = phyc.weighted(depth).mean('lev')
+-    phyc_weighted = phyc_weighted.assign_attrs(
++        os.path.join(folder_gridded_data, f'*{gfdl_exp}_phyc_*'))[0])['phyc'].fillna(0))
++    phypico = (xr.open_zarr(glob(
++        os.path.join(folder_gridded_data, f'*{gfdl_exp}_phypico_*'))[0])['phypico'].fillna(0))
++
++    #Build ONE depth weight and apply it to BOTH fractions (small + total).
++    if averaging == 'fixed200':
++        w = thk.sel(lev = slice(None, thresh_depth))
++        phyc = phyc.sel(lev = slice(None, thresh_depth))
++        phypico = phypico.sel(lev = slice(None, thresh_depth))
++    elif averaging == 'mld':
++        td = get_threshold_depth(folder_gridded_data, gfdl_exp, max_depth = thresh_depth)
++        w = thk.sel(lev = slice(None, thresh_depth)).where(thk['lev'] <= td, 0)
++        phyc = phyc.sel(lev = slice(None, thresh_depth))
++        phypico = phypico.sel(lev = slice(None, thresh_depth))
++    elif averaging == 'cumulative90':
++        bio = phyc * thk
++        within = bio.cumsum('lev') <= 0.90 * bio.sum('lev')
++        w = thk.where(within, 0)
++    elif averaging == 'biomass_weighted':
++        w = phyc * thk                    # common weight = total-phyto biomass per layer
++    else:
++        raise ValueError("averaging must be 'fixed200', 'mld', 'cumulative90' or "
++                         f"'biomass_weighted' (got '{averaging}')")
++
++    def _wmean(v):
++        return (v * w).sum('lev') / w.sum('lev')
++
++    phyc_weighted = _wmean(phyc).assign_attrs(
+         {'standard_name': 'mean_mole_concentration_of_phytoplankton_expressed_as_carbon_in_sea_water',
+-         'long_name': 'Depth Weighted Mean of Phytoplankton Carbon Concentration', 
++         'long_name': f'{averaging} mean of phytoplankton carbon concentration',
+          'units': 'mol m-3'})
+-    
++    phypico_weighted = _wmean(phypico).assign_attrs(
++        {'standard_name': 'mean_mole_concentration_of_picophytoplankton_expressed_as_carbon_in_sea_water',
++         'long_name': f'{averaging} mean of picophytoplankton carbon concentration',
++         'units': 'mol m-3'})
++
+     return phyc_weighted, phypico_weighted
+ 
+ 
