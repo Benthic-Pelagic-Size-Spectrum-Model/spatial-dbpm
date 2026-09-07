@@ -203,14 +203,72 @@ legend("topright", c("pelagic (north)", "benthic (north)", "pelagic (south)", "b
        col = c("#1f78b4", "#b2570b", "#1f78b4", "#b2570b"), lty = c(1, 1, 2, 2), lwd = 2, bty = "n", cex = 0.85)
 ```
 
+## 5. Adding fishing and calibrating to catch
+
+The run above is unfished. To make it a *calibrated* regional model we add two more
+FishMIP inputs — both downloadable per region from the
+[FishMIP Input Explorer](https://fishmip.global-ecosystem-model.cloud.edu.au/shiny/FishMIP_Input_Explorer/):
+
+* **fishing effort** (nominal effort by year), which drives fishing pressure, and
+* **observed catch** (by functional group), the calibration target.
+
+Effort is redistributed across cells each year by a **spatial-gravity** model
+(more effort where accessible, high-biomass cells are), fishing is applied to size
+classes above ~30 cm (separately for pelagic vs benthic/demersal groups mapped from
+the catch functional groups), and the two catchabilities `q_pel`, `q_ben` are fitted
+so aggregated modelled catch matches the observed series. Because Kerguelen has no
+0-D anchor, we calibrate **directly on the grid** (spin cached once, then BOBYQA on
+`log10(q)` with each objective evaluation running the fished transient). That step is
+slow (many transients), so it is shown here but not run — we load its shipped result:
+
+```{r eval = FALSE}
+# Gridded-native q calibration (sketch; minutes-to-hours depending on region size):
+#   spin unfished (cache) -> for each candidate (q_pel, q_ben):
+#     transient 1961-2010 with annual gravity redistribution of FishMIP effort,
+#     aggregate per-cell catch to a regional density series,
+#     objective = wlogmse(agg_pel, obs_pel) + wlogmse(agg_ben, obs_ben)
+#   BOBYQA over log10(q); observed catch split pelagic/benthic by functional group.
+```
+
+```{r fig.height = 4}
+cal <- readRDS(ex("kerguelen_calib.rds"))
+c(q_pel = cal$qg[1], q_ben = cal$qg[2])                       # fitted catchabilities
+c(cor_pelagic = cal$corr_pel, cor_benthic = cal$corr_ben)    # modelled-vs-observed catch correlation
+
+par(mfrow = c(1, 2), mar = c(4, 4.2, 3, 1))
+y <- cal$yrs; pos <- function(x) pmax(x, 1e-9)
+yl <- range(c(cal$pel, cal$ben, cal$obs_pel, cal$obs_ben)[c(cal$pel, cal$ben, cal$obs_pel, cal$obs_ben) > 0])
+plot(y, pos(cal$obs_pel), pch = 16, col = "#1f78b4", log = "y", ylim = yl,
+     xlab = "Year", ylab = expression("Catch density (g m"^-2*" yr"^-1*")"), main = "Modelled vs observed catch")
+points(y, pos(cal$obs_ben), pch = 16, col = "#b2570b")
+lines(y, pos(cal$pel), col = "#1f78b4", lwd = 2); lines(y, pos(cal$ben), col = "#b2570b", lwd = 2)
+legend("bottomright", c("pelagic obs", "pelagic model", "benthic obs", "benthic model"),
+       pch = c(16, NA, 16, NA), lty = c(NA, 1, NA, 1), lwd = 2,
+       col = c("#1f78b4", "#1f78b4", "#b2570b", "#b2570b"), bty = "n", cex = 0.75)
+
+fc <- readRDS(ex("kerguelen_fished_cells.rds"))               # per-cell fished result
+pal <- hcl.colors(64, "YlOrRd", rev = TRUE)
+plot(fc$lon, fc$lat, pch = 15, cex = 2.1, col = pal[as.integer(cut(log10(pos(fc$catch_tot)), 64))],
+     xlab = "Longitude", ylab = "Latitude", main = "Modelled catch (2001-2010)")
+points(c(69.2, 73.5), c(-49.3, -53.1), pch = 17)
+```
+
+The temporal fit is good in both groups (correlation ≈ 0.77 pelagic, 0.82 benthic):
+the model reproduces the catch ramp-up and effort-driven variability, and catch
+concentrates over the productive northern plateau where effort and biomass are
+highest. Two honest limitations for this region: `q_ben` sits at its upper bound —
+the model under-produces the large-bodied benthic (toothfish) catch *level* even at
+maximum benthic catchability — and pelagic catch runs somewhat high. Both reflect
+that a longline/deep-demersal fishery stresses the size-selective assumptions of a
+generic size-spectrum model, not a data problem.
+
 ## Going further
 
-* **Fishing & calibration.** This run is unfished. A calibrated run adds gridded
-  fishing effort (redistributed across cells by a spatial-gravity model) and fits
-  catchability `q` so aggregated modelled catch matches observations. That full
-  pipeline — per-cell forcing → LME-centering → gridded `q` calibration → fished
-  run — is documented in the package's gridded workflow (`GRIDDED_WORKFLOW.md`).
+* **The full gridded workflow.** For the pre-calibrated large regions the pipeline
+  also does per-cell forcing → LME-centering → gridded `q` calibration → fished run;
+  see the package's gridded workflow (`GRIDDED_WORKFLOW.md`).
 * **Another region.** Swap in any FishMIP regional boundary from
   [Fish-MIP/FishMIP_regions](https://github.com/Fish-MIP/FishMIP_regions), pull its
-  forcing from the [FishMIP Input Explorer](https://fishmip.global-ecosystem-model.cloud.edu.au/shiny/FishMIP_Input_Explorer/),
-  and reuse exactly the `run_cell()` loop above.
+  forcing, effort and catch from the
+  [FishMIP Input Explorer](https://fishmip.global-ecosystem-model.cloud.edu.au/shiny/FishMIP_Input_Explorer/),
+  and reuse exactly the `run_cell()` loop and the calibration sketch above.
