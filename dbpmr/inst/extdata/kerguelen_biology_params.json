@@ -1,0 +1,16 @@
+{
+  "params": {
+    "c1": 25.22,
+    "activation_energy": 0.63,
+    "boltzmann": 8.62e-05,
+    "defecate_prop": 0.3,
+    "def_low": 0.5,
+    "growth_pred": 0.3,
+    "energy_pred": 0.5,
+    "growth_detritivore": 0.2,
+    "energy_detritivore": 0.7,
+    "metabolic_req_pred": 0.82,
+    "metabolic_req_detritivore": 0.75,
+    "natural_mort": 0.2
+  }
+}
