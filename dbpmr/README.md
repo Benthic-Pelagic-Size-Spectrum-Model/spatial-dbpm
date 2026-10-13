@@ -86,6 +86,26 @@ Plus cell **area** (m²) for aggregating per-cell densities. Derivations: `inter
 biomass-weighted method; the standard method can instead use the ESM's vertically-integrated
 `phyc-vint`/`phypico-vint` (mol m⁻²) with surface `tos`.
 
+## Engine options (environment variables)
+
+A couple of optional engine behaviours are controlled by environment variables, read by the
+C engine at the start of a run (set them with `Sys.setenv(...)` before `SizeSpectrum()`):
+
+| Variable | Default | Effect |
+|---|---|---|
+| `PEL_IMM_FRAC` | `0` (off) | **Connectivity/immigration recruitment floor** (pelagic only). When `> 0`, pelagic recruitment cannot fall below this fraction of the running peak of natural recruitment (frozen the instant the floor first binds) — a connectivity subsidy that rescues otherwise-collapsing cells. `0` skips the term entirely, so dynamics are unchanged. The gridded LME/regional runs use `0.15`. |
+| `TEMP_ON_MORT` | `1` (on) | Whether temperature scales **background (natural) mortality** `mu_0`. With `1`, `mu_0 = mu_0_base × tempeff` for both groups. With `0`, temperature drives **feeding only** and `mu_0` is held at base — rationale: the model doesn't resolve metabolic maintenance/respiration, so a lone `mu_0 × tempeff` is an unbalanced "cost of warmth". |
+
+```r
+Sys.setenv(PEL_IMM_FRAC = "0.15")   # enable the connectivity floor at 15%
+Sys.setenv(TEMP_ON_MORT = "0")      # temperature affects feeding only, not mortality
+# ... then Setup.* and SizeSpectrum() as usual
+```
+
+**Note:** `TEMP_ON_MORT` defaults to *on*, so it affects baseline behaviour out of the box — set it
+to `0` when comparing against runs that predate temperature-dependent mortality. `PEL_IMM_FRAC`
+defaults to *off*, so leaving it unset reproduces the engine with no immigration floor.
+
 ## Legacy package name
 
 This package was historically named `SizeSpectra` and has been renamed to `dbpmr` for consistency with DBPM usage.
