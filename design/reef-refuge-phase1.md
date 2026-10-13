@@ -53,6 +53,16 @@ at the prey-size index of these two computations:
 (exactly as the R loop recomputes `a.u`/`a.h` at the top of every step). It sits alongside the existing
 `tempeff` scaling of `A` — same "per-timestep multiplier on the feeding term" pattern.
 
+> **Implementation correction (validated against the Rogers R model).** The table above says to apply
+> `a` at the *prey-size* index in the mortality term. That is **wrong** and makes sheltered sizes
+> *deplete* instead of bump. Rogers builds the mortality kernel `mphi` as the transpose (`q2 = -q1`) of
+> the feeding kernel `gphi`, so the identical `a·(U) %*% kernel` construction lands `a` on the **PREY**
+> index in feeding (`pel_biomass`) but the **PREDATOR** index in mortality (`mu_pel_pred` / `death.u`).
+> It is `a` multiplying the **U vector** in both integrals — prey when U is being eaten, predator when U
+> is doing the killing. The implemented engine uses: `a(prey)` inside the prey sum of `pel_biomass`, and
+> `a(predator)` inside the predator sum of `mu_pel_pred`. This reproduces the paper's refuge bump; the
+> "same `a` on both sides for mass balance" framing above is superseded by matching Rogers' actual code.
+
 ## 3. Design decisions for the 2-spectrum case
 
 - **Competitor pool.** Reef model uses `U+H` (predators + herbivores share refuges). In 2-spectrum dbpmr

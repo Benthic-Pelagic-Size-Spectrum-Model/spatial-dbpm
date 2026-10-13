@@ -1,0 +1,135 @@
+---
+title: "Reef structural complexity: a size-structured prey refuge (Rogers et al. 2014)"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Reef structural complexity: a size-structured prey refuge (Rogers et al. 2014)}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 7, fig.height = 4.5,
+                      fig.align = "center")
+```
+
+Rogers, Blanchard & Mumby (2014, *Current Biology*) showed that the **structural
+complexity** of coral reefs acts as a **size-structured prey refuge**: small and
+mid-sized prey shelter in the reef matrix, which reshapes the community size
+spectrum and the productivity available to fisheries. `dbpmr` implements this as
+an opt-in per-size **availability** multiplier
+
+$$a(w) = \max\!\big(\texttt{min\_A},\; 1 - \tfrac{\text{refuge}(w)}{\text{competitor}(w)}\big),$$
+
+applied to **both** the predation mortality on, and predator intake of, prey of
+body size $w$ (so sheltered prey are both eaten less and, as predators, hunt
+less — matching the paper's `vulnerability()` function). With no refuge the
+engine is bit-identical to standard `dbpmr`.
+
+This vignette reproduces the paper's core qualitative result: **more complexity →
+a bump in abundance at the sheltered sizes and a non-linear size spectrum.** The
+paper's parameter `min.A` — the *minimum proportion of a size class that stays
+vulnerable to predation* — is a natural **complexity axis**: `min_A = 1` is a
+fully degraded reef (no refuge), small `min_A` is a highly complex reef.
+
+## Setup
+
+A minimal, unfished two-spectrum model, with a refuge over a band of mid-sized
+prey (~1–30 g). We run it across a gradient of reef complexity by varying `min_A`.
+
+```{r}
+library(dbpmr)
+LN10 <- log(10)
+
+run_reef <- function(min_A) {
+  wd <- tempfile("reef"); dir.create(wd); old <- setwd(wd); on.exit(setwd(old), add = TRUE)
+  on.exit(Sys.unsetenv("REFUGE_MIN_A"), add = TRUE)
+  run  <- Setup.Run("R", 1, 1, 0, TRUE, 1)
+  grid <- Setup.Grid(run, tmax = 60, tstep = 1/48, toutstep = 1)
+  pl <- Setup.Plankton(run, filename = "plankton")
+  pe <- Setup.Pelagic(run, filename = "fish")
+  be <- Setup.Benthic(run, filename = "benthos")
+  de <- Setup.Detritus(run, filename = "detritus")
+
+  if (min_A < 1) {                               # a refuge over the ~1-30 g prey band
+    mass   <- seq(grid@mmin, grid@mmax, grid@mstep)
+    log10m <- mass / LN10
+    refuge <- ifelse(log10m >= 0 & log10m <= 1.5, 1e20, 0)  # strong shelter -> a clamps to min_A on the band
+    Setup.Refuge(pe, run, grid, refuge, min_A = min_A)
+  }
+  invisible(capture.output(SizeSpectrum(run, grid, pl, pe, be, de)))
+  f <- Read.In("R", "fish")
+  data.frame(log10m = f@mrange / LN10, u = as.numeric(f@finaluvals[1, -(1:3)]))
+}
+```
+
+## Complexity gradient
+
+`min_A = 1` is the degraded baseline (no refuge); `0.5` and `0.2` are increasingly
+complex reefs.
+
+```{r}
+degraded <- run_reef(1.0)    # no refuge
+medium   <- run_reef(0.5)
+complex  <- run_reef(0.2)    # strong refuge
+band <- degraded$log10m >= 0 & degraded$log10m <= 1.5
+```
+
+```{r fig.height = 4.2, fig.width = 9}
+sel <- degraded$log10m > -4 & degraded$log10m < 5 & degraded$u > 0
+par(mfrow = c(1, 2), mar = c(4, 4.2, 3, 1))
+# (left) the three spectra
+plot(degraded$log10m[sel], log10(pmax(degraded$u[sel], 1e-30)), type = "l", lwd = 2, col = "#9ecae1",
+     xlab = expression(log[10]~"body mass (g)"), ylab = expression(log[10]~"abundance density"),
+     main = "Size spectra")
+lines(medium$log10m[sel],  log10(pmax(medium$u[sel],  1e-30)), lwd = 2, col = "#4292c6")
+lines(complex$log10m[sel], log10(pmax(complex$u[sel], 1e-30)), lwd = 2, col = "#084594")
+rect(0, par("usr")[3], 1.5, par("usr")[4], col = rgb(0, 0.4, 0, 0.06), border = NA)
+legend("topright", c("degraded (min_A=1)", "medium (0.5)", "complex (0.2)"),
+       col = c("#9ecae1", "#4292c6", "#084594"), lwd = 2, bty = "n", cex = 0.8)
+# (right) effect relative to the degraded baseline -> the refuge bump is obvious
+rel <- function(d) log10(pmax(d$u[sel], 1e-30)) - log10(pmax(degraded$u[sel], 1e-30))
+plot(degraded$log10m[sel], rel(complex), type = "l", lwd = 2, col = "#084594",
+     xlab = expression(log[10]~"body mass (g)"), ylab = expression(Delta~log[10]~"abundance vs degraded"),
+     main = "Complexity effect (refuge bump)")
+lines(degraded$log10m[sel], rel(medium), lwd = 2, col = "#4292c6")
+abline(h = 0, lty = 3)
+rect(0, par("usr")[3], 1.5, par("usr")[4], col = rgb(0, 0.4, 0, 0.06), border = NA)
+text(0.75, par("usr")[4] * 0.85, "sheltered band", cex = 0.8, col = "darkgreen")
+legend("topright", c("complex (0.2)", "medium (0.5)"), col = c("#084594", "#4292c6"), lwd = 2, bty = "n", cex = 0.8)
+```
+
+Increasing complexity (smaller `min_A`) lifts abundance **in the sheltered band**
+and bends the spectrum away from a straight line — the paper's non-linear,
+refuge-driven size spectrum.
+
+```{r}
+data.frame(
+  reef       = c("degraded", "medium", "complex"),
+  min_A      = c(1.0, 0.5, 0.2),
+  band_vs_degraded = round(c(
+    mean(degraded$u[band]) / mean(degraded$u[band]),
+    mean(medium$u[band])   / mean(degraded$u[band]),
+    mean(complex$u[band])  / mean(degraded$u[band])), 2)
+)
+```
+
+The sheltered-size abundance rises monotonically with reef complexity — i.e. a
+**loss of complexity reduces** the abundance those sizes can sustain, the
+direction of the Rogers et al. (2014) result (there, quantified as a >3× loss of
+fisheries productivity under full complexity loss).
+
+## Notes
+
+* **Reduced form.** This is a two-spectrum (`U` + `V` + detritus) model; the full
+  2014 reef model also carries a herbivore spectrum and an algae pool (the
+  competitor pool there is `U + H`). A control re-run of the Rogers R model
+  confirmed that even a two-spectrum refuge reproduces the bump, so this captures
+  the core mechanism as an honest reduced form.
+* **Off by default.** With no `Setup.Refuge()` call the mechanism is inactive and
+  the engine is bit-identical to standard `dbpmr`.
+
+### Reference
+
+Rogers A, Blanchard JL, Mumby PJ (2014) Vulnerability of coral reef fisheries to
+a loss of structural complexity. *Current Biology* 24(9): 1000–1005.
+<https://doi.org/10.1016/j.cub.2014.03.026>
