@@ -3469,24 +3469,26 @@ double mu_pel_pred(int species, int pred, int size, int xspace, int yspace, RUN 
        double ans=0;
        int i;
        
-       /*Mortality due to Predation by all Size Spectra*/
+       /* Mortality due to Predation by all Size Spectra. Reef refuge: scale each predator i's contribution
+          by its availability a(i) -- matching Rogers' death.u, where a.u multiplies the predator (U) vector
+          INSIDE the predator integral (mortality kernel mphi = q2 = -q1 is the transpose of the feeding
+          kernel gphi = q1, so the same a*(U) construction lands on the PREDATOR index in mortality but the
+          PREY index in feeding/pel_biomass). a(i)=1 when refuge off -> identical to standard dbpmr. */
        if(run->coupled_flag==1){
                for(i=size ; i<(community->pelagic[pred].ipelmax+1) ; i++){
-                       ans+=(exp(community->pelagic[pred].alpha*grid->m_values[i]))*community->pelagic[pred].phi_values[i-size]*(community->pelagic[pred].u_values[i][xspace][yspace])*community->pelagic[pred].A*community->pelagic[pred].pref_pel*grid->mstep;
+                       ans+=community->pelagic[pred].a_refuge[i][xspace][yspace]*(exp(community->pelagic[pred].alpha*grid->m_values[i]))*community->pelagic[pred].phi_values[i-size]*(community->pelagic[pred].u_values[i][xspace][yspace])*community->pelagic[pred].A*community->pelagic[pred].pref_pel*grid->mstep;
                }
        }
        /*Mortality due to Own Size Spectra Predation*/
        else{
             if(species==pred){
                     for(i=size ; i<(community->pelagic[species].ipelmax+1) ; i++){
-                            ans+=(exp(community->pelagic[species].alpha*grid->m_values[i]))*community->pelagic[species].phi_values[i-size]*(community->pelagic[species].u_values[i][xspace][yspace])*community->pelagic[species].A*community->pelagic[species].pref_pel*grid->mstep;
+                            ans+=community->pelagic[species].a_refuge[i][xspace][yspace]*(exp(community->pelagic[species].alpha*grid->m_values[i]))*community->pelagic[species].phi_values[i-size]*(community->pelagic[species].u_values[i][xspace][yspace])*community->pelagic[species].A*community->pelagic[species].pref_pel*grid->mstep;
                     }
             }
        }
 
-       /*reef refuge: prey of size 'size' are exposed to predation only with probability a(size) (=1 when off).
-         Same a(w) as scales intake in pel_biomass -> predation mortality and predator growth stay balanced.*/
-       return community->pelagic[species].a_refuge[size][xspace][yspace]*ans;
+       return ans;
 }
 
 double mu_pel(int species, int size, int xspace, int yspace, RUN *run, GRID *grid, COMMUNITY *community)
