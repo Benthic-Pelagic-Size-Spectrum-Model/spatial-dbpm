@@ -165,6 +165,10 @@ typedef struct pelagic_info{
         double imm_frac;       //connectivity/immigration recruitment floor as a fraction of unfished recruitment (0=off)
         double rec0;           //running-peak (unfished) recruitment density at the smallest size
         int rec0_frozen;       //freeze rec0 at first bind so the subsidy cannot inflate its own reference
+        int refuge_on;         //reef prey-refuge mechanism active (refuge.txt supplied); 0 = off (a(w)=1, standard dbpmr)
+        double refuge_min_a;   //availability floor min_A (REFUGE_MIN_A env, default 0); a(w) clamped to [min_a,1]
+        double *refuge_values; //per prey-size refuge-space density (count m^-2); NULL/all-zero when off
+        double ***a_refuge;    //per (size,x,y) availability multiplier a(w)=max(min_a,1-refuge(w)/competitor(w)); recomputed each step
         int initial_flag;
         int ts_flag;
         int fishing_flag;      //flag for fishing; 0-off, 1-on
@@ -917,8 +921,10 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
      pelagic->pla_bio=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
      pelagic->pel_bio=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
      pelagic->ben_bio=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
-     
+     pelagic->a_refuge=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);   /*reef refuge availability a(w)*/
+
      pelagic->phi_values=(double *)safe_malloc(m*sizeof(double),__LINE__,__FILE__);
+     pelagic->refuge_values=(double *)safe_malloc(m*sizeof(double),__LINE__,__FILE__);   /*per prey-size refuge density*/
      for(i=0 ; i<m ; i++){
              pelagic->u_values[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
              pelagic->g_values[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
@@ -931,8 +937,10 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
              pelagic->pla_bio[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
              pelagic->pel_bio[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
              pelagic->ben_bio[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-             
+             pelagic->a_refuge[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
+
              pelagic->phi_values[i]=0;
+             pelagic->refuge_values[i]=0;
              for(k=0 ; k<x ; k++){
                      pelagic->u_values[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
                      pelagic->g_values[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
@@ -945,6 +953,7 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
                      pelagic->pla_bio[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
                      pelagic->pel_bio[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
                      pelagic->ben_bio[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
+                     pelagic->a_refuge[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
                      for(l=0 ; l<y ; l++){
                              pelagic->u_values[i][k][l]=0;
                              pelagic->g_values[i][k][l]=0;
@@ -957,6 +966,7 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
                              pelagic->pla_bio[i][k][l]=0;
                              pelagic->pel_bio[i][k][l]=0;
                              pelagic->ben_bio[i][k][l]=0;
+                             pelagic->a_refuge[i][k][l]=1.0;   /*default fully exposed (a=1) -> standard dbpmr*/
                      }
              }
      }
@@ -1067,7 +1077,28 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
              pelagic->phi_values[i]=phi((grid->m_values[i]-grid->m_values[0]),pelagic->q_0, pelagic->sig, pelagic->trunc);
      }
 
-
+     /* --- Reef prey-refuge plugin (opt-in; Rogers, Blanchard & Mumby 2014) ---
+        Availability a(w) = max(min_A, 1 - refuge(w)/competitor(w)) scales BOTH predation mortality on,
+        and predator intake of, prey of body size w (mass balance). Reads an optional per-size refuge
+        density from <run>/Input/<name>_refuge.txt (one value per grid size class). Absent file (or all
+        zeros) -> refuge_on=0 -> a(w)=1 everywhere -> bit-identical to standard dbpmr. min_A (floor) from
+        the REFUGE_MIN_A env var (default 0). */
+     pelagic->refuge_on = 0;
+     pelagic->refuge_min_a = 0.0;
+     { char *e = getenv("REFUGE_MIN_A"); if(e) pelagic->refuge_min_a = atof(e); }
+     {
+             char rfn[256];
+             snprintf(rfn, sizeof(rfn), "%s/Input/%s_refuge.txt", run->filename, pelagic->filename);
+             FILE *rf = fopen(rfn, "r");
+             if(rf){
+                     double v; int cnt=0;
+                     for(i=0 ; i<grid->mnum && fscanf(rf,"%lf",&v)==1 ; i++){
+                             pelagic->refuge_values[i]=v; if(v>0) cnt++;
+                     }
+                     fclose(rf);
+                     if(cnt>0) pelagic->refuge_on = 1;   /*only activate when a positive refuge is supplied*/
+             }
+     }
 }
 
 void setup_benthic(RUN *run, GRID *grid, BENTHIC *benthic, double *ben_params, char *filename, int rep_method, int initial_flag, int ts_flag, int fishing_flag)
@@ -3137,6 +3168,26 @@ void calculate_g_and_mu(RUN *run, GRID *grid, COMMUNITY *community)
      
      double pla,pel,ben,det,fish,pred;
 
+     /* Reef refuge pre-pass: recompute the per-size availability a(w) for every pelagic species from the
+        CURRENT spectrum, BEFORE the feeding/mortality integrals that consume it (so predation mortality
+        and predator intake see the SAME a(w) -> mass balance). a(w)=max(min_A, 1 - refuge(w)/competitor(w)),
+        competitor = U abundance density. Species with refuge off keep a=1 (set at allocation) -> no effect. */
+     for(s=0 ; s<n ; s++){
+             if(!community->pelagic[s].refuge_on) continue;
+             double minA=community->pelagic[s].refuge_min_a;
+             for(i=0 ; i<grid->mnum ; i++){
+                     double rf=community->pelagic[s].refuge_values[i];
+                     for(k=0 ; k<x ; k++){
+                             for(l=0 ; l<y ; l++){
+                                     double comp=community->pelagic[s].u_values[i][k][l];
+                                     double a=(rf>0 && comp>0) ? 1.0-rf/comp : 1.0;
+                                     if(a<minA) a=minA; if(a>1.0) a=1.0; if(a<0.0) a=0.0;
+                                     community->pelagic[s].a_refuge[i][k][l]=a;
+                             }
+                     }
+             }
+     }
+
      //Pelagic changes
      for(s=0 ; s<n ; s++){
              for(i=community->pelagic[s].ipelmin ; i<(community->pelagic[s].ipelmax+1) ; i++){
@@ -3250,15 +3301,16 @@ double pel_biomass(int species, int size, int xspace, int yspace, RUN *run, GRID
        if(run->coupled_flag==1){
                for(s=0 ; s<run->no_pelagic ; s++){
                        for(i=community->pelagic[s].ipelmin ; i<size ; i++){
-                               ans+=exp(grid->m_values[i])*community->pelagic[species].phi_values[size-i]*community->pelagic[s].u_values[i][xspace][yspace]*grid->mstep;
+                               /*reef refuge: prey of size i are available for intake only with probability a(i) (=1 when off)*/
+                               ans+=community->pelagic[s].a_refuge[i][xspace][yspace]*exp(grid->m_values[i])*community->pelagic[species].phi_values[size-i]*community->pelagic[s].u_values[i][xspace][yspace]*grid->mstep;
                        }
                }
        }
-       
+
        /* Allows feeding from own Size Spectra Only*/
        else{
               for(i=community->pelagic[species].ipelmin ; i<size ; i++){
-                      ans+=exp(grid->m_values[i])*community->pelagic[species].phi_values[size-i]*community->pelagic[species].u_values[i][xspace][yspace]*grid->mstep;
+                      ans+=community->pelagic[species].a_refuge[i][xspace][yspace]*exp(grid->m_values[i])*community->pelagic[species].phi_values[size-i]*community->pelagic[species].u_values[i][xspace][yspace]*grid->mstep;
               }
        }
             
@@ -3431,9 +3483,10 @@ double mu_pel_pred(int species, int pred, int size, int xspace, int yspace, RUN 
                     }
             }
        }
-       
-       
-       return ans;
+
+       /*reef refuge: prey of size 'size' are exposed to predation only with probability a(size) (=1 when off).
+         Same a(w) as scales intake in pel_biomass -> predation mortality and predator growth stay balanced.*/
+       return community->pelagic[species].a_refuge[size][xspace][yspace]*ans;
 }
 
 double mu_pel(int species, int size, int xspace, int yspace, RUN *run, GRID *grid, COMMUNITY *community)
@@ -3844,6 +3897,7 @@ void free_mem(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, MAT
                                      free(community->pelagic[s].pla_bio[i][k]);
                                      free(community->pelagic[s].pel_bio[i][k]);
                                      free(community->pelagic[s].ben_bio[i][k]);
+                                     free(community->pelagic[s].a_refuge[i][k]);
                              }
                              free(community->pelagic[s].u_values[i]);
                              free(community->pelagic[s].g_values[i]);
@@ -3855,6 +3909,7 @@ void free_mem(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, MAT
                              free(community->pelagic[s].pla_bio[i]);
                              free(community->pelagic[s].pel_bio[i]);
                              free(community->pelagic[s].ben_bio[i]);
+                             free(community->pelagic[s].a_refuge[i]);
                      }
                      free(community->pelagic[s].u_values);
                      free(community->pelagic[s].g_values);
@@ -3866,7 +3921,9 @@ void free_mem(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, MAT
                      free(community->pelagic[s].pla_bio);
                      free(community->pelagic[s].pel_bio);
                      free(community->pelagic[s].ben_bio);
+                     free(community->pelagic[s].a_refuge);
                      free(community->pelagic[s].phi_values);
+                     free(community->pelagic[s].refuge_values);
                      free(temp_pel_params[s]);
                      
                      free(community->pelagic[s].fname_pred);
