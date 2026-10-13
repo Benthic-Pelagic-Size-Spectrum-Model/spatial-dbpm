@@ -5,14 +5,19 @@ production repo**. It follows the plan in
 [`design/dbpmr-fishmip-integration-plan.md`](../../design/dbpmr-fishmip-integration-plan.md)
 and epic [#26](https://github.com/Benthic-Pelagic-Size-Spectrum-Model/spatial-dbpm/issues/26).
 
-**Principle: import, don't copy.** The LME pipeline is a **git submodule**
-(`lme-workflow/`, pinned to `new_features`), sourced as-is — so forcing,
-`sizeparam`, `run_model`, calibration and gravity are the real workflow, unchanged.
-We override **only the integrator** via an `engine=` switch. When Tier-1 validates,
-the plan is to fold that switch back into the LME repo as a PR — no permanent fork.
+**Principle: import, don't copy.** The LME pipeline is the **separate
+[`dbpm_isimip3a`](https://github.com/Benthic-Pelagic-Size-Spectrum-Model/dbpm_isimip3a)
+repo** — a standalone workflow, kept deliberately distinct from this package build
+(it was previously embedded here as a git submodule; now decoupled). Clone it into
+`lme-workflow/` to run the sandbox scripts, so forcing, `sizeparam`, `run_model`,
+calibration and gravity are the real workflow, unchanged. We override **only the
+integrator** via an `engine=` switch.
 
 ## Files
-- `lme-workflow/` — the ISIMIP3a workflow (submodule). Run `git submodule update --init`.
+- `lme-workflow/` — the ISIMIP3a workflow, now the standalone
+  [`dbpm_isimip3a`](https://github.com/Benthic-Pelagic-Size-Spectrum-Model/dbpm_isimip3a)
+  repo. Clone it here (not tracked by this repo):
+  `git clone https://github.com/Benthic-Pelagic-Size-Spectrum-Model/dbpm_isimip3a.git adapter/sandbox/lme-workflow`.
 - `dbpmr_engine.R` — **`run_model_dbpmr()`**: the dbpmr engine adapter. Same call
   signature as the workflow's `run_model()`; derives parameters via the workflow's
   own `sizeparam()` (identical biology), runs the dbpmr C engine, returns biomass +
@@ -22,11 +27,12 @@ the plan is to fold that switch back into the LME repo as a PR — no permanent 
 
 ## Run
 ```sh
-git submodule update --init --recursive
+# clone the workflow repo into lme-workflow/ (one-time)
+git clone https://github.com/Benthic-Pelagic-Size-Spectrum-Model/dbpm_isimip3a.git adapter/sandbox/lme-workflow
 DBPM_DATA=/path/to/DBPM_dev Rscript adapter/sandbox/tier1_engine_swap.R 14
 ```
 Requires an installed `dbpmr` (the script points `.libPaths` at `/tmp/dbpmrlib`)
-and the submodule's R deps (arrow, dplyr, …).
+and the workflow's R deps (arrow, dplyr, …).
 
 ## Status
 - [x] Submodule import + `engine=` switch runs both engines on one LME (aspatial,
