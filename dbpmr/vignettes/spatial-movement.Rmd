@@ -1,0 +1,177 @@
+---
+title: "Spatial movement on a 2-D grid (coupled fish dispersal)"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Spatial movement on a 2-D grid (coupled fish dispersal)}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 7, fig.height = 3.4,
+                      fig.align = "center")
+LN10 <- log(10)
+```
+
+This vignette exercises `dbpmr`'s **coupled spatial mode** (`spatial_dim = 2`), where a single
+grid of cells is solved *together* each timestep and the pelagic fish community **moves between
+cells**. This is a different execution path from the
+[gridded-Kerguelen](gridded-kerguelen.html) vignette, which runs each 1° cell as an *independent*
+0-D column (no biology crosses cell boundaries). Use that one for regional forcing/calibration
+studies; use **this** one when dispersal between cells is part of the question (connectivity,
+source–sink dynamics, an MPA network).
+
+## How movement works
+
+Each timestep, after the local size-spectrum dynamics are solved, the fish density `u(m, x, y)` is
+advected and diffused across the grid. For a size class of (log) mass `m`, the per-cell movement is
+
+- **advection** with velocity `v = C·∇g − D·∇μ` — fish swim **up** the growth/food gradient `g`
+  and **down** the mortality gradient `μ`;
+- **diffusion** with coefficient `Diffun` — undirected spreading.
+
+The three coefficients are set on the pelagic group and scale allometrically with body mass:
+
+| `Setup.Pelagic` argument | role | coefficient |
+|---|---|---|
+| `prey`  (× `exp(gamma_prey·m)`) | swim toward food | `C` (advection) |
+| `pred`  (× `exp(gamma_pred·m)`) | flee predation risk | `D` (advection) |
+| `comp`  (× `exp(gamma_comp·m)`) | spread out | `Diffun` (diffusion) |
+
+All default to small values; set them to `0` for a no-movement control. The movement is
+**behavioural** (fish responding to local gradients) — it is *not* external current-driven larval
+transport. A larval-connectivity study would add a dispersal kernel on top (see the closing note).
+
+> **Important for spatial runs.** The default plankton/benthic initial condition carries a built-in
+> spatial bump (`x_start`), so for a controlled experiment you must set the plankton (and benthic)
+> fields **explicitly per cell**, as below. Otherwise cells diverge for reasons unrelated to your
+> scenario.
+
+```{r setup}
+library(dbpmr)
+```
+
+A small helper runs one `spatial_dim = 2` grid and returns, for each output time, an
+`n × n` matrix of depth-integrated pelagic biomass per cell. Plankton, benthic and pelagic
+initial conditions are all supplied per cell (functions of `x`, `y`).
+
+```{r helper}
+run2d <- function(n = 9, dx = 1, tmax = 2, toutstep = 0.5,
+                  comp = 0, prey = 0, pred = 0, gcomp = 0, gprey = 0,
+                  plfun, pefun) {
+  wd <- tempfile("s2"); dir.create(wd); old <- setwd(wd); on.exit(setwd(old), add = TRUE)
+  run  <- Setup.Run("R", 1, 1, spatial_dim = 2, coupled_flag = TRUE, diff_method = 1)
+  L <- (n - 1) * dx
+  grid <- Setup.Grid(run, tmax = tmax, tstep = 1/48, toutstep = toutstep,
+                     xmin = 0, xmax = L, xstep = dx, xoutstep = dx,
+                     ymin = 0, ymax = L, ystep = dx, youtstep = dx)
+  pl <- Setup.Plankton(run, filename = "plankton", initial_flag = TRUE)
+  Setup.ts(pl, run, grid, func = plfun)                       # per-cell plankton
+  pe <- Setup.Pelagic(run, filename = "fish", comp = comp, prey = prey, pred = pred,
+                      gamma_comp = gcomp, gamma_prey = gprey, gamma_pred = gprey,
+                      initial_flag = TRUE)
+  Setup.ts(pe, run, grid, func = pefun)                       # per-cell fish IC
+  be <- Setup.Benthic(run, filename = "benthos", initial_flag = TRUE)
+  Setup.ts(be, run, grid, func = function(m, t, x, y) 0.01 * exp(-m))   # uniform benthic
+  de <- Setup.Detritus(run, filename = "detritus")
+  invisible(utils::capture.output(SizeSpectrum(run, grid, pl, pe, be, de)))
+  L2 <- readLines("R/fish/results.txt")
+  hdr <- suppressWarnings(as.numeric(strsplit(L2[5], ",")[[1]]))
+  mc <- which(!is.na(hdr)); m <- hdr[mc]; dd <- diff(m)[1]
+  rows <- lapply(L2[6:length(L2)][nchar(L2[6:length(L2)]) > 0],
+                 function(z) suppressWarnings(as.numeric(strsplit(z, ",")[[1]])))
+  rows <- rows[sapply(rows, function(v) length(v) >= max(mc) &&
+                        !is.na(v[1]) && !is.na(v[2]) && !is.na(v[3]))]
+  tv <- round(sapply(rows, `[`, 1), 6); xv <- sapply(rows, `[`, 2); yv <- sapply(rows, `[`, 3)
+  b  <- sapply(rows, function(v) sum(v[mc] * exp(m) * dd, na.rm = TRUE))
+  ux <- sort(unique(xv)); uy <- sort(unique(yv)); ut <- sort(unique(tv))
+  fields <- lapply(ut, function(tt) {
+    M <- matrix(NA, length(ux), length(uy)); idx <- which(tv == tt)
+    for (j in idx) M[match(xv[j], ux), match(yv[j], uy)] <- b[j]; M
+  })
+  list(times = ut, fields = fields)
+}
+
+show_field <- function(M, main) {
+  image(seq_len(nrow(M)), seq_len(ncol(M)), M, xlab = "x cell", ylab = "y cell",
+        main = main, col = hcl.colors(24, "YlGnBu", rev = TRUE), useRaster = TRUE)
+}
+```
+
+## 1. Diffusion: a biomass bump spreads out
+
+Uniform food everywhere, a modest biomass bump in the centre, no directed swimming
+(`prey = pred = 0`). With diffusion off the bump just relaxes locally; with diffusion on it
+spreads symmetrically to the neighbours.
+
+```{r diffusion, fig.height = 3.2}
+plflat <- function(m, t, x, y) 0.02 * exp(-m)
+bump   <- function(m, t, x, y) { r2 <- (x - 4)^2 + (y - 4)^2
+                                 (0.05 * (1 + 2 * exp(-r2 / 1.5))) * (1/LN10) * exp(-m) }
+d_off <- run2d(n = 9, tmax = 1, comp = 0,   gcomp = 0, plfun = plflat, pefun = bump)
+d_on  <- run2d(n = 9, tmax = 1, comp = 500, gcomp = 0, plfun = plflat, pefun = bump)
+
+par(mfrow = c(1, 3), mar = c(4, 4, 2, 1))
+show_field(d_off$fields[[1]],                       "t = 0 (seeded bump)")
+show_field(d_off$fields[[length(d_off$fields)]],    "no diffusion (comp = 0)")
+show_field(d_on$fields[[length(d_on$fields)]],      "with diffusion (comp = 500)")
+```
+
+```{r diffusion-numbers}
+fe_off <- d_off$fields[[length(d_off$fields)]]
+fe_on  <- d_on$fields[[length(d_on$fields)]]
+c(centre_vs_edge_no_diff = fe_off[5, 5] / fe_off[1, 5],
+  centre_vs_edge_diff    = fe_on[5, 5]  / fe_on[1, 5])   # ~1 => bump has been smoothed away
+```
+
+Local demography pulls every cell toward the same local carrying capacity, so the steady-state
+footprint of pure diffusion is modest — the clear signal is that the **central excess is flattened**
+(centre/edge ratio falls toward 1) once diffusion is on.
+
+## 2. Advection: fish aggregate on the food-rich side
+
+Now a gentle east–west food gradient (richer in the west), a uniform fish IC, and prey-seeking
+switched on (`prey > 0`). Fish swim up the growth gradient and concentrate where food is — beyond
+what the purely local (no-movement) solution gives.
+
+```{r advection}
+plgrad <- function(m, t, x, y) (0.6 + 0.9 * (1 - x / 8)) * 0.02 * exp(-m)  # west rich, east poor
+peuni  <- function(m, t, x, y) 0.05 * (1/LN10) * exp(-m)
+
+a_off <- run2d(n = 9, tmax = 2, toutstep = 2, prey = 0, plfun = plgrad, pefun = peuni)
+a_on  <- run2d(n = 9, tmax = 2, toutstep = 2, prey = 5, plfun = plgrad, pefun = peuni)
+
+we <- function(res) { M <- res$fields[[length(res$fields)]]; xm <- rowMeans(M, na.rm = TRUE)
+                      mean(xm[1:3]) / mean(xm[7:9]) }   # west:east biomass ratio
+c(west_east_no_movement = we(a_off), west_east_prey_seeking = we(a_on))
+```
+
+```{r advection-fig, fig.height = 3.2}
+par(mfrow = c(1, 2), mar = c(4, 4, 2, 1))
+show_field(a_off$fields[[length(a_off$fields)]], "no movement (prey = 0)")
+show_field(a_on$fields[[length(a_on$fields)]],   "prey-seeking (prey = 5)")
+```
+
+The west:east biomass ratio rises once movement is on: the fish have actively redistributed toward
+the productive side.
+
+## Stability notes
+
+- **Diffusion** (`comp`) uses an unconditionally stable Crank–Nicolson step — any magnitude is safe
+  (very large values simply mix the grid to uniform).
+- **Advection** (`prey`, `pred`) is an explicit upwind scheme and is CFL-limited. The solver
+  **sub-steps** automatically so a large coefficient *saturates* rather than blowing up, but large
+  coefficients mean many sub-steps and slower runs — keep `prey`/`pred` modest (single digits here)
+  for responsive behaviour.
+- Movement acts on top of local demography. If a cell's population *crashes* to zero (e.g. from a
+  pathological initial condition or over-fishing with no food), keep initial conditions physically
+  sensible — seed cells near their local equilibrium, as above.
+
+## Where this goes next
+
+The movement here is **behavioural** advection + diffusion. For a spatial MPA / larval-connectivity
+study you would layer an **external dispersal matrix** (e.g. from an ocean-current model) on the
+recruitment of the smallest size class, and impose spatial fishing (`Setup.fishing()` takes a
+function of `x, y`) that is zero inside protected cells. The coupled grid demonstrated here — with
+per-cell forcing (`FORCING_PERCELL = 1`; see the engine README) and between-cell movement — is the
+substrate for that work.
