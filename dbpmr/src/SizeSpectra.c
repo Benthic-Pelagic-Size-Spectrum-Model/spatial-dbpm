@@ -2926,187 +2926,118 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
 }
 
 void xmove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *xmat, double ****temp_pelagic, int time)
+/* Spatial movement in x, operator-split (fix for issue #41 — the old scheme accumulated biomass at the
+   x-max wall regardless of source and did not conserve mass):
+     (1) ADVECTION in conservative upwind FLUX form, with ZERO FLUX through the domain walls
+         (mass-conserving + stable); advective velocity v = C*dg/dx - D*dmu/dx (move up the food
+         gradient g, down the mortality gradient mu);
+     (2) DIFFUSION by Crank-Nicolson with ZERO-FLUX (Neumann) boundaries.
+   With no movement (C=D=0 and Diffun=0) both steps are the identity -> output unchanged. */
 {
      int i,k,l,s;
      int x,y,n;
-     double dt,dx;
-     
-     double mu_ijk,mu_ij1k,mu_ijk1;
-     double g_ijk,g_ij1k,g_ijk1;
-     double C,D;
-     
+     double dt,dx,C,D,r;
+
      dt=grid->tstep;
      dx=grid->xstep;
-     
      x=grid->xnum;
      y=grid->ynum;
      n=run->no_pelagic;
-     
-     double *alpha;
-     double *beta;
-     double gam;
-     
-     alpha=(double *)safe_malloc(x*sizeof(double),__LINE__,__FILE__);
-     beta=(double *)safe_malloc(x*sizeof(double),__LINE__,__FILE__);
-     
-     //calculate spatial movement (using CN system)
+
+     double *uadv=(double *)safe_malloc(x*sizeof(double),__LINE__,__FILE__);   /* state after advection */
+     double *flux=(double *)safe_malloc(x*sizeof(double),__LINE__,__FILE__);   /* flux[k] = flux across the face between cells k and k+1 */
+
      for(s=0 ; s<n ; s++){
              for(i=community->pelagic[s].ipelmin ; i<(community->pelagic[s].ipelmax+1) ; i++){
                      C=Cfun(grid->m_values[i], grid->t_values[time], grid, &(community->pelagic[s]));
                      D=Dfun(grid->m_values[i], grid->t_values[time], grid, &(community->pelagic[s]));
-                     gam=Diffun(grid->m_values[i], grid->t_values[time], grid, &(community->pelagic[s]))*(dt/(dx*dx));
+                     r=Diffun(grid->m_values[i], grid->t_values[time], grid, &(community->pelagic[s]))*(dt/(dx*dx));
                      for(l=0 ; l<y ; l++){
-                             for(k=1 ; k<x-1 ; k++){
-                                     g_ij1k=community->pelagic[s].g_values[i][k-1][l];
-                                     g_ijk=community->pelagic[s].g_values[i][k][l];
-                                     g_ijk1=community->pelagic[s].g_values[i][k+1][l];
-                                     mu_ij1k=community->pelagic[s].mu_values[i][k-1][l];
-                                     mu_ijk=community->pelagic[s].mu_values[i][k][l];
-                                     mu_ijk1=community->pelagic[s].mu_values[i][k+1][l];
-                                     
-                                     alpha[k]=(-1*(dt/(4*dx*dx)))*(C*(g_ijk1-g_ij1k)-D*(mu_ijk1-mu_ij1k));
-                                     beta[k]=(-1*(dt/(dx*dx)))*(C*(g_ijk1+g_ij1k-2*g_ijk)-D*(mu_ijk1+mu_ij1k-2*mu_ijk));
+                             /* --- 1. advection: conservative upwind flux form; zero flux at both walls --- */
+                             for(k=0 ; k<x-1 ; k++){
+                                     double vf=(C*(community->pelagic[s].g_values[i][k+1][l]-community->pelagic[s].g_values[i][k][l])
+                                               -D*(community->pelagic[s].mu_values[i][k+1][l]-community->pelagic[s].mu_values[i][k][l]))/dx;
+                                     double uup=(vf>0.0)? temp_pelagic[s][i][k][l] : temp_pelagic[s][i][k+1][l];   /* upwind */
+                                     flux[k]=vf*uup;
                              }
-                             
-                             alpha[0]=((-1*dt*2)/(dx*dx))*(C*(community->pelagic[s].g_values[i][1][l]-community->pelagic[s].g_values[i][0][l])-D*(community->pelagic[s].mu_values[i][1][l]-community->pelagic[s].mu_values[i][0][l]));
-                             alpha[x-1]=((-1*dt*2)/(dx*dx))*(C*(community->pelagic[s].g_values[i][x-2][l]-community->pelagic[s].g_values[i][x-1][l])-D*(community->pelagic[s].mu_values[i][x-2][l]-community->pelagic[s].mu_values[i][x-1][l]));
-                             
-                             /*Setup RHS CN Matrix*/           
-                             xmat->a[0]=0;
-                             xmat->b[0]=2+alpha[0]-(2*gam);
-                             xmat->c[0]=(2*gam);
-                             for(k=1 ; k<x-1 ; k++){
-                                     xmat->a[k]=-alpha[k]+gam;
-                                     xmat->b[k]=2+beta[k]-(2*gam);
-                                     xmat->c[k]=alpha[k]+gam;
-                             }
-                             xmat->a[x-1]=(2*gam);
-                             xmat->b[x-1]=2+alpha[x-1]-(2*gam);
-                             xmat->c[x-1]=0;
-                             
                              for(k=0 ; k<x ; k++){
-                                     xmat->u[k]=temp_pelagic[s][i][k][l];
+                                     double Fr=(k<x-1)? flux[k]   : 0.0;   /* right-face flux (0 at the x-max wall) */
+                                     double Fl=(k>0)  ? flux[k-1] : 0.0;   /* left-face  flux (0 at the x=0   wall) */
+                                     uadv[k]=temp_pelagic[s][i][k][l]-(dt/dx)*(Fr-Fl);
+                                     if(uadv[k]<0.0) uadv[k]=0.0;          /* clamp tiny upwind undershoots */
                              }
-                             
-                             /*Calculate xmat r[] column*/
+                             /* --- 2. diffusion: Crank-Nicolson with zero-flux (Neumann) BCs; conserves mass --- */
+                             /* RHS (I + r/2 L): xmat->r = RHS * uadv via trimul */
+                             xmat->b[0]=1.0-r/2.0;  xmat->c[0]=r/2.0;
+                             for(k=1 ; k<x-1 ; k++){ xmat->a[k]=r/2.0; xmat->b[k]=1.0-r; xmat->c[k]=r/2.0; }
+                             xmat->a[x-1]=r/2.0;    xmat->b[x-1]=1.0-r/2.0;
+                             for(k=0 ; k<x ; k++) xmat->u[k]=uadv[k];
                              trimul(xmat);
-                             
-                             /*Setup LHS CN Matrix*/
-                             xmat->a[0]=0;
-                             xmat->b[0]=2-alpha[0]+(2*gam);
-                             xmat->c[0]=-(2*gam);
-                             for(k=1 ; k<x-1 ; k++){
-                                     xmat->a[k]=alpha[k]-gam;
-                                     xmat->b[k]=2-beta[k]+(2*gam);
-                                     xmat->c[k]=-alpha[k]-gam;
-                             }
-                             xmat->a[x-1]=-(2*gam);
-                             xmat->b[x-1]=2-alpha[x-1]+(2*gam);
-                             xmat->c[x-1]=0;
-                             
-                             /*Calculate xmat u[] column*/
+                             /* LHS (I - r/2 L): solve LHS * unew = r */
+                             xmat->b[0]=1.0+r/2.0;  xmat->c[0]=-r/2.0;
+                             for(k=1 ; k<x-1 ; k++){ xmat->a[k]=-r/2.0; xmat->b[k]=1.0+r; xmat->c[k]=-r/2.0; }
+                             xmat->a[x-1]=-r/2.0;   xmat->b[x-1]=1.0+r/2.0;
                              tridag(xmat);
-                             
-                             for(k=0 ; k<x ; k++){
-                                     community->pelagic[s].u_values[i][k][l]=xmat->u[k];
-                             }
+                             for(k=0 ; k<x ; k++) community->pelagic[s].u_values[i][k][l]=xmat->u[k];
                      }
              }
      }
-     free(alpha);
-     free(beta);
+     free(uadv);
+     free(flux);
 }
 
 void ymove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *ymat, double ****temp_pelagic, int time)
+/* Spatial movement in y, operator-split (same fix as xmove_solver — see issue #41):
+   conservative upwind FLUX advection + Crank-Nicolson diffusion, both with ZERO-FLUX walls. */
 {
      int i,k,l,s;
      int x,y,n;
-     double dt,dy;
-     
-     double mu_ijk,mu_ij1k,mu_ijk1;
-     double g_ijk,g_ij1k,g_ijk1;
-     double C,D;
-     
+     double dt,dy,C,D,r;
+
      dt=grid->tstep;
      dy=grid->ystep;
-     
      x=grid->xnum;
      y=grid->ynum;
      n=run->no_pelagic;
-     
-     double *alpha;
-     double *beta;
-     double gam;
-     
-     alpha=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-     beta=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-     
-     //calculate spatial movement (using CN system)
+
+     double *uadv=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
+     double *flux=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);   /* flux[l] = flux across the face between cells l and l+1 */
+
      for(s=0 ; s<n ; s++){
              for(i=community->pelagic[s].ipelmin ; i<(community->pelagic[s].ipelmax+1) ; i++){
                      C=Cfun(grid->m_values[i], grid->t_values[time], grid, &(community->pelagic[s]));
                      D=Dfun(grid->m_values[i], grid->t_values[time], grid, &(community->pelagic[s]));
-                     gam=Diffun(grid->m_values[i], grid->t_values[time], grid, &(community->pelagic[s]))*(dt/(dy*dy));
+                     r=Diffun(grid->m_values[i], grid->t_values[time], grid, &(community->pelagic[s]))*(dt/(dy*dy));
                      for(k=0 ; k<x ; k++){
-                             for(l=1 ; l<y-1 ; l++){
-                                     g_ij1k=community->pelagic[s].g_values[i][k][l-1];
-                                     g_ijk=community->pelagic[s].g_values[i][k][l];
-                                     g_ijk1=community->pelagic[s].g_values[i][k][l+1];
-                                     mu_ij1k=community->pelagic[s].mu_values[i][k][l-1];
-                                     mu_ijk=community->pelagic[s].mu_values[i][k][l];
-                                     mu_ijk1=community->pelagic[s].mu_values[i][k][l+1];
-                                     
-                                     alpha[l]=(-1*(dt/(4*dy*dy)))*(C*(g_ijk1-g_ij1k)-D*(mu_ijk1-mu_ij1k));
-                                     beta[l]=(-1*(dt/(dy*dy)))*(C*(g_ijk1+g_ij1k-2*g_ijk)-D*(mu_ijk1+mu_ij1k-2*mu_ijk));
+                             /* --- 1. advection: conservative upwind flux form; zero flux at both walls --- */
+                             for(l=0 ; l<y-1 ; l++){
+                                     double vf=(C*(community->pelagic[s].g_values[i][k][l+1]-community->pelagic[s].g_values[i][k][l])
+                                               -D*(community->pelagic[s].mu_values[i][k][l+1]-community->pelagic[s].mu_values[i][k][l]))/dy;
+                                     double uup=(vf>0.0)? temp_pelagic[s][i][k][l] : temp_pelagic[s][i][k][l+1];   /* upwind */
+                                     flux[l]=vf*uup;
                              }
-                             
-                             alpha[0]=((-1*dt*2)/(dy*dy))*(C*(community->pelagic[s].g_values[i][k][1]-community->pelagic[s].g_values[i][k][0])-D*(community->pelagic[s].mu_values[i][k][1]-community->pelagic[s].mu_values[i][k][0]));
-                             alpha[y-1]=((-1*dt*2)/(dy*dy))*(C*(community->pelagic[s].g_values[i][k][y-2]-community->pelagic[s].g_values[i][k][y-1])-D*(community->pelagic[s].mu_values[i][k][y-2]-community->pelagic[s].mu_values[i][k][y-1]));
-                             
-                             /*Setup RHS CN Matrix*/           
-                             ymat->a[0]=0;
-                             ymat->b[0]=2+alpha[0]-(2*gam);
-                             ymat->c[0]=(2*gam);
-                             for(l=1 ; l<y-1 ; l++){
-                                     ymat->a[l]=-alpha[l]+gam;
-                                     ymat->b[l]=2+beta[l]-(2*gam);
-                                     ymat->c[l]=alpha[l]+gam;
-                             }
-                             ymat->a[y-1]=(2*gam);
-                             ymat->b[y-1]=2+alpha[y-1]-(2*gam);
-                             ymat->c[y-1]=0;
-                             
                              for(l=0 ; l<y ; l++){
-                                     ymat->u[l]=temp_pelagic[s][i][k][l];
+                                     double Fr=(l<y-1)? flux[l]   : 0.0;   /* right-face flux (0 at the y-max wall) */
+                                     double Fl=(l>0)  ? flux[l-1] : 0.0;   /* left-face  flux (0 at the y=0   wall) */
+                                     uadv[l]=temp_pelagic[s][i][k][l]-(dt/dy)*(Fr-Fl);
+                                     if(uadv[l]<0.0) uadv[l]=0.0;
                              }
-                             
-                             /*Calculate xmat r[] column*/
+                             /* --- 2. diffusion: Crank-Nicolson with zero-flux (Neumann) BCs --- */
+                             ymat->b[0]=1.0-r/2.0;  ymat->c[0]=r/2.0;
+                             for(l=1 ; l<y-1 ; l++){ ymat->a[l]=r/2.0; ymat->b[l]=1.0-r; ymat->c[l]=r/2.0; }
+                             ymat->a[y-1]=r/2.0;    ymat->b[y-1]=1.0-r/2.0;
+                             for(l=0 ; l<y ; l++) ymat->u[l]=uadv[l];
                              trimul(ymat);
-                             
-                             /*Setup LHS CN Matrix*/
-                             ymat->a[0]=0;
-                             ymat->b[0]=2-alpha[0]+(2*gam);
-                             ymat->c[0]=-(2*gam);
-                             for(l=1 ; l<y-1 ; l++){
-                                     ymat->a[l]=alpha[l]-gam;
-                                     ymat->b[l]=2-beta[l]+(2*gam);
-                                     ymat->c[l]=-alpha[l]-gam;
-                             }
-                             ymat->a[y-1]=-(2*gam);
-                             ymat->b[y-1]=2-alpha[y-1]+(2*gam);
-                             ymat->c[y-1]=0;
-                             
-                             /*Calculate xmat u[] column*/
+                             ymat->b[0]=1.0+r/2.0;  ymat->c[0]=-r/2.0;
+                             for(l=1 ; l<y-1 ; l++){ ymat->a[l]=-r/2.0; ymat->b[l]=1.0+r; ymat->c[l]=-r/2.0; }
+                             ymat->a[y-1]=-r/2.0;   ymat->b[y-1]=1.0+r/2.0;
                              tridag(ymat);
-                             
-                             for(l=0 ; l<y ; l++){
-                                     community->pelagic[s].u_values[i][k][l]=ymat->u[l];
-                             }
+                             for(l=0 ; l<y ; l++) community->pelagic[s].u_values[i][k][l]=ymat->u[l];
                      }
              }
      }
-     free(alpha);
-     free(beta);
+     free(uadv);
+     free(flux);
 }
 
 void trimul(MATRIX *matrix)
