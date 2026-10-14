@@ -46,6 +46,10 @@ typedef struct run_info{
         double **pel_tempeff_c;//per-cell pelagic temperature multiplier (used when forcing_percell; applied in feeding/mortality)
         double **ben_tempeff_c;//per-cell benthic temperature multiplier
         double **sinking_rate_c;//per-cell detritus sinking/export fraction
+        double **depth_c;      //per-cell water-column depth (value used only in the gravity-fishing pelagic:benthic split)
+        double **export_attn_c;//per-cell size-dependent export attenuation number
+        double **export_gamma_c;//per-cell size-dependent export sinking-velocity exponent
+        double **export_magg_c;//per-cell size-dependent export aggregation floor (ln-mass)
         double depth;          //water-column depth (m); read+available. Supplying the channel toggles Dunne burial ON (col_depth>=0); the value is NOT used to rescale the burial flux (sizemodel applies burial to the per-volume flux directly)
         double residence_time; //detritus residence time tau (yr) for the alternative first-order pool loss W/tau (dimensionally clean; supplied via the residence_time channel). 0/absent = off
         double export_attn;    //size-dependent export: attenuation number A = k(T)*z/w0 (per-timestep, from export_attn channel; larger = more remineralisation = less export)
@@ -168,8 +172,10 @@ typedef struct pelagic_info{
         
         int rep_method;        //reproduction method; 0-fixed amount , 1-biomass dependent
         double imm_frac;       //connectivity/immigration recruitment floor as a fraction of unfished recruitment (0=off)
-        double rec0;           //running-peak (unfished) recruitment density at the smallest size
-        int rec0_frozen;       //freeze rec0 at first bind so the subsidy cannot inflate its own reference
+        double rec0;           //running-peak (unfished) recruitment density at the smallest size (0-D / legacy scalar; spatial runs use rec0_c)
+        int rec0_frozen;       //freeze rec0 at first bind so the subsidy cannot inflate its own reference (0-D / legacy scalar)
+        double **rec0_c;       //PER-CELL running-peak recruitment (spatial-safe connectivity floor; each cell keeps its own reference so cells don't couple)
+        int **rec0_frozen_c;   //PER-CELL freeze flag for the connectivity floor
         int refuge_on;         //reef prey-refuge mechanism active (refuge.txt supplied); 0 = off (a(w)=1, standard dbpmr)
         double refuge_min_a;   //availability floor min_A (REFUGE_MIN_A env, default 0); a(w) clamped to [min_a,1]
         double *refuge_values; //per prey-size refuge-space density (count m^-2); NULL/all-zero when off
@@ -984,22 +990,28 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
      pelagic->fish_total=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
      pelagic->pred_total=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
      pelagic->reproduction=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
+     pelagic->rec0_c=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
+     pelagic->rec0_frozen_c=(int **)safe_malloc(x*sizeof(int *),__LINE__,__FILE__);
      for(k=0 ; k<x ; k++){
              pelagic->pla_total[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
              pelagic->pel_total[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
              pelagic->ben_total[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-             
+
              pelagic->fish_total[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
              pelagic->pred_total[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
              pelagic->reproduction[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
+             pelagic->rec0_c[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
+             pelagic->rec0_frozen_c[k]=(int *)safe_malloc(y*sizeof(int),__LINE__,__FILE__);
              for(l=0 ; l<y ; l++){
                      pelagic->pla_total[k][l]=0;
                      pelagic->pel_total[k][l]=0;
                      pelagic->ben_total[k][l]=0;
-                     
+
                      pelagic->fish_total[k][l]=0;
                      pelagic->pred_total[k][l]=0;
                      pelagic->reproduction[k][l]=0;
+                     pelagic->rec0_c[k][l]=0.0;
+                     pelagic->rec0_frozen_c[k][l]=0;
              }
      }
           
@@ -1484,6 +1496,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      run->fptr_forcing=NULL;
      run->forcing_percell=0;
      run->pel_tempeff_c=NULL; run->ben_tempeff_c=NULL; run->sinking_rate_c=NULL;
+     run->depth_c=NULL; run->export_attn_c=NULL; run->export_gamma_c=NULL; run->export_magg_c=NULL;
      { char *e=getenv("TEMP_ON_MORT"); run->temp_on_mort = e ? atoi(e) : 1; }
      {
              char fname_forcing[256];
@@ -1528,11 +1541,20 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
              run->pel_tempeff_c=(double**)safe_malloc(xx*sizeof(double*),__LINE__,__FILE__);
              run->ben_tempeff_c=(double**)safe_malloc(xx*sizeof(double*),__LINE__,__FILE__);
              run->sinking_rate_c=(double**)safe_malloc(xx*sizeof(double*),__LINE__,__FILE__);
+             run->depth_c=(double**)safe_malloc(xx*sizeof(double*),__LINE__,__FILE__);
+             run->export_attn_c=(double**)safe_malloc(xx*sizeof(double*),__LINE__,__FILE__);
+             run->export_gamma_c=(double**)safe_malloc(xx*sizeof(double*),__LINE__,__FILE__);
+             run->export_magg_c=(double**)safe_malloc(xx*sizeof(double*),__LINE__,__FILE__);
              for(kk=0;kk<xx;kk++){
                      run->pel_tempeff_c[kk]=(double*)safe_malloc(yy*sizeof(double),__LINE__,__FILE__);
                      run->ben_tempeff_c[kk]=(double*)safe_malloc(yy*sizeof(double),__LINE__,__FILE__);
                      run->sinking_rate_c[kk]=(double*)safe_malloc(yy*sizeof(double),__LINE__,__FILE__);
-                     for(ll=0;ll<yy;ll++){ run->pel_tempeff_c[kk][ll]=1.0; run->ben_tempeff_c[kk][ll]=1.0; run->sinking_rate_c[kk][ll]=1.0; }
+                     run->depth_c[kk]=(double*)safe_malloc(yy*sizeof(double),__LINE__,__FILE__);
+                     run->export_attn_c[kk]=(double*)safe_malloc(yy*sizeof(double),__LINE__,__FILE__);
+                     run->export_gamma_c[kk]=(double*)safe_malloc(yy*sizeof(double),__LINE__,__FILE__);
+                     run->export_magg_c[kk]=(double*)safe_malloc(yy*sizeof(double),__LINE__,__FILE__);
+                     for(ll=0;ll<yy;ll++){ run->pel_tempeff_c[kk][ll]=1.0; run->ben_tempeff_c[kk][ll]=1.0; run->sinking_rate_c[kk][ll]=1.0;
+                             run->depth_c[kk][ll]=1.0; run->export_attn_c[kk][ll]=0.0; run->export_gamma_c[kk][ll]=0.0; run->export_magg_c[kk][ll]=-1e30; }
              }
      }
 
@@ -1842,8 +1864,10 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      if(run->forcing_flag==1){
              fclose(run->fptr_forcing);
              if(run->pel_tempeff_c!=NULL){
-                     for(k=0;k<x;k++){ free(run->pel_tempeff_c[k]); free(run->ben_tempeff_c[k]); free(run->sinking_rate_c[k]); }
+                     for(k=0;k<x;k++){ free(run->pel_tempeff_c[k]); free(run->ben_tempeff_c[k]); free(run->sinking_rate_c[k]);
+                             free(run->depth_c[k]); free(run->export_attn_c[k]); free(run->export_gamma_c[k]); free(run->export_magg_c[k]); }
                      free(run->pel_tempeff_c); free(run->ben_tempeff_c); free(run->sinking_rate_c);
+                     free(run->depth_c); free(run->export_attn_c); free(run->export_gamma_c); free(run->export_magg_c);
              }
      }
      for(s=0 ; s<n ; s++){
@@ -2593,6 +2617,10 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                              run->pel_tempeff_c[k][l]  = (run->col_pel_tempeff>=0 && run->col_pel_tempeff<nv) ? vals[run->col_pel_tempeff] : 1.0;
                              run->ben_tempeff_c[k][l]  = (run->col_ben_tempeff>=0 && run->col_ben_tempeff<nv) ? vals[run->col_ben_tempeff] : 1.0;
                              run->sinking_rate_c[k][l] = (run->col_sinking_rate>=0 && run->col_sinking_rate<nv) ? vals[run->col_sinking_rate] : 1.0;
+                             run->depth_c[k][l]        = (run->col_depth>=0 && run->col_depth<nv) ? vals[run->col_depth] : 1.0;
+                             run->export_attn_c[k][l]  = (run->col_export_attn>=0 && run->col_export_attn<nv) ? vals[run->col_export_attn] : 0.0;
+                             run->export_gamma_c[k][l] = (run->col_export_gamma>=0 && run->col_export_gamma<nv) ? vals[run->col_export_gamma] : 0.0;
+                             run->export_magg_c[k][l]  = (run->col_export_magg>=0 && run->col_export_magg<nv) ? vals[run->col_export_magg] : -1e30;
                      }
              }
              for(s=0 ; s<n ; s++){ community->pelagic[s].A=community->pelagic[s].A_base; community->pelagic[s].mu_0=community->pelagic[s].mu_0_base; }
@@ -3368,6 +3396,10 @@ double g_det(int xspace, int yspace, RUN *run, GRID *grid, COMMUNITY *community)
         export_attn = k(T)*z/w0 - so large carcasses/pellets sink faster and are recycled less
         than small ones. Replaces the flat sinking_rate. Default (channel absent): flat export. */
      int size_dep = (run->col_export_attn>=0);
+     /*Per-cell export parameters when FORCING_PERCELL (spatial_dim>=1); otherwise the global values.*/
+     double e_attn  = run->forcing_percell ? run->export_attn_c[xspace][yspace]  : run->export_attn;
+     double e_gamma = run->forcing_percell ? run->export_gamma_c[xspace][yspace] : run->export_gamma;
+     double e_magg  = run->forcing_percell ? run->export_magg_c[xspace][yspace]  : run->export_magg;
 
      if(run->coupled_flag==1){
              for(s=0 ; s<n ; s++){
@@ -3386,8 +3418,8 @@ double g_det(int xspace, int yspace, RUN *run, GRID *grid, COMMUNITY *community)
                                          + community->pelagic[s].mu_s*((log10(exp(grid->m_values[i]))-log10(exp(community->pelagic[s].pelmin)))/((log10(exp(community->pelagic[s].pelmax))+community->pelagic[s].epsilon)-log10(exp(grid->m_values[i]))))*community->pelagic[s].u_values[i][xspace][yspace]*exp(grid->m_values[i])*grid->mstep;
                              if(size_dep){
                                      double faeces = (community->pelagic[s].Ex_pla*community->pelagic[s].pla_bio[i][xspace][yspace]+community->pelagic[s].Ex_pel*community->pelagic[s].pel_bio[i][xspace][yspace]+community->pelagic[s].Ex_ben*community->pelagic[s].ben_bio[i][xspace][yspace])*community->pelagic[s].u_values[i][xspace][yspace]*grid->mstep;
-                                     double me = fmax(grid->m_values[i], run->export_magg);   /*aggregation floor: small stuff sinks as marine snow*/
-                                     ans_surf += exp(-run->export_attn*exp(-run->export_gamma*me))*(faeces + dead);
+                                     double me = fmax(grid->m_values[i], e_magg);   /*aggregation floor: small stuff sinks as marine snow*/
+                                     ans_surf += exp(-e_attn*exp(-e_gamma*me))*(faeces + dead);
                              }else{
                                      ans_surf += dead;
                              }
@@ -3407,7 +3439,7 @@ double g_det(int xspace, int yspace, RUN *run, GRID *grid, COMMUNITY *community)
      for(i=community->plankton->iplamin ; i<(community->plankton->iplamax+1) ; i++){
              /*Rate of det biomass in from dead (sinking) plankton - surface origin*/
              double pdead = community->plankton->mu_0*exp(community->plankton->beta*grid->m_values[i])*community->plankton->u_values[i][xspace][yspace]*exp(grid->m_values[i])*grid->mstep;
-             if(size_dep) ans_surf += exp(-run->export_attn*exp(-run->export_gamma*fmax(grid->m_values[i], run->export_magg)))*pdead;
+             if(size_dep) ans_surf += exp(-e_attn*exp(-e_gamma*fmax(grid->m_values[i], e_magg)))*pdead;
              else         ans_surf += pdead;
      }
 
@@ -3603,9 +3635,10 @@ void calculate_fishing(RUN *run, GRID *grid, COMMUNITY *community)
         concentrates where biomass is). Runs per cell -> ready for gridded. */
      if(run->col_gravity>=0){
              double bhd=20.0;                 /* benthic habitat depth (sizemodel default) */
-             double dcorr=run->depth;         /* pelagic column thickness (depth channel; 1 if absent) */
              for(k=0 ; k<x ; k++){
                      for(l=0 ; l<y ; l++){
+                             /* pelagic column thickness (depth channel; 1 if absent) - per-cell under FORCING_PERCELL */
+                             double dcorr=run->forcing_percell ? run->depth_c[k][l] : run->depth;
                              double Bpel=0.0, Bben=0.0;
                              for(s=0 ; s<n ; s++){
                                      if(community->pelagic[s].fishing_flag!=1) continue;
@@ -3690,13 +3723,17 @@ void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
                                        tracks the running peak of NATURAL recruitment, frozen the instant the floor first binds,
                                        so the subsidy can never inflate its own reference (no positive feedback).*/
                                      if(community->pelagic[s].imm_frac>0){
-                                             if(!community->pelagic[s].rec0_frozen &&
-                                                community->pelagic[s].reproduction[k][l]>community->pelagic[s].rec0)
-                                                     community->pelagic[s].rec0=community->pelagic[s].reproduction[k][l];
-                                             double fl=community->pelagic[s].imm_frac*community->pelagic[s].rec0;
+                                             /*Per-cell reference (rec0_c[k][l]): each cell keeps its OWN running-peak
+                                               recruitment and freeze flag, so the floor never couples cells in a
+                                               spatial_dim>=1 run. For spatial_dim=0 (x=y=1) this is the [0][0] scalar,
+                                               bit-identical to the former per-species scalar.*/
+                                             if(!community->pelagic[s].rec0_frozen_c[k][l] &&
+                                                community->pelagic[s].reproduction[k][l]>community->pelagic[s].rec0_c[k][l])
+                                                     community->pelagic[s].rec0_c[k][l]=community->pelagic[s].reproduction[k][l];
+                                             double fl=community->pelagic[s].imm_frac*community->pelagic[s].rec0_c[k][l];
                                              if(community->pelagic[s].reproduction[k][l]<fl){
                                                      community->pelagic[s].reproduction[k][l]=fl;
-                                                     community->pelagic[s].rec0_frozen=1;
+                                                     community->pelagic[s].rec0_frozen_c[k][l]=1;
                                              }
                                      }
                              }
@@ -3927,6 +3964,8 @@ void free_mem(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, MAT
                              free(community->pelagic[s].fish_total[k]);
                              free(community->pelagic[s].pred_total[k]);
                              free(community->pelagic[s].reproduction[k]);
+                             free(community->pelagic[s].rec0_c[k]);
+                             free(community->pelagic[s].rec0_frozen_c[k]);
                      }
                      free(community->pelagic[s].pla_total);
                      free(community->pelagic[s].pel_total);
@@ -3934,6 +3973,8 @@ void free_mem(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, MAT
                      free(community->pelagic[s].fish_total);
                      free(community->pelagic[s].pred_total);
                      free(community->pelagic[s].reproduction);
+                     free(community->pelagic[s].rec0_c);
+                     free(community->pelagic[s].rec0_frozen_c);
              }
      free(community->pelagic);
      
