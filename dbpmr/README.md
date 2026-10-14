@@ -95,6 +95,7 @@ C engine at the start of a run (set them with `Sys.setenv(...)` before `SizeSpec
 |---|---|---|
 | `PEL_IMM_FRAC` | `0` (off) | **Connectivity/immigration recruitment floor** (pelagic only). When `> 0`, pelagic recruitment cannot fall below this fraction of the running peak of natural recruitment (frozen the instant the floor first binds) — a connectivity subsidy that rescues otherwise-collapsing cells. `0` skips the term entirely, so dynamics are unchanged. The gridded LME/regional runs use `0.15`. |
 | `TEMP_ON_MORT` | `1` (on) | Whether temperature scales **background (natural) mortality** `mu_0`. With `1`, `mu_0 = mu_0_base × tempeff` for both groups. With `0`, temperature drives **feeding only** and `mu_0` is held at base — rationale: the model doesn't resolve metabolic maintenance/respiration, so a lone `mu_0 × tempeff` is an unbalanced "cost of warmth". |
+| `FORCING_PERCELL` | `0` (off) | **Per-cell environmental forcing** for spatial runs (`spatial_dim ≥ 1`). When `1`, the `forcing_ts.txt` plugin reads **one row per cell per timestep** (`x*y` rows, x-outer/y-inner — the plankton `_ts` convention) so `pel_tempeff`/`ben_tempeff`/`sinking_rate` can vary across space; each cell then responds to its own temperature. `0` (default) reads one global row per timestep, applied to all cells — bit-identical to standard behaviour. |
 
 ```r
 Sys.setenv(PEL_IMM_FRAC = "0.15")   # enable the connectivity floor at 15%

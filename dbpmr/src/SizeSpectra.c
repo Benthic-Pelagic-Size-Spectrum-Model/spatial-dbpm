@@ -41,6 +41,11 @@ typedef struct run_info{
         double pel_tempeff;    //current surface-temperature multiplier (default 1)
         double ben_tempeff;    //current seafloor-temperature multiplier (default 1)
         double sinking_rate;   //current detritus sinking/export fraction (default 1)
+        int forcing_percell;   //per-cell forcing: forcing_ts.txt has x*y rows per timestep (env FORCING_PERCELL=1, spatial_dim>=1). 0 = one global row/timestep (default, bit-identical)
+        int temp_on_mort;      //cached TEMP_ON_MORT (1 = temperature scales background mortality mu_0)
+        double **pel_tempeff_c;//per-cell pelagic temperature multiplier (used when forcing_percell; applied in feeding/mortality)
+        double **ben_tempeff_c;//per-cell benthic temperature multiplier
+        double **sinking_rate_c;//per-cell detritus sinking/export fraction
         double depth;          //water-column depth (m); read+available. Supplying the channel toggles Dunne burial ON (col_depth>=0); the value is NOT used to rescale the burial flux (sizemodel applies burial to the per-volume flux directly)
         double residence_time; //detritus residence time tau (yr) for the alternative first-order pool loss W/tau (dimensionally clean; supplied via the residence_time channel). 0/absent = off
         double export_attn;    //size-dependent export: attenuation number A = k(T)*z/w0 (per-timestep, from export_attn channel; larger = more remineralisation = less export)
@@ -1477,6 +1482,9 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      run->export_magg=-1e30;
      run->gravity=0.0;
      run->fptr_forcing=NULL;
+     run->forcing_percell=0;
+     run->pel_tempeff_c=NULL; run->ben_tempeff_c=NULL; run->sinking_rate_c=NULL;
+     { char *e=getenv("TEMP_ON_MORT"); run->temp_on_mort = e ? atoi(e) : 1; }
      {
              char fname_forcing[256];
              snprintf(fname_forcing, sizeof(fname_forcing), "%s/Input/forcing_ts.txt", run->filename);
@@ -1507,6 +1515,24 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
                              }
                              run->forcing_ncol=col;
                      }
+             }
+     }
+     /* Per-cell forcing (opt-in): FORCING_PERCELL=1 + spatial_dim>=1 => forcing_ts.txt has one row per
+        CELL per timestep (x*y rows, ordered x-outer y-inner, like the plankton _ts file), so temperature
+        and export can vary across space. Allocate the per-cell multiplier arrays (init neutral=1). When
+        off (default), the single global row is used and these arrays are unused -> behaviour unchanged. */
+     if(run->forcing_flag==1){
+             char *e=getenv("FORCING_PERCELL");
+             run->forcing_percell = (e && atoi(e)!=0 && (run->spatial_dim==1 || run->spatial_dim==2)) ? 1 : 0;
+             int xx=grid->xnum, yy=grid->ynum, kk, ll;
+             run->pel_tempeff_c=(double**)safe_malloc(xx*sizeof(double*),__LINE__,__FILE__);
+             run->ben_tempeff_c=(double**)safe_malloc(xx*sizeof(double*),__LINE__,__FILE__);
+             run->sinking_rate_c=(double**)safe_malloc(xx*sizeof(double*),__LINE__,__FILE__);
+             for(kk=0;kk<xx;kk++){
+                     run->pel_tempeff_c[kk]=(double*)safe_malloc(yy*sizeof(double),__LINE__,__FILE__);
+                     run->ben_tempeff_c[kk]=(double*)safe_malloc(yy*sizeof(double),__LINE__,__FILE__);
+                     run->sinking_rate_c[kk]=(double*)safe_malloc(yy*sizeof(double),__LINE__,__FILE__);
+                     for(ll=0;ll<yy;ll++){ run->pel_tempeff_c[kk][ll]=1.0; run->ben_tempeff_c[kk][ll]=1.0; run->sinking_rate_c[kk][ll]=1.0; }
              }
      }
 
@@ -1815,6 +1841,10 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      }
      if(run->forcing_flag==1){
              fclose(run->fptr_forcing);
+             if(run->pel_tempeff_c!=NULL){
+                     for(k=0;k<x;k++){ free(run->pel_tempeff_c[k]); free(run->ben_tempeff_c[k]); free(run->sinking_rate_c[k]); }
+                     free(run->pel_tempeff_c); free(run->ben_tempeff_c); free(run->sinking_rate_c);
+             }
      }
      for(s=0 ; s<n ; s++){
              if(community->pelagic[s].ts_flag==1){
@@ -2549,7 +2579,26 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
            temperature effect, matching sizemodel(): feeding & other-mortality are temperature-
            scaled; senescence (mu_s) and fishing are not;
          - store sinking_rate on run for use in g_det() (detritus input).*/
-     if(run->forcing_flag==1){
+     if(run->forcing_flag==1 && run->forcing_percell){
+             /* PER-CELL forcing: read x*y rows this timestep (one per cell, x-outer y-inner) into the
+                per-cell temperature/sinking arrays. A and mu_0 are held at BASE here; the per-cell
+                temperature is applied in the feeding/mortality integrals (via run->*_tempeff_c[k][l]).
+                Only pel_tempeff/ben_tempeff/sinking_rate are made per-cell in this mode. */
+             char fline[1024]; double vals[64];
+             for(k=0 ; k<x ; k++){
+                     for(l=0 ; l<y ; l++){
+                             if(fgets(fline,sizeof(fline),run->fptr_forcing)==NULL) break;
+                             int nv=0; char *tok=strtok(fline,",");
+                             while(tok!=NULL && nv<64){ vals[nv++]=atof(tok); tok=strtok(NULL,","); }
+                             run->pel_tempeff_c[k][l]  = (run->col_pel_tempeff>=0 && run->col_pel_tempeff<nv) ? vals[run->col_pel_tempeff] : 1.0;
+                             run->ben_tempeff_c[k][l]  = (run->col_ben_tempeff>=0 && run->col_ben_tempeff<nv) ? vals[run->col_ben_tempeff] : 1.0;
+                             run->sinking_rate_c[k][l] = (run->col_sinking_rate>=0 && run->col_sinking_rate<nv) ? vals[run->col_sinking_rate] : 1.0;
+                     }
+             }
+             for(s=0 ; s<n ; s++){ community->pelagic[s].A=community->pelagic[s].A_base; community->pelagic[s].mu_0=community->pelagic[s].mu_0_base; }
+             for(b=0 ; b<c ; b++){ community->benthic[b].A=community->benthic[b].A_base; community->benthic[b].mu_0=community->benthic[b].mu_0_base; }
+     }
+     else if(run->forcing_flag==1){
              char fline[1024];
              if(fgets(fline,sizeof(fline),run->fptr_forcing)!=NULL){
                      double vals[64];
@@ -3124,14 +3173,16 @@ void calculate_g_and_mu(RUN *run, GRID *grid, COMMUNITY *community)
              for(i=community->pelagic[s].ipelmin ; i<(community->pelagic[s].ipelmax+1) ; i++){
                      for(k=0 ; k<x ; k++){
                              for(l=0 ; l<y ; l++){
+                                     /* per-cell pelagic temperature multiplier on FEEDING + PREDATION (1 when off). */
+                                     double tmP = run->forcing_percell ? run->pel_tempeff_c[k][l] : 1.0;
                                      for(ss=0 ; ss<n ; ss++){
-                                              community->pelagic[s].mu_pred_values[ss][i][k][l]=mu_pel_pred(s, ss, i, k, l, run, grid, community);
+                                              community->pelagic[s].mu_pred_values[ss][i][k][l]=tmP*mu_pel_pred(s, ss, i, k, l, run, grid, community);
                                      }
                                      community->pelagic[s].mu_values[i][k][l]=mu_pel(s, i, k, l, run, grid, community);
-                                     
-                                     community->pelagic[s].pla_bio[i][k][l]=pla_biomass(s, i, k, l, grid, community);
-                                     community->pelagic[s].pel_bio[i][k][l]=pel_biomass(s, i, k, l, run, grid, community);
-                                     community->pelagic[s].ben_bio[i][k][l]=ben_biomass(s, i, k, l, run, grid, community);
+
+                                     community->pelagic[s].pla_bio[i][k][l]=tmP*pla_biomass(s, i, k, l, grid, community);
+                                     community->pelagic[s].pel_bio[i][k][l]=tmP*pel_biomass(s, i, k, l, run, grid, community);
+                                     community->pelagic[s].ben_bio[i][k][l]=tmP*ben_biomass(s, i, k, l, run, grid, community);
                                      community->pelagic[s].g_values[i][k][l]=g_pel(s, i, k, l, run, grid, community);
                              }
                      }
@@ -3171,10 +3222,13 @@ void calculate_g_and_mu(RUN *run, GRID *grid, COMMUNITY *community)
                      for(i=community->benthic[b].ibenmin ; i<(community->benthic[b].ibenmax+1) ; i++){
                              for(k=0 ; k<x ; k++){
                                      for(l=0 ; l<y ; l++){
-                                             community->benthic[b].mu_pred_values[i][k][l]=mu_ben_pred(b, i, k, l, run, grid, community);
+                                             /* predation ON benthos is BY pelagic predators (pel temp); benthic feeding uses benthic temp */
+                                             double tmPb = run->forcing_percell ? run->pel_tempeff_c[k][l] : 1.0;
+                                             double tmB  = run->forcing_percell ? run->ben_tempeff_c[k][l] : 1.0;
+                                             community->benthic[b].mu_pred_values[i][k][l]=tmPb*mu_ben_pred(b, i, k, l, run, grid, community);
                                              community->benthic[b].mu_values[i][k][l]=mu_ben(b, i, k, l, run, grid, community);
-                                             
-                                             community->benthic[b].det_bio[i][k][l]=det_biomass(b, i, k, l, run, grid, community);
+
+                                             community->benthic[b].det_bio[i][k][l]=tmB*det_biomass(b, i, k, l, run, grid, community);
                                              community->benthic[b].g_values[i][k][l]=g_ben(b, i, k, l, run, grid, community);
                                      }
                              }
@@ -3374,7 +3428,8 @@ double g_det(int xspace, int yspace, RUN *run, GRID *grid, COMMUNITY *community)
        not done.*/
      /* size-dependent export already applied export(m) per size class inside ans_surf, so it
         replaces the flat sinking_rate; otherwise scale the aggregated surface flux by sinking_rate */
-     return((size_dep ? ans_surf : run->sinking_rate * ans_surf) + ans_bed);
+     double sink = run->forcing_percell ? run->sinking_rate_c[xspace][yspace] : run->sinking_rate;
+     return((size_dep ? ans_surf : sink * ans_surf) + ans_bed);
 }
 
 double mu_det(int xspace, int yspace, RUN *run, GRID *grid, COMMUNITY *community)
@@ -3434,7 +3489,7 @@ double mu_pel(int species, int size, int xspace, int yspace, RUN *run, GRID *gri
                ans+=community->pelagic[species].mu_pred_values[s][size][xspace][yspace];
        }
        ans+=community->pelagic[species].mu_fish_values[size][xspace][yspace];
-       ans+=(community->pelagic[species].mu_0*exp(community->pelagic[species].beta*grid->m_values[size]));
+       ans+=((run->forcing_percell && run->temp_on_mort ? run->pel_tempeff_c[xspace][yspace] : 1.0)*community->pelagic[species].mu_0*exp(community->pelagic[species].beta*grid->m_values[size]));
        ans+=(community->pelagic[species].mu_s*((log10(exp(grid->m_values[size]))-log10(exp(community->pelagic[species].pelmin)))/((log10(exp(community->pelagic[species].pelmax))+community->pelagic[species].epsilon)-log10(exp(grid->m_values[size])))));
             
        return ans;
@@ -3465,7 +3520,7 @@ double mu_ben(int species, int size, int xspace, int yspace, RUN *run, GRID *gri
        
        ans+=community->benthic[species].mu_pred_values[size][xspace][yspace];
        ans+=community->benthic[species].mu_fish_values[size][xspace][yspace];
-       ans+=(community->benthic[species].mu_0*exp(community->benthic[species].beta*grid->m_values[size]));
+       ans+=((run->forcing_percell && run->temp_on_mort ? run->ben_tempeff_c[xspace][yspace] : 1.0)*community->benthic[species].mu_0*exp(community->benthic[species].beta*grid->m_values[size]));
        ans+=(community->benthic[species].mu_s*((log10(exp(grid->m_values[size]))-log10(exp(community->benthic[species].benmin)))/((log10(exp(community->benthic[species].benmax))+community->benthic[species].epsilon)-log10(exp(grid->m_values[size])))));
        
        return ans;
