@@ -10,13 +10,19 @@ LN10 <- log(10)
   run  <- Setup.Run("R", 1, 1, spatial_dim = 1, coupled_flag = TRUE, diff_method = 1)
   grid <- Setup.Grid(run, tmax = tmax, tstep = 1/48, toutstep = 1,
                      xmin = 0, xmax = (ncell - 1) * dx, xstep = dx, xoutstep = dx)
-  pl <- Setup.Plankton(run, filename = "plankton")
+  # uniform=TRUE: also give plankton a uniform IC + ts, overriding the default spatial x_start
+  # Gaussian (the real source of cell-to-cell divergence diagnosed in issue #42).
+  pl <- Setup.Plankton(run, filename = "plankton", initial_flag = uniform)
+  if (uniform) Setup.ts(pl, run, grid, func = function(m, t, x, y) 0.01 * exp(-m))
   pe <- Setup.Pelagic(run, filename = "fish", comp = comp, prey = prey, pred = pred, initial_flag = TRUE)
   seedx <- seed_cell * dx
   f <- if (uniform) function(m, t, x, y) (0.01/LN10) * exp(-m)
        else         function(m, t, x, y) if (abs(x - seedx) < dx/2) (0.01/LN10)*exp(-m) else 1e-20
   Setup.ts(pe, run, grid, func = f)
-  be <- Setup.Benthic(run, filename = "benthos"); de <- Setup.Detritus(run, filename = "detritus")
+  # benthic also carries the x_start bump unless given a uniform IC (same reason as plankton)
+  be <- Setup.Benthic(run, filename = "benthos", initial_flag = uniform)
+  if (uniform) Setup.ts(be, run, grid, func = function(m, t, x, y) 0.01 * exp(-m))
+  de <- Setup.Detritus(run, filename = "detritus")
   invisible(capture.output(SizeSpectrum(run, grid, pl, pe, be, de)))
   L <- readLines("R/fish/results.txt")
   hdr <- suppressWarnings(as.numeric(strsplit(L[5], ",")[[1]])); mc <- which(!is.na(hdr)); m <- hdr[mc]; dd <- diff(m)[1]
@@ -36,8 +42,10 @@ test_that("diffusion spreads symmetrically from a central source (issue #41)", {
   expect_false(b[5] > 1.5 * b[3])              # the old bug: biomass piling at x-max
 })
 
-test_that("with movement off, identical cells stay identical (no spurious drift)", {
-  skip("blocked on #42 - per-cell dynamics are not yet independent for spatial_dim>=1")
-  b <- .move_biomass(comp = 0, dx = 100, uniform = TRUE, ncell = 5)  # no movement, uniform init
-  expect_lt(diff(range(b)) / mean(b), 1e-6)    # every cell evolves identically (currently fails: #42)
+test_that("with movement off and uniform inputs, identical cells stay identical (#42)", {
+  # #42 closed as not-a-bug: the per-cell divergence was the default spatial plankton x_start
+  # bump, not the solver. With plankton + pelagic both uniform and movement off, every cell is
+  # an independent, identical 0-D run (and the connectivity floor is now per-cell too).
+  b <- .move_biomass(comp = 0, dx = 100, uniform = TRUE, ncell = 5)
+  expect_lt(diff(range(b)) / mean(b), 1e-6)
 })
