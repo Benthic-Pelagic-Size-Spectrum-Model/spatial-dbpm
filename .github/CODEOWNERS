@@ -1,0 +1,10 @@
+# Code owners for spatial-dbpm (dbpmr).
+# With branch protection on `main` requiring code-owner review, a PR touching
+# these paths auto-requests review from the owner(s) listed and cannot merge
+# without their approval.
+
+# Default: every change needs maintainer review.
+*                 @juliablanchard
+
+# The compiled C engine — review especially carefully here.
+/dbpmr/src/       @juliablanchard
