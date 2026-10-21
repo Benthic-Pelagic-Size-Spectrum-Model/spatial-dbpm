@@ -2479,7 +2479,7 @@ void print_pelagic_summary(GRID *grid, PELAGIC *pelagic, int time)
 
      for(k=0 ; k<x ; k+=(int)rint(grid->xoutstep/grid->xstep)){
              for(l=0 ; l<y ; l+=(int)rint(grid->youtstep/grid->ystep)){
-                     fprintf(pelagic->fptr_summ,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
+                     fprintf(pelagic->fptr_summ,"%.10f,%f,%f",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
                      
                      /*Pelagic Biomass Totals*/
                      temp=0;
@@ -2522,7 +2522,7 @@ void print_benthic_summary(GRID *grid, BENTHIC *benthic, int time)
 
      for(k=0 ; k<x ; k+=(int)rint(grid->xoutstep/grid->xstep)){
              for(l=0 ; l<y ; l+=(int)rint(grid->youtstep/grid->ystep)){
-                     fprintf(benthic->fptr_summ,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
+                     fprintf(benthic->fptr_summ,"%.10f,%f,%f",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
                      
                      /*Benthic Biomass Totals*/
                      temp=0;
@@ -2560,7 +2560,7 @@ void print_detritus_summary(GRID *grid, DETRITUS *detritus, int time)
 
      for(k=0 ; k<x ; k+=(int)rint(grid->xoutstep/grid->xstep)){
              for(l=0 ; l<y ; l+=(int)rint(grid->youtstep/grid->ystep)){
-                     fprintf(detritus->fptr_summ,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);                     
+                     fprintf(detritus->fptr_summ,"%.10f,%f,%f",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);                     
                      
                      /*Detritus Biomass Totals*/
                      fprintf(detritus->fptr_summ,",%.16f",detritus->w_values[k][l]);
