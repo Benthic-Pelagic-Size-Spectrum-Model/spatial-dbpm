@@ -3,6 +3,7 @@
 #include <math.h>
 #include <time.h>
 #include <R.h>
+#include <Rinternals.h>
 
 //------------------------//
 // Structure Declarations //
@@ -441,13 +442,35 @@ void free_mem(RUN *, GRID *, COMMUNITY *, MATRIX *, MATRIX *, MATRIX *, MATRIX *
 void *safe_malloc(size_t, int, char *);           //Wrappered function for memory alloaction
 FILE *safe_fopen(char *, char *, int, char *);    //Wrappered function for file opening
 
+/*Protype of the internal size-spectrum function (no interface with R)*/
+static void SizeSpectrum_internals(int *, double *, double *, double *, double *, double *, char **, int *);
 
-//--------------------------------------//
-// This is the main program called by R //
-//--------------------------------------//
+// This is the new R interface. SizeSpectrum() is now a wrapper function that
+// takes the objects from R (.Call()). SizeSpectrum() checks the SEXP objects from
+// R are the correct SXPtypes, sets C pointers to the R data, and then runs the
+// internal function SizeSpectrum_internals() which performs the calculations and
+// writes outputs. SizeSpectrum() returns NULL to R.
+// TODO: return to R will be changed to be optional so that users can toggle
+// file output, memory output or both. 
+SEXP SizeSpectrum(
+        SEXP run_params_r, 
+        SEXP grid_params_r, 
+        SEXP plankton_params_r, 
+        SEXP pelagic_params_r, 
+        SEXP benthic_params_r, 
+        SEXP detritus_params_r, 
+        SEXP names_params_r, 
+        SEXP flags_params_r
+) {
 
+        return(R_NilValue);
+}
 
-void SizeSpectrum(int *run_params, double *grid_params, double *pla_params, double *pel_params, double *ben_params, double * det_params, char **names_params, int *flags_params)
+//-----------------------------------------------------------------------------//
+// This is the internal function that does the work of the program called by R //
+//-----------------------------------------------------------------------------//
+
+static void SizeSpectrum_internals(int *run_params, double *grid_params, double *pla_params, double *pel_params, double *ben_params, double * det_params, char **names_params, int *flags_params)
 // run_params is an array of run parameters
 // grid_params is an array of grid discretisation values
 // pla_params is plankton params
@@ -524,7 +547,6 @@ void SizeSpectrum(int *run_params, double *grid_params, double *pla_params, doub
     free_mem(&run, &grid, &community, pelmatrix, benmatrix, &xmatrix, &ymatrix, temp_pel_params, temp_ben_params);
 
 }
-
 
 //-----------------//
 // Setup Functions //
