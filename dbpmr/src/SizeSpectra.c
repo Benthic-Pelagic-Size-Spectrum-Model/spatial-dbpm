@@ -2275,30 +2275,30 @@ void print_detritus(DETRITUS *detritus, FILE *fptr)
 void print_mass_header(GRID *grid, FILE *fptr)
 {
      /*Output Header Row*/
-     int i;
-     int m=grid->mnum;
+     int sc_idx;
+     int n_m=grid->mnum;
      
      fprintf(fptr,"Ouput Data\n");
      fprintf(fptr,"t,x,y,");
-     for(i=0 ; i<(m-1) ; i+=(int)rint(grid->moutstep/grid->mstep)){
-             fprintf(fptr,"%f,",grid->m_values[i]);
+     for(sc_idx=0; sc_idx < (n_m-1); sc_idx += (int)rint(grid->moutstep / grid->mstep)){
+             fprintf(fptr,"%f,",grid->m_values[sc_idx]);
      }
-     fprintf(fptr,"%f\n",grid->m_values[m-1]);
+     fprintf(fptr,"%f\n",grid->m_values[n_m-1]);
 }
 
 void print_detailed_header(GRID *grid, FILE *fptr)
 {
-     int i;
-     int m;
-     m=grid->mnum;
+     int sc_idx;
+     int n_m;
+     n_m=grid->mnum;
 
      /*Print Header*/
      fprintf(fptr,"\nDetailed Timestep\n");
      fprintf(fptr,"t,x,y,");
-     for(i=0 ; i<(m-1) ; i++){
-             fprintf(fptr,"%f,",grid->m_values[i]);
+     for(sc_idx=0 ; sc_idx < (n_m-1) ; sc_idx++){
+             fprintf(fptr,"%f,",grid->m_values[sc_idx]);
      }
-     fprintf(fptr,"%f\n",grid->m_values[m-1]);
+     fprintf(fptr,"%f\n",grid->m_values[n_m-1]);
 }
 
 void print_plankton_header(FILE *fptr)
@@ -2348,22 +2348,22 @@ void print_detritus_header(FILE *fptr)
 void print_timestep_plankton(GRID *grid, PLANKTON *plankton, int time)
 /*Outputs timestep values*/
 {
-     int i,k,l;
-     int m,x,y;
-     m=grid->mnum;
-     x=grid->xnum;
-     y=grid->ynum;
+     int sc_idx, x_idx, y_idx;
+     int n_m, n_x, n_y;
+     n_m=grid->mnum;
+     n_x=grid->xnum;
+     n_y=grid->ynum;
      
      /*Open output files*/
      plankton->fptr_r=safe_fopen(plankton->fname_r,"a",__LINE__,__FILE__);
 
-     for(k=0 ; k<x ; k+=(int)rint(grid->xoutstep/grid->xstep)){
-             for(l=0 ; l<y ; l+=(int)rint(grid->youtstep/grid->ystep)){
-                     fprintf(plankton->fptr_r,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
-                     for(i=0 ; i<(m-1) ; i+=(int)rint(grid->moutstep/grid->mstep)){
-                             fprintf(plankton->fptr_r,"%.16f,",plankton->u_values[i][k][l]);
+     for(x_idx=0 ; x_idx<n_x ; x_idx+=(int)rint(grid->xoutstep/grid->xstep)){
+             for(y_idx=0 ; y_idx<n_y ; y_idx+=(int)rint(grid->youtstep/grid->ystep)){
+                     fprintf(plankton->fptr_r,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
+                     for(sc_idx=0 ; sc_idx<(n_m-1) ; sc_idx+=(int)rint(grid->moutstep/grid->mstep)){
+                             fprintf(plankton->fptr_r,"%.16f,",plankton->u_values[sc_idx][x_idx][y_idx]);
                      }
-                     fprintf(plankton->fptr_r,"%.16f\n",plankton->u_values[m-1][k][l]);
+                     fprintf(plankton->fptr_r,"%.16f\n",plankton->u_values[n_m-1][x_idx][y_idx]);
              }
      }
      
@@ -2373,11 +2373,11 @@ void print_timestep_plankton(GRID *grid, PLANKTON *plankton, int time)
 void print_detailed_plankton(GRID *grid, PLANKTON *plankton, int time)
 /*Outputs timestep values at high resolution*/
 {     
-     int i,k,l;
-     int m,x,y;
-     m=grid->mnum;
-     x=grid->xnum;
-     y=grid->ynum;
+     int sc_idx, x_idx, y_idx;
+     int n_m, n_x, n_y;
+     n_m=grid->mnum;
+     n_x=grid->xnum;
+     n_y=grid->ynum;
      
      /*Open output files*/
      plankton->fptr_r=safe_fopen(plankton->fname_r,"a",__LINE__,__FILE__);
@@ -2385,13 +2385,13 @@ void print_detailed_plankton(GRID *grid, PLANKTON *plankton, int time)
      /*Print Header*/
      print_detailed_header(grid, plankton->fptr_r);
 
-     for(k=0 ; k<x ; k++){
-             for(l=0 ; l<y ; l++){
-                     fprintf(plankton->fptr_r,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
-                     for(i=0 ; i<(m-1) ; i++){
-                             fprintf(plankton->fptr_r,"%.16f,",plankton->u_values[i][k][l]);
+     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                     fprintf(plankton->fptr_r,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
+                     for(sc_idx=0 ; sc_idx<(n_m-1) ; sc_idx++){
+                             fprintf(plankton->fptr_r,"%.16f,",plankton->u_values[sc_idx][x_idx][y_idx]);
                      }
-                     fprintf(plankton->fptr_r,"%.16f\n",plankton->u_values[m-1][k][l]);
+                     fprintf(plankton->fptr_r,"%.16f\n",plankton->u_values[n_m-1][x_idx][y_idx]);
              }
      }
      
@@ -2401,47 +2401,47 @@ void print_detailed_plankton(GRID *grid, PLANKTON *plankton, int time)
 void print_timestep_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, int time)
 /*Outputs timestep values*/
 {
-     int s,i,k,l;
-     int n,m,x,y;
-     n=run->no_pelagic;
-     m=grid->mnum;
-     x=grid->xnum;
-     y=grid->ynum;
+     int pel_species_idx, sc_idx, x_idx, y_idx;
+     int n_pel_species, n_m, n_x, n_y;
+     n_pel_species=run->no_pelagic;
+     n_m=grid->mnum;
+     n_x=grid->xnum;
+     n_y=grid->ynum;
 
      /*Open output files*/
      pelagic->fptr_r=safe_fopen(pelagic->fname_r,"a",__LINE__,__FILE__);
      pelagic->fptr_g=safe_fopen(pelagic->fname_g,"a",__LINE__,__FILE__);
      pelagic->fptr_m=safe_fopen(pelagic->fname_m,"a",__LINE__,__FILE__);
-     for(s=0 ; s<n ; s++){
-             pelagic->fptr_pred[s]=safe_fopen(pelagic->fname_pred[s],"a",__LINE__,__FILE__);
+     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+             pelagic->fptr_pred[pel_species_idx]=safe_fopen(pelagic->fname_pred[pel_species_idx],"a",__LINE__,__FILE__);
      }
      pelagic->fptr_fish=safe_fopen(pelagic->fname_fish,"a",__LINE__,__FILE__);
 
-     for(k=0 ; k<x ; k+=(int)rint(grid->xoutstep/grid->xstep)){
-             for(l=0 ; l<y ; l+=(int)rint(grid->youtstep/grid->ystep)){
-                     fprintf(pelagic->fptr_r,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
-                     fprintf(pelagic->fptr_g,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
-                     fprintf(pelagic->fptr_m,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
-                     for(s=0 ; s<n ; s++){
-                             fprintf(pelagic->fptr_pred[s],"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
+     for(x_idx=0 ; x_idx<n_x ; x_idx+=(int)rint(grid->xoutstep/grid->xstep)){
+             for(y_idx=0 ; y_idx<n_y ; y_idx+=(int)rint(grid->youtstep/grid->ystep)){
+                     fprintf(pelagic->fptr_r,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
+                     fprintf(pelagic->fptr_g,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
+                     fprintf(pelagic->fptr_m,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
+                     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+                             fprintf(pelagic->fptr_pred[pel_species_idx],"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
                      }
-                     fprintf(pelagic->fptr_fish,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
-                     for(i=0 ; i<(m-1) ; i+=(int)rint(grid->moutstep/grid->mstep)){
-                             fprintf(pelagic->fptr_r,"%.16f,",pelagic->u_values[i][k][l]);
-                             fprintf(pelagic->fptr_g,"%.16f,",pelagic->g_values[i][k][l]);
-                             fprintf(pelagic->fptr_m,"%.16f,",pelagic->mu_values[i][k][l]);
-                             for(s=0 ; s<n ; s++){
-                                     fprintf(pelagic->fptr_pred[s],"%.16f,",pelagic->mu_pred_values[s][i][k][l]);
+                     fprintf(pelagic->fptr_fish,"%.10f,%f,%f,",(grid->t_values[tn_ime]),grid->x_values[x_idx],grid->y_values[y_idx]);
+                     for(sc_idx=0 ; sc_idx<(n_m-1) ; sc_idx+=(int)rint(grid->moutstep/grid->mstep)){
+                             fprintf(pelagic->fptr_r,"%.16f,",pelagic->u_values[sc_idx][x_idx][y_idx]);
+                             fprintf(pelagic->fptr_g,"%.16f,",pelagic->g_values[sc_idx][x_idx][y_idx]);
+                             fprintf(pelagic->fptr_m,"%.16f,",pelagic->mu_values[sc_idx][x_idx][y_idx]);
+                             for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+                                     fprintf(pelagic->fptr_pred[pel_species_idx],"%.16f,",pelagic->mu_pred_values[pel_species_idx][sc_idx][x_idx][y_idx]);
                              }
-                             fprintf(pelagic->fptr_fish,"%.16f,",pelagic->mu_fish_values[i][k][l]);
+                             fprintf(pelagic->fptr_fish,"%.16f,",pelagic->mu_fish_values[sc_idx][x_idx][y_idx]);
                      }
-                     fprintf(pelagic->fptr_r,"%.16f\n",pelagic->u_values[m-1][k][l]);
-                     fprintf(pelagic->fptr_g,"%.16f\n",pelagic->g_values[m-1][k][l]);
-                     fprintf(pelagic->fptr_m,"%.16f\n",pelagic->mu_values[m-1][k][l]);
-                     for(s=0 ; s<n ; s++){
-                             fprintf(pelagic->fptr_pred[s],"%.16f\n",pelagic->mu_pred_values[s][m-1][k][l]);
+                     fprintf(pelagic->fptr_r,"%.16f\n",pelagic->u_values[n_m-1][x_idx][y_idx]);
+                     fprintf(pelagic->fptr_g,"%.16f\n",pelagic->g_values[n_m-1][x_idx][y_idx]);
+                     fprintf(pelagic->fptr_m,"%.16f\n",pelagic->mu_values[n_m-1][x_idx][y_idx]);
+                     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+                             fprintf(pelagic->fptr_pred[s],"%.16f\n",pelagic->mu_pred_values[pel_species_idx][n_m-1][x_idx][y_idx]);
                      }
-                     fprintf(pelagic->fptr_fish,"%.16f\n",pelagic->mu_fish_values[m-1][k][l]);
+                     fprintf(pelagic->fptr_fish,"%.16f\n",pelagic->mu_fish_values[n_m-1][x_idx][y_idx]);
              }
      }
      
@@ -2449,8 +2449,8 @@ void print_timestep_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, int time)
      fclose(pelagic->fptr_r);
      fclose(pelagic->fptr_g);
      fclose(pelagic->fptr_m);
-     for(s=0 ; s<n ; s++){
-             fclose(pelagic->fptr_pred[s]);
+     for(pel_species_idx=0; pel_species_idx<n_pel_species; pel_species_idx++){
+             fclose(pelagic->fptr_pred[pel_species_idx]);
      }
      fclose(pelagic->fptr_fish);
 }
@@ -2458,19 +2458,19 @@ void print_timestep_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, int time)
 void print_detailed_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, int time)
 /*Outputs timestep values*/
 {
-     int s,i,k,l;
-     int n,m,x,y;
-     n=run->no_pelagic;
-     m=grid->mnum;
-     x=grid->xnum;
-     y=grid->ynum;
+     int pel_species_idx, sc_idx, x_idx, y_idx;
+     int n_pel_species, n_m, n_x, n_y;
+     n_pel_species=run->no_pelagic;
+     n_m=grid->mnum;
+     n_x=grid->xnum;
+     n_y=grid->ynum;
 
      /*Open output files*/
      pelagic->fptr_r=safe_fopen(pelagic->fname_r,"a",__LINE__,__FILE__);
      pelagic->fptr_g=safe_fopen(pelagic->fname_g,"a",__LINE__,__FILE__);
      pelagic->fptr_m=safe_fopen(pelagic->fname_m,"a",__LINE__,__FILE__);
-     for(s=0 ; s<n ; s++){
-             pelagic->fptr_pred[s]=safe_fopen(pelagic->fname_pred[s],"a",__LINE__,__FILE__);
+     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+             pelagic->fptr_pred[pel_species_idx]=safe_fopen(pelagic->fname_pred[pel_species_idx],"a",__LINE__,__FILE__);
      }
      pelagic->fptr_fish=safe_fopen(pelagic->fname_fish,"a",__LINE__,__FILE__);
 
@@ -2478,37 +2478,37 @@ void print_detailed_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, int time)
      print_detailed_header(grid, pelagic->fptr_r);
      print_detailed_header(grid, pelagic->fptr_g);
      print_detailed_header(grid, pelagic->fptr_m);
-     for(s=0 ; s<n ; s++){
-             print_detailed_header(grid, pelagic->fptr_pred[s]);
+     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+             print_detailed_header(grid, pelagic->fptr_pred[pel_species_idx]);
      }
      print_detailed_header(grid, pelagic->fptr_fish);
 
 
-     for(k=0 ; k<x ; k++){
-             for(l=0 ; l<y ; l++){
-                     fprintf(pelagic->fptr_r,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
-                     fprintf(pelagic->fptr_g,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
-                     fprintf(pelagic->fptr_m,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
-                     for(s=0 ; s<n ; s++){
-                             fprintf(pelagic->fptr_pred[s],"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
+     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                     fprintf(pelagic->fptr_r,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
+                     fprintf(pelagic->fptr_g,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
+                     fprintf(pelagic->fptr_m,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
+                     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+                             fprintf(pelagic->fptr_pred[pel_species_idx],"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
                      }
-                     fprintf(pelagic->fptr_fish,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
-                     for(i=0 ; i<(m-1) ; i++){
-                             fprintf(pelagic->fptr_r,"%.16f,",pelagic->u_values[i][k][l]);
-                             fprintf(pelagic->fptr_g,"%.16f,",pelagic->g_values[i][k][l]);
-                             fprintf(pelagic->fptr_m,"%.16f,",pelagic->mu_values[i][k][l]);
-                             for(s=0 ; s<n ; s++){
-                                     fprintf(pelagic->fptr_pred[s],"%.16f,",pelagic->mu_pred_values[s][i][k][l]);
+                     fprintf(pelagic->fptr_fish,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
+                     for(sc_idx=0 ; sc_idx<(n_m-1) ; sc_idx++){
+                             fprintf(pelagic->fptr_r,"%.16f,",pelagic->u_values[sc_idx][x_idx][y_idx]);
+                             fprintf(pelagic->fptr_g,"%.16f,",pelagic->g_values[sc_idx][x_idx][y_idx]);
+                             fprintf(pelagic->fptr_m,"%.16f,",pelagic->mu_values[sc_idx][x_idx][y_idx]);
+                             for(pel_species_idx=0 ; pel_species_idx<n ; pel_species_idx++){
+                                     fprintf(pelagic->fptr_pred[pel_species_idx],"%.16f,",pelagic->mu_pred_values[pel_species_idx][sc_idx][x_idx][y_idx]);
                              }
-                             fprintf(pelagic->fptr_fish,"%.16f,",pelagic->mu_fish_values[i][k][l]);
+                             fprintf(pelagic->fptr_fish,"%.16f,",pelagic->mu_fish_values[sc_idx][x_idx][y_idx]);
                      }
-                     fprintf(pelagic->fptr_r,"%.16f\n",pelagic->u_values[m-1][k][l]);
-                     fprintf(pelagic->fptr_g,"%.16f\n",pelagic->g_values[m-1][k][l]);
-                     fprintf(pelagic->fptr_m,"%.16f\n",pelagic->mu_values[m-1][k][l]);
-                     for(s=0 ; s<n ; s++){
-                             fprintf(pelagic->fptr_pred[s],"%.16f\n",pelagic->mu_pred_values[s][m-1][k][l]);
+                     fprintf(pelagic->fptr_r,"%.16f\n",pelagic->u_values[n_m-1][x_idx][y_idx]);
+                     fprintf(pelagic->fptr_g,"%.16f\n",pelagic->g_values[n_m-1][x_idx][y_idx]);
+                     fprintf(pelagic->fptr_m,"%.16f\n",pelagic->mu_values[n_m-1][x_idx][y_idx]);
+                     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+                             fprintf(pelagic->fptr_pred[pel_species_idx],"%.16f\n",pelagic->mu_pred_values[pel_species_idx][n_m-1][x_idx][y_idx]);
                      }
-                     fprintf(pelagic->fptr_fish,"%.16f\n",pelagic->mu_fish_values[m-1][k][l]);
+                     fprintf(pelagic->fptr_fish,"%.16f\n",pelagic->mu_fish_values[n_m-1][x_idx][y_idx]);
              }
      }
      
@@ -2516,8 +2516,8 @@ void print_detailed_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, int time)
      fclose(pelagic->fptr_r);
      fclose(pelagic->fptr_g);
      fclose(pelagic->fptr_m);
-     for(s=0 ; s<n ; s++){
-             fclose(pelagic->fptr_pred[s]);
+     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+             fclose(pelagic->fptr_pred[pel_species_idx]);
      }
      fclose(pelagic->fptr_fish);
 }
@@ -2526,11 +2526,11 @@ void print_detailed_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, int time)
 void print_timestep_benthic(GRID *grid, BENTHIC *benthic, int time)
 /*Outputs timestep values*/
 {
-     int i,k,l;
-     int m,x,y;
-     m=grid->mnum;
-     x=grid->xnum;
-     y=grid->ynum;
+     int sc_idx, x_idx, y_idx;
+     int n_m, n_x, n_y;
+     n_m=grid->mnum;
+     n_x=grid->xnum;
+     n_y=grid->ynum;
 
      /*Open output files*/
      benthic->fptr_r=safe_fopen(benthic->fname_r,"a",__LINE__,__FILE__);
@@ -2539,25 +2539,25 @@ void print_timestep_benthic(GRID *grid, BENTHIC *benthic, int time)
      benthic->fptr_pred=safe_fopen(benthic->fname_pred,"a",__LINE__,__FILE__);
      benthic->fptr_fish=safe_fopen(benthic->fname_fish,"a",__LINE__,__FILE__);
 
-     for(k=0 ; k<x ; k+=(int)rint(grid->xoutstep/grid->xstep)){
-             for(l=0 ; l<y ; l+=(int)rint(grid->youtstep/grid->ystep)){
-                     fprintf(benthic->fptr_r,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
-                     fprintf(benthic->fptr_g,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
-                     fprintf(benthic->fptr_m,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
-                     fprintf(benthic->fptr_pred,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
-                     fprintf(benthic->fptr_fish,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
-                     for(i=0 ; i<(m-1) ; i+=(int)rint(grid->moutstep/grid->mstep)){
-                             fprintf(benthic->fptr_r,"%.16f,",benthic->u_values[i][k][l]);
-                             fprintf(benthic->fptr_g,"%.16f,",benthic->g_values[i][k][l]);
-                             fprintf(benthic->fptr_m,"%.16f,",benthic->mu_values[i][k][l]);
-                             fprintf(benthic->fptr_pred,"%.16f,",benthic->mu_pred_values[i][k][l]);
-                             fprintf(benthic->fptr_fish,"%.16f,",benthic->mu_fish_values[i][k][l]);
+     for(x_idx=0 ; x_idx<n_x ; x_idx+=(int)rint(grid->xoutstep/grid->xstep)){
+             for(y_idx=0 ; y_idx<n_y ; y_idx+=(int)rint(grid->youtstep/grid->ystep)){
+                     fprintf(benthic->fptr_r,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
+                     fprintf(benthic->fptr_g,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
+                     fprintf(benthic->fptr_m,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
+                     fprintf(benthic->fptr_pred,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
+                     fprintf(benthic->fptr_fish,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
+                     for(sc_idx=0 ; sc_idx<(n_m-1) ; sc_idx+=(int)rint(grid->moutstep/grid->mstep)){
+                             fprintf(benthic->fptr_r,"%.16f,",benthic->u_values[sc_idx][x_idx][y_idx]);
+                             fprintf(benthic->fptr_g,"%.16f,",benthic->g_values[sc_idx][x_idx][y_idx]);
+                             fprintf(benthic->fptr_m,"%.16f,",benthic->mu_values[sc_idx][x_idx][y_idx]);
+                             fprintf(benthic->fptr_pred,"%.16f,",benthic->mu_pred_values[sc_idx][x_idx][y_idx]);
+                             fprintf(benthic->fptr_fish,"%.16f,",benthic->mu_fish_values[sc_idx][x_idx][y_idx]);
                      }
-                     fprintf(benthic->fptr_r,"%.16f\n",benthic->u_values[m-1][k][l]);
-                     fprintf(benthic->fptr_g,"%.16f\n",benthic->g_values[m-1][k][l]);
-                     fprintf(benthic->fptr_m,"%.16f\n",benthic->mu_values[m-1][k][l]);
-                     fprintf(benthic->fptr_pred,"%.16f\n",benthic->mu_pred_values[m-1][k][l]);
-                     fprintf(benthic->fptr_fish,"%.16f\n",benthic->mu_fish_values[m-1][k][l]);
+                     fprintf(benthic->fptr_r,"%.16f\n",benthic->u_values[n_m-1][x_idx][y_idx]);
+                     fprintf(benthic->fptr_g,"%.16f\n",benthic->g_values[n_m-1][x_idx][y_idx]);
+                     fprintf(benthic->fptr_m,"%.16f\n",benthic->mu_values[n_m-1][x_idx][y_idx]);
+                     fprintf(benthic->fptr_pred,"%.16f\n",benthic->mu_pred_values[n_m-1][x_idx][y_idx]);
+                     fprintf(benthic->fptr_fish,"%.16f\n",benthic->mu_fish_values[n_m-1][x_idx][y_idx]);
              }
      }
 
@@ -2572,11 +2572,11 @@ void print_timestep_benthic(GRID *grid, BENTHIC *benthic, int time)
 void print_detailed_benthic(GRID *grid, BENTHIC *benthic, int time)
 /*Outputs timestep values*/
 {
-     int i,k,l;
-     int m,x,y;
-     m=grid->mnum;
-     x=grid->xnum;
-     y=grid->ynum;
+     int sc_idx, x_idx, y_idx;
+     int n_m, n_x, n_y;
+     n_m=grid->mnum;
+     n_x=grid->xnum;
+     n_y=grid->ynum;
 
      /*Open output files*/
      benthic->fptr_r=safe_fopen(benthic->fname_r,"a",__LINE__,__FILE__);
@@ -2592,25 +2592,25 @@ void print_detailed_benthic(GRID *grid, BENTHIC *benthic, int time)
      print_detailed_header(grid, benthic->fptr_pred);
      print_detailed_header(grid, benthic->fptr_fish);
      
-     for(k=0 ; k<x ; k++){
-             for(l=0 ; l<y ; l++){
-                     fprintf(benthic->fptr_r,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
-                     fprintf(benthic->fptr_g,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
-                     fprintf(benthic->fptr_m,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
-                     fprintf(benthic->fptr_pred,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
-                     fprintf(benthic->fptr_fish,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
-                     for(i=0 ; i<(m-1) ; i++){
-                             fprintf(benthic->fptr_r,"%.16f,",benthic->u_values[i][k][l]);
-                             fprintf(benthic->fptr_g,"%.16f,",benthic->g_values[i][k][l]);
-                             fprintf(benthic->fptr_m,"%.16f,",benthic->mu_values[i][k][l]);
-                             fprintf(benthic->fptr_pred,"%.16f,",benthic->mu_pred_values[i][k][l]);
-                             fprintf(benthic->fptr_fish,"%.16f,",benthic->mu_fish_values[i][k][l]);
+     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                     fprintf(benthic->fptr_r,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
+                     fprintf(benthic->fptr_g,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
+                     fprintf(benthic->fptr_m,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
+                     fprintf(benthic->fptr_pred,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
+                     fprintf(benthic->fptr_fish,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
+                     for(sc_idx=0 ; sc_idx<(n_m-1) ; sc_idx++){
+                             fprintf(benthic->fptr_r,"%.16f,",benthic->u_values[sc_idx][x_idx][y_idx]);
+                             fprintf(benthic->fptr_g,"%.16f,",benthic->g_values[sc_idx][x_idx][y_idx]);
+                             fprintf(benthic->fptr_m,"%.16f,",benthic->mu_values[sc_idx][x_idx][y_idx]);
+                             fprintf(benthic->fptr_pred,"%.16f,",benthic->mu_pred_values[sc_idx][x_idx][y_idx]);
+                             fprintf(benthic->fptr_fish,"%.16f,",benthic->mu_fish_values[sc_idx][x_idx][y_idx]);
                      }
-                     fprintf(benthic->fptr_r,"%.16f\n",benthic->u_values[m-1][k][l]);
-                     fprintf(benthic->fptr_g,"%.16f\n",benthic->g_values[m-1][k][l]);
-                     fprintf(benthic->fptr_m,"%.16f\n",benthic->mu_values[m-1][k][l]);
-                     fprintf(benthic->fptr_pred,"%.16f\n",benthic->mu_pred_values[m-1][k][l]);
-                     fprintf(benthic->fptr_fish,"%.16f\n",benthic->mu_fish_values[m-1][k][l]);
+                     fprintf(benthic->fptr_r,"%.16f\n",benthic->u_values[n_m-1][x_idx][y_idx]);
+                     fprintf(benthic->fptr_g,"%.16f\n",benthic->g_values[n_m-1][x_idx][y_idx]);
+                     fprintf(benthic->fptr_m,"%.16f\n",benthic->mu_values[n_m-1][x_idx][y_idx]);
+                     fprintf(benthic->fptr_pred,"%.16f\n",benthic->mu_pred_values[n_m-1][x_idx][y_idx]);
+                     fprintf(benthic->fptr_fish,"%.16f\n",benthic->mu_fish_values[n_m-1][x_idx][y_idx]);
              }
      }
 
@@ -2626,24 +2626,24 @@ void print_detailed_benthic(GRID *grid, BENTHIC *benthic, int time)
 void print_plankton_summary(GRID *grid, PLANKTON *plankton, int time)
 {
      
-     int i,k,l;
-     int x,y;
-     x=grid->xnum;
-     y=grid->ynum;
+     int sc_idx, x_idx, y_idx;
+     int n_x, n_y;
+     n_x=grid->xnum;
+     n_y=grid->ynum;
      
      double temp;
      
      /*Open output files*/
      plankton->fptr_summ=safe_fopen(plankton->fname_summ,"a",__LINE__,__FILE__);
      
-     for(k=0 ; k<x ; k+=(int)rint(grid->xoutstep/grid->xstep)){
-             for(l=0 ; l<y ; l+=(int)rint(grid->youtstep/grid->ystep)){
-                     fprintf(plankton->fptr_summ,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
+     for(x_idx=0 ; x_idx<n_x ; x_idx+=(int)rint(grid->xoutstep/grid->xstep)){
+             for(y_idx=0 ; y_idx<n_y ; y_idx+=(int)rint(grid->youtstep/grid->ystep)){
+                     fprintf(plankton->fptr_summ,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
                      
                      /*Plankton Biomass Totals*/
                      temp=0;
-                     for(i=plankton->iplamin ; i<(plankton->iplamax+1) ; i++){
-                             temp+=plankton->u_values[i][k][l]*exp(grid->m_values[i])*grid->mstep;
+                     for(sc_idx=plankton->iplamin ; sc_idx<(plankton->iplamax+1) ; sc_idx++){
+                             temp+=plankton->u_values[sc_idx][x_idx][y_idx]*exp(grid->m_values[sc_idx])*grid->mstep;
                      }
                      fprintf(plankton->fptr_summ,"%.16f",temp);
                      fprintf(plankton->fptr_summ,"\n");
@@ -2656,40 +2656,40 @@ void print_plankton_summary(GRID *grid, PLANKTON *plankton, int time)
 void print_pelagic_summary(GRID *grid, PELAGIC *pelagic, int time)
 {
      
-     int i,k,l;
-     int x,y;
-     x=grid->xnum;
-     y=grid->ynum;
+     int sc_idx, x_idx, y_idx;
+     int n_x, n_y;
+     n_x=grid->xnum;
+     n_y=grid->ynum;
      
      double temp;
      
      /*Open output files*/
      pelagic->fptr_summ=safe_fopen(pelagic->fname_summ,"a",__LINE__,__FILE__);
 
-     for(k=0 ; k<x ; k+=(int)rint(grid->xoutstep/grid->xstep)){
-             for(l=0 ; l<y ; l+=(int)rint(grid->youtstep/grid->ystep)){
-                     fprintf(pelagic->fptr_summ,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
+     for(x_idx=0 ; x_idx<n_x ; x_idx+=(int)rint(grid->xoutstep/grid->xstep)){
+             for(y_idx=0 ; y_idx<n_y ; y_idx+=(int)rint(grid->youtstep/grid->ystep)){
+                     fprintf(pelagic->fptr_summ,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
                      
                      /*Pelagic Biomass Totals*/
                      temp=0;
-                     for(i=pelagic->ipelmin ; i<(pelagic->ipelmax+1) ; i++){
-                             temp+=pelagic->u_values[i][k][l]*exp(grid->m_values[i])*grid->mstep;
+                     for(sc_idx=pelagic->ipelmin ; sc_idx<(pelagic->ipelmax+1) ; sc_idx++){
+                             temp+=pelagic->u_values[sc_idx][x_idx][y_idx]*exp(grid->m_values[sc_idx])*grid->mstep;
                      }
                      fprintf(pelagic->fptr_summ,",%.16f",temp);
                      
                      /*Pelagic Biomass Intake Rate*/
-                     fprintf(pelagic->fptr_summ,",%.16f",pelagic->pla_total[k][l]);
-                     fprintf(pelagic->fptr_summ,",%.16f",pelagic->pel_total[k][l]);
-                     fprintf(pelagic->fptr_summ,",%.16f",pelagic->ben_total[k][l]);
+                     fprintf(pelagic->fptr_summ,",%.16f",pelagic->pla_total[x_idx][y_idx]);
+                     fprintf(pelagic->fptr_summ,",%.16f",pelagic->pel_total[x_idx][y_idx]);
+                     fprintf(pelagic->fptr_summ,",%.16f",pelagic->ben_total[x_idx][y_idx]);
                      
                      /*Biomass Lost to Predation*/
-                     fprintf(pelagic->fptr_summ,",%.16f",pelagic->pred_total[k][l]);
+                     fprintf(pelagic->fptr_summ,",%.16f",pelagic->pred_total[x_idx][y_idx]);
                      
                      /*Biomass Lost to Fishing*/
-                     fprintf(pelagic->fptr_summ,",%.16f",pelagic->fish_total[k][l]);
+                     fprintf(pelagic->fptr_summ,",%.16f",pelagic->fish_total[x_idx][y_idx]);
                      
                      /*Reproduction*/
-                     fprintf(pelagic->fptr_summ,",%.16f",pelagic->reproduction[k][l]/grid->tstep);
+                     fprintf(pelagic->fptr_summ,",%.16f",pelagic->reproduction[x_idx][y_idx]/grid->tstep);
                      fprintf(pelagic->fptr_summ,"\n");
              }
      }
@@ -2699,38 +2699,38 @@ void print_pelagic_summary(GRID *grid, PELAGIC *pelagic, int time)
 
 void print_benthic_summary(GRID *grid, BENTHIC *benthic, int time)
 {
-     int i,k,l;
-     int x,y;
-     x=grid->xnum;
-     y=grid->ynum;
+     int sc_idx, x_idx, y_idx;
+     int n_x, n_y;
+     n_x=grid->xnum;
+     n_y=grid->ynum;
      
      double temp;
      
      /*Open output files*/
      benthic->fptr_summ=safe_fopen(benthic->fname_summ,"a",__LINE__,__FILE__);
 
-     for(k=0 ; k<x ; k+=(int)rint(grid->xoutstep/grid->xstep)){
-             for(l=0 ; l<y ; l+=(int)rint(grid->youtstep/grid->ystep)){
-                     fprintf(benthic->fptr_summ,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);
+     for(x_idx=0 ; x_idx<n_x ; x_idx+=(int)rint(grid->xoutstep/grid->xstep)){
+             for(y_idx=0 ; y_idx<n_y ; y_idx+=(int)rint(grid->youtstep/grid->ystep)){
+                     fprintf(benthic->fptr_summ,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
                      
                      /*Benthic Biomass Totals*/
                      temp=0;
-                     for(i=benthic->ibenmin ; i<(benthic->ibenmax+1) ; i++){
-                             temp+=benthic->u_values[i][k][l]*exp(grid->m_values[i])*grid->mstep;
+                     for(sc_idx=benthic->ibenmin ; sc_idx<(benthic->ibenmax+1) ; sc_idx++){
+                             temp+=benthic->u_values[sc_idx][x_idx][y_idx]*exp(grid->m_values[sc_idx])*grid->mstep;
                      }
                      fprintf(benthic->fptr_summ,",%.16f",temp);
                      
                      /*Benthic Biomass Intake*/
-                     fprintf(benthic->fptr_summ,",%.16f",benthic->det_total[k][l]);
+                     fprintf(benthic->fptr_summ,",%.16f",benthic->det_total[x_idx][y_idx]);
                      
                      /*Biomass Lost to Predation*/
-                     fprintf(benthic->fptr_summ,",%.16f",benthic->pred_total[k][l]);
+                     fprintf(benthic->fptr_summ,",%.16f",benthic->pred_total[x_idx][y_idx]);
                      
                      /*Biomass Lost to Fishing*/
-                     fprintf(benthic->fptr_summ,",%.16f",benthic->fish_total[k][l]);
+                     fprintf(benthic->fptr_summ,",%.16f",benthic->fish_total[x_idx][y_idx]);
                      
                      /*Reproduction*/
-                     fprintf(benthic->fptr_summ,",%.16f",benthic->reproduction[k][l]/grid->tstep);
+                     fprintf(benthic->fptr_summ,",%.16f",benthic->reproduction[x_idx][y_idx]/grid->tstep);
                      fprintf(benthic->fptr_summ,"\n");
              }
      }
@@ -2739,26 +2739,26 @@ void print_benthic_summary(GRID *grid, BENTHIC *benthic, int time)
 
 void print_detritus_summary(GRID *grid, DETRITUS *detritus, int time)
 {
-     int k,l;
-     int x,y;
-     x=grid->xnum;
-     y=grid->ynum;
+     int x_idx, y_idx;
+     int n_x, n_y;
+     n_x=grid->xnum;
+     n_y=grid->ynum;
      
      /*Open output files*/
      detritus->fptr_summ=safe_fopen(detritus->fname_summ,"a",__LINE__,__FILE__);
 
-     for(k=0 ; k<x ; k+=(int)rint(grid->xoutstep/grid->xstep)){
-             for(l=0 ; l<y ; l+=(int)rint(grid->youtstep/grid->ystep)){
-                     fprintf(detritus->fptr_summ,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[k],grid->y_values[l]);                     
+     for(x_idx=0 ; x_idx<n_x ; x_idx+=(int)rint(grid->xoutstep/grid->xstep)){
+             for(y_idx=0 ; y_idx<n_y ; y_idx+=(int)rint(grid->youtstep/grid->ystep)){
+                     fprintf(detritus->fptr_summ,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);                     
                      
                      /*Detritus Biomass Totals*/
-                     fprintf(detritus->fptr_summ,",%.16f",detritus->w_values[k][l]);
+                     fprintf(detritus->fptr_summ,",%.16f",detritus->w_values[x_idx][y_idx]);
                      
                      /*Detritus In*/
-                     fprintf(detritus->fptr_summ,",%.16f",detritus->g_values[k][l]);
+                     fprintf(detritus->fptr_summ,",%.16f",detritus->g_values[x_idx][y_idx]);
                      
                      /*Detritus Out*/
-                     fprintf(detritus->fptr_summ,",%.16f",detritus->mu_values[k][l]);
+                     fprintf(detritus->fptr_summ,",%.16f",detritus->mu_values[x_idx][y_idx]);
 
                      fprintf(detritus->fptr_summ,"\n");
              }
