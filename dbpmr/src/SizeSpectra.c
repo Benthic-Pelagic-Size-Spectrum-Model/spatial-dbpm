@@ -460,13 +460,15 @@ SEXP SizeSpectrum(
         SEXP benthic_params_r, 
         SEXP detritus_params_r, 
         SEXP names_params_r, 
-        SEXP flags_params_r
+        SEXP flags_params_r,
+        SEXP output_params_r
 ) {
         // Ensure that all of the SEXP objects are of the correct type after
         // passing in from R.
-        if (!isInteger(run_params_r) || !isInteger(flags_params_r)) {
-                error("run_params_r and flags_params_r R objects must be integer vectors");
-        }
+        if (
+                !isInteger(run_params_r) || !isInteger(flags_params_r) || 
+                isInteger(output_params_r)
+        ) {error("run, flags and output *_params_r R objects must be integer vectors");}
         if (
                 !isReal(grid_params_r) || !isReal(plankton_params_r) ||
                 !isReal(pelagic_params_r) || !isReal(benthic_params_r) ||
@@ -486,6 +488,9 @@ SEXP SizeSpectrum(
         }
         if (LENGTH(plankton_params_r) != 6) {
                 error("plankton_params_r must have 6 elements");
+        }
+        if (LENGTH(output_params_r) != 2) {
+                error("output_params_r must have 2 elements");
         }
 
         int npel = INTEGER(run_params_r)[0];
@@ -520,6 +525,7 @@ SEXP SizeSpectrum(
         // Assign pointers for the SEXP data to correct names for function use
         int *run_params = INTEGER(run_params_r);
         int *flags_params = INTEGER(flags_params_r);
+        int *output_params = INTEGER(output_params_r);
         double *grid_params = REAL(grid_params_r);
         double *pla_params = REAL(plankton_params_r);
         double *pel_params = REAL(pelagic_params_r);
@@ -543,7 +549,8 @@ SEXP SizeSpectrum(
                 ben_params,
                 det_params,
                 names_params,
-                flags_params
+                flags_params,
+                output_params
         );
         return(R_NilValue);
 }
@@ -552,7 +559,17 @@ SEXP SizeSpectrum(
 // This is the internal function that does the work of the program called by R //
 //-----------------------------------------------------------------------------//
 
-static void SizeSpectrum_internals(int *run_params, double *grid_params, double *pla_params, double *pel_params, double *ben_params, double * det_params, char **names_params, int *flags_params)
+static void SizeSpectrum_internals(
+    int *run_params, 
+    double *grid_params, 
+    double *pla_params, 
+    double *pel_params, 
+    double *ben_params, 
+    double * det_params, 
+    char **names_params, 
+    int *flags_params, 
+    int *output_params
+)
 // run_params is an array of run parameters
 // grid_params is an array of grid discretisation values
 // pla_params is plankton params
