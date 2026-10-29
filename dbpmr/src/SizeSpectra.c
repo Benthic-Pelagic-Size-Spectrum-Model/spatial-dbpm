@@ -1635,17 +1635,18 @@ void setup_matrix(int dim, MATRIX *matrix)
 void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, MATRIX *benmatrix, MATRIX *xmatrix, MATRIX *ymatrix)
 /* Sets up output txt files and implements time stepping process*/
 {
-     int i,j,k,l,s,b;         //indices for each variable
-     int m,t,x,y,n,c;         //maximum number of steps for each variable
+    // Indices for each variable with readable names
+    int sc_idx, ts_idx, x_idx, y_idx, pel_species_idx, ben_species_idx
+    // Counts for each variable with readable names
+    int n_m, n_t, n_x, n_y, n_pel_species, n_ben_species
+    double time1=0, time2=0, timed=0;  //variables for countdown timer
      
-     double time1=0,time2=0,timed=0;  //variables for countdown timer
-     
-     m=grid->mnum;
-     t=grid->tnum;
-     x=grid->xnum;
-     y=grid->ynum;
-     n=run->no_pelagic;
-     c=run->no_benthic;
+     n_m=grid->mnum;
+     n_t=grid->tnum;
+     n_x=grid->xnum;
+     n_y=grid->ynum;
+     n_pel_species=run->no_pelagic;
+     n_ben_species=run->no_benthic;
 
      /*Optional environmental-forcing plugin: auto-detect <run>/Input/forcing_ts.txt, whose
        first line names the channels present (comma-separated) and each subsequent line gives
@@ -1715,24 +1716,25 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      if(run->forcing_flag==1){
              char *e=getenv("FORCING_PERCELL");
              run->forcing_percell = (e && atoi(e)!=0 && (run->spatial_dim==1 || run->spatial_dim==2)) ? 1 : 0;
-             int xx=grid->xnum, yy=grid->ynum, kk, ll;
-             run->pel_tempeff_c=(double**)safe_malloc(xx*sizeof(double*),__LINE__,__FILE__);
-             run->ben_tempeff_c=(double**)safe_malloc(xx*sizeof(double*),__LINE__,__FILE__);
-             run->sinking_rate_c=(double**)safe_malloc(xx*sizeof(double*),__LINE__,__FILE__);
-             run->depth_c=(double**)safe_malloc(xx*sizeof(double*),__LINE__,__FILE__);
-             run->export_attn_c=(double**)safe_malloc(xx*sizeof(double*),__LINE__,__FILE__);
-             run->export_gamma_c=(double**)safe_malloc(xx*sizeof(double*),__LINE__,__FILE__);
-             run->export_magg_c=(double**)safe_malloc(xx*sizeof(double*),__LINE__,__FILE__);
-             for(kk=0;kk<xx;kk++){
-                     run->pel_tempeff_c[kk]=(double*)safe_malloc(yy*sizeof(double),__LINE__,__FILE__);
-                     run->ben_tempeff_c[kk]=(double*)safe_malloc(yy*sizeof(double),__LINE__,__FILE__);
-                     run->sinking_rate_c[kk]=(double*)safe_malloc(yy*sizeof(double),__LINE__,__FILE__);
-                     run->depth_c[kk]=(double*)safe_malloc(yy*sizeof(double),__LINE__,__FILE__);
-                     run->export_attn_c[kk]=(double*)safe_malloc(yy*sizeof(double),__LINE__,__FILE__);
-                     run->export_gamma_c[kk]=(double*)safe_malloc(yy*sizeof(double),__LINE__,__FILE__);
-                     run->export_magg_c[kk]=(double*)safe_malloc(yy*sizeof(double),__LINE__,__FILE__);
-                     for(ll=0;ll<yy;ll++){ run->pel_tempeff_c[kk][ll]=1.0; run->ben_tempeff_c[kk][ll]=1.0; run->sinking_rate_c[kk][ll]=1.0;
-                             run->depth_c[kk][ll]=1.0; run->export_attn_c[kk][ll]=0.0; run->export_gamma_c[kk][ll]=0.0; run->export_magg_c[kk][ll]=-1e30; }
+
+             run->pel_tempeff_c=(double**)safe_malloc(n_x*sizeof(double*),__LINE__,__FILE__);
+             run->ben_tempeff_c=(double**)safe_malloc(n_x*sizeof(double*),__LINE__,__FILE__);
+             run->sinking_rate_c=(double**)safe_malloc(n_x*sizeof(double*),__LINE__,__FILE__);
+             run->depth_c=(double**)safe_malloc(n_x*sizeof(double*),__LINE__,__FILE__);
+             run->export_attn_c=(double**)safe_malloc(n_x*sizeof(double*),__LINE__,__FILE__);
+             run->export_gamma_c=(double**)safe_malloc(n_x*sizeof(double*),__LINE__,__FILE__);
+             run->export_magg_c=(double**)safe_malloc(n_x*sizeof(double*),__LINE__,__FILE__);
+
+             for(x_idx=0; x_idx<n_x; x_idx++){
+                     run->pel_tempeff_c[x_idx]=(double*)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     run->ben_tempeff_c[x_idx]=(double*)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     run->sinking_rate_c[x_idx]=(double*)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     run->depth_c[x_idx]=(double*)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     run->export_attn_c[x_idx]=(double*)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     run->export_gamma_c[x_idx]=(double*)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     run->export_magg_c[x_idx]=(double*)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     for(y_idx=0; y_idx<n_y; y_idx++){ run->pel_tempeff_c[x_idx][y_idx]=1.0; run->ben_tempeff_c[x_idx][y_idx]=1.0; run->sinking_rate_c[x_idx][y_idx]=1.0;
+                             run->depth_c[x_idx][y_idx]=1.0; run->export_attn_c[x_idx][y_idx]=0.0; run->export_gamma_c[x_idx][y_idx]=0.0; run->export_magg_c[x_idx][y_idx]=-1e30; }
              }
      }
 
@@ -1742,25 +1744,25 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      double ****temp_benthic;
      double **temp_detritus;
      
-     temp_plankton=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
-     for(i=0 ; i< m ; i++){
-             temp_plankton[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-             for(k=0 ; k<x ; k++){
-                     temp_plankton[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-                     for(l=0 ; l<y ; l++){
-                             temp_plankton[i][k][l]=0;
+     temp_plankton=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
+     for(sc_idx=0 ; sc_idx< n_m ; sc_idx++){
+             temp_plankton[sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                     temp_plankton[sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                             temp_plankton[sc_idx][x_idx][y_idx]=0;
                      }
              }
      }
      temp_pelagic=(double ****)safe_malloc(n*sizeof(double ***),__LINE__,__FILE__);
-     for(s=0 ; s<n ; s++){
-             temp_pelagic[s]=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
-             for(i=0 ; i< m ; i++){
-                     temp_pelagic[s][i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-                     for(k=0 ; k<x ; k++){
-                             temp_pelagic[s][i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-                             for(l=0 ; l<y ; l++){
-                                     temp_pelagic[s][i][k][l]=0;
+     for(pel_species_idx=0 ; pel_species_idx < nn_pel_species ; pel_species_idx++){
+             temp_pelagic[pel_species_idx]=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
+             for(sc_idx=0 ; sc_idx< n_m ; sc_idx++){
+                     temp_pelagic[pel_species_idx][sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                             temp_pelagic[pel_species_idx][sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                     temp_pelagic[pel_species_idx][sc_idx][x_idx][y_idx]=0;
                              }
                      }
              }
@@ -1768,23 +1770,23 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      
      if(run->no_benthic!=0){
              temp_benthic=(double ****)safe_malloc(c*sizeof(double ***),__LINE__,__FILE__);
-             for(b=0 ; b<c ; b++){
-                     temp_benthic[b]=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
-                     for(i=0 ; i< m ; i++){
-                             temp_benthic[b][i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-                             for(k=0 ; k<x ; k++){
-                                     temp_benthic[b][i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-                                     for(l=0 ; l<y ; l++){
-                                             temp_benthic[b][i][k][l]=0;
+             for(ben_species_idx=0 ; ben_species_idx<n_ben_species ; ben_species_idx++){
+                     temp_benthic[b]=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
+                     for(i=0 ; sc_idx< n_m ; i++){
+                             temp_benthicben_species_idxb][sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+                             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                                     temp_benthic[ben_species_idx][sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                                     for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                             temp_benthic[ben_species_idx][sc_idx][x_idx][y_idx]=0;
                                      }
                              }
                      }
              }
-             temp_detritus=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-             for(k=0 ; k<x ; k++){
-                     temp_detritus[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-                     for(l=0 ; l<y ; l++){
-                             temp_detritus[k][l]=0;
+             temp_detritus=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                     temp_detritus[x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                             temp_detritus[x_idx][y_idx]=0;
                      }
              }
      }
@@ -1806,19 +1808,19 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      }
 
      /*Pelagic*/
-     for(s=0 ; s<n ; s++){
+     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
              if(grid->toutmin == 0){
-                     print_timestep_pelagic(run, grid, &(community->pelagic[s]), 0);
-                     print_pelagic_summary(grid, &(community->pelagic[s]), 0);
+                     print_timestep_pelagic(run, grid, &(community->pelagic[pel_species_idx]), 0);
+                     print_pelagic_summary(grid, &(community->pelagic[pel_species_idx]), 0);
              }
      }
      
      if(run->no_benthic!=0){
              /*Benthic*/
-             for(b=0 ; b<c ; b++){
+             for(ben_species_idx=0 ; ben_species_idx<n_ben_species; ben_species_idx++){
                      if(grid->toutmin == 0){
-                             print_timestep_benthic(grid, &(community->benthic[b]), 0);
-                             print_benthic_summary(grid, &(community->benthic[b]), 0);
+                             print_timestep_benthic(grid, &(community->benthic[ben_species_idx]), 0);
+                             print_benthic_summary(grid, &(community->benthic[ben_species_idx]), 0);
                      }
              }
              /*Detritus*/
@@ -1833,19 +1835,19 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      print_run(run, run->fptr_summ);
      print_grid(grid, run->fptr_summ);
      print_plankton(community->plankton, run->fptr_summ);
-     for(s=0 ; s<n ; s++){
-             print_pelagic(&(community->pelagic[s]),run->fptr_summ);
+     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+             print_pelagic(&(community->pelagic[pel_species_idx]),run->fptr_summ);
      }
      if(run->no_benthic!=0){
-             for(b=0 ; b<c ; b++){
-                     print_benthic(&(community->benthic[b]),run->fptr_summ);
+             for(ben_species_idx=0 ; ben_species_idx<n_ben_species; ben_species_idx++){
+                     print_benthic(&(community->benthic[ben_species_idx]),run->fptr_summ);
              }
              print_detritus(community->detritus, run->fptr_summ);
      }
      fclose(run->fptr_summ);
 
      /*Time Stepping Loop*/
-     for(j=1 ; j<t ; j++){
+     for(ts_idx=1 ; ts_idx<n_t ; ts_idx++){
                          
             /*Countdown timer for the program*/
              
@@ -1853,21 +1855,21 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
              R_CheckUserInterrupt();
              
              /*Countdown timer for the program*/
-             if(j==1){
+             if(ts_idx==1){
                       time2=(double)clock()/CLOCKS_PER_SEC;
              }
              else{
-                      if(j%((int)rint(grid->toutstep/grid->tstep))==0){
+                      if(ts_idx%((int)rint(grid->toutstep/grid->tstep))==0){
                              time1=time2;
                              time2=(double)clock()/CLOCKS_PER_SEC;
                              timed=(time2-time1)*(grid->tstep/grid->toutstep);
                       }
                              Rprintf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
                              R_FlushConsole();
-                             Rprintf("%6.1f   %d",timed*(grid->tnum-j),grid->tnum-j);
+                             Rprintf("%6.1f   %d",timed*(grid->tnum-ts_idx),grid->tnum-ts_idx);
                              R_FlushConsole();
              }
-             if(j==(t-1)){
+             if(ts_idx==(n_t-1)){
                       Rprintf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
                       R_FlushConsole();
                       Rprintf("\n");
@@ -1875,36 +1877,36 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
              }
 
              /*Store previous time step in temporary array for each species*/
-             for(i=0 ; i<m ; i++){
-                     for(k=0 ; k<x ; k++){
-                             for(l=0 ; l<y ; l++){
-                                     temp_plankton[i][k][l]=community->plankton->u_values[i][k][l];
+             for(sc_idx=0 ; sc_idx<n_n_m ; sc_idx++){
+                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                     temp_plankton[sc_idx][x_idx][y_idx]=community->plankton->u_values[sc_idx][x_idx][y_idx];
                              }
                      }
              }
-             for(s=0 ; s<n ; s++){
-                     for(i=0 ; i<m ; i++){
-                             for(k=0 ; k<x ; k++){
-                                     for(l=0 ; l<y ; l++){
-                                             temp_pelagic[s][i][k][l]=community->pelagic[s].u_values[i][k][l];
+             for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+                     for(sc_idx=0 ; sc_idx<n_m ; sc_idx++){
+                             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                                     for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                             temp_pelagic[pel_species_idx][sc_idx][x_idx][y_idx]=community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx];
                                      }
                              }
                      }
              }
              
              if(run->no_benthic!=0){
-                     for(b=0 ; b<c ; b++){
-                             for(i=0 ; i<m ; i++){
-                                     for(k=0 ; k<x ; k++){
-                                             for(l=0 ; l<y ; l++){
-                                                     temp_benthic[b][i][k][l]=community->benthic[b].u_values[i][k][l];
+                     for(ben_species_idx=0 ; ben_species_idx<n_ben_species; ben_species_idx++){
+                             for(sc_idx=0 ; sc_idx<n_m ; sc_idx++){
+                                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                                             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                                     temp_benthic[ben_species_idx][sc_idx][x_idx][y_idx]=community->benthic[ben_species_idx].u_values[sc_idx][x_idx][y_idx];
                                              }
                                      }
                              }
                      }
-                     for(k=0 ; k<x ; k++){
-                             for(l=0 ; l<y ; l++){
-                                     temp_detritus[k][l]=community->detritus->w_values[k][l];
+                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                     temp_detritus[x_idx][y_idx]=community->detritus->w_values[x_idx][y_idx];
                              }
                      }
              }
@@ -1933,11 +1935,11 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
 
                      /*Store itermediate time step as temp_pelagic*/
 
-                     for(s=0 ; s<n ; s++){
-                             for(i=0 ; i<m ; i++){
-                                    for(k=0 ; k<x ; k++){
-                                             for(l=0 ; l<y ; l++){
-                                                     temp_pelagic[s][i][k][l]=community->pelagic[s].u_values[i][k][l];
+                     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+                             for(sc_idx=0 ; sc_idx<n_m ; sc_idx++){
+                                    for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                                             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                                     temp_pelagic[s][sc_idx][x_idx][y_idx]=community->pelagic[s].u_values[sc_idx][x_idx][y_idx];
                                              }
                                      }
                              }
@@ -1945,23 +1947,23 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
 
 
                      /*Calculate spatial movements using intermediate values*/
-                     xmove_solver(run, grid, community, xmatrix, temp_pelagic, j);
+                     xmove_solver(run, grid, community, xmatrix, temp_pelagic, ts_idx);
              
                      
                     if(run->spatial_dim==2){
                      
                              /*Store itermediate time step as temp_pelagic*/
-                             for(s=0 ; s<n ; s++){
-                                     for(i=0 ; i<m ; i++){
-                                             for(k=0 ; k<x ; k++){
-                                                    for(l=0 ; l<y ; l++){
-                                                             temp_pelagic[s][i][k][l]=community->pelagic[s].u_values[i][k][l];
+                             for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+                                     for(sc_idx=0 ; sc_idx<n_m ; sc_idx++){
+                                             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                                                    for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                                             temp_pelagic[pel_species_idx][sc_idx][x_idx][y_idx]=community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx];
                                                      }
                                              }
                                      }
                              }
                              /*Calculate spatial movements using intermediate values*/
-                             ymove_solver(run, grid, community, ymatrix, temp_pelagic, j);
+                             ymove_solver(run, grid, community, ymatrix, temp_pelagic, ts_idx);
              
                      }
              }
@@ -1969,71 +1971,71 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
              
              
              /*Print current timestep values to files*/
-             if(grid->t_values[j]>=grid->toutmin && grid->t_values[j]<=grid->toutmax){
-                     if(j%((int)rint(grid->toutstep/grid->tstep))==0){
+             if(grid->t_values[ts_idx]>=grid->toutmin && grid->t_values[ts_idx]<=grid->toutmax){
+                     if(ts_idx%((int)rint(grid->toutstep/grid->tstep))==0){
                              
-                             print_timestep_plankton(grid, community->plankton,j);
-                             print_plankton_summary(grid, community->plankton, j);
-                             for(s=0 ; s<n ; s++){
-                                     print_timestep_pelagic(run, grid, &(community->pelagic[s]),j);
-                                     print_pelagic_summary(grid, &(community->pelagic[s]),j);
+                             print_timestep_plankton(grid, community->plankton,ts_idx);
+                             print_plankton_summary(grid, community->plankton, ts_idx);
+                             for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+                                     print_timestep_pelagic(run, grid, &(community->pelagic[pel_species_idx]),ts_idx);
+                                     print_pelagic_summary(grid, &(community->pelagic[pel_species_idx]),ts_idx);
                              }
                              if(run->no_benthic!=0){
-                                     for(b=0 ; b<c  ;b++){
-                                             print_timestep_benthic(grid, &(community->benthic[b]),j);
-                                             print_benthic_summary(grid, &(community->benthic[b]),j);
+                                     for(ben_species_idx=0 ; ben_species_idx<n_ben_species ;ben_species_idx++){
+                                             print_timestep_benthic(grid, &(community->benthic[b]),ts_idx);
+                                             print_benthic_summary(grid, &(community->benthic[b]),ts_idx);
                                      }
-                                     print_detritus_summary(grid, community->detritus,j);
+                                     print_detritus_summary(grid, community->detritus,ts_idx);
                              }
                      }
              }
      }
      
      /*Print final detailed timestep*/
-     print_detailed_plankton(grid, community->plankton, t-1);
-     for(s=0 ; s<n ; s++){
-             print_detailed_pelagic(run, grid, &(community->pelagic[s]), t-1);
+     print_detailed_plankton(grid, community->plankton, n_t-1);
+     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+             print_detailed_pelagic(run, grid, &(community->pelagic[pel_species_idx]), n_t-1);
      }
      if(run->no_benthic!=0){
-             for(b=0 ; b<c  ;b++){
-                     print_detailed_benthic(grid, &(community->benthic[b]),t-1);
+             for(ben_species_idx=0 ; ben_species_idx<n_ben_species ;ben_species_idx++){
+                     print_detailed_benthic(grid, &(community->benthic[b]),n_t-1);
              }
      }
 
      /*Free pointers*/
-     for(i=0 ; i<m ; i++){
-             for(k=0 ; k<x ; k++){
-                     free(temp_plankton[i][k]);
+     for(sc_idx=0 ; sc_idx<n_m ; sc_idx++){
+             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                     free(temp_plankton[sc_idx][x_idx]);
              }
-             free(temp_plankton[i]);
+             free(temp_plankton[sc_idx]);
      }
      free(temp_plankton);
      
-     for(s=0 ; s<n ; s++){
-             for(i=0 ; i<m ; i++){
-                     for(k=0 ; k<x ; k++){
-                             free(temp_pelagic[s][i][k]);
+     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+             for(sc_idx=0 ; sc_idx<n_m ; sc_idx++){
+                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                             free(temp_pelagic[pel_species_idx][sc_idx][x_idx]);
                      }
-                     free(temp_pelagic[s][i]);
+                     free(temp_pelagic[pel_species_idx][sc_idx]);
              }
              free(temp_pelagic[s]);
      }
      free(temp_pelagic);
      
      if(run->no_benthic!=0){
-             for(b=0 ; b<c ; b++){
-                     for(i=0 ; i<m ; i++){
-                             for(k=0 ; k<x ; k++){
-                                     free(temp_benthic[b][i][k]);
+             for(ben_species_idx=0 ; ben_species_idx<n_ben_species; ben_species_idx++){
+                     for(sc_idx=0 ; sc_idx<n_m ; sc_idx++){
+                             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                                     free(temp_benthic[ben_species_idx][sc_idx][x_idx]);
                              }
-                             free(temp_benthic[b][i]);
+                             free(temp_benthic[ben_species_idx][sc_idx]);
                      }
-                     free(temp_benthic[b]);
+                     free(temp_benthic[ben_species_idx]);
              }
              free(temp_benthic);
              
-             for(k=0 ; k<x ; k++){
-                     free(temp_detritus[k]);
+             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                     free(temp_detritus[x_idx]);
              }
              free(temp_detritus);
      }
@@ -2045,21 +2047,30 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      if(run->forcing_flag==1){
              fclose(run->fptr_forcing);
              if(run->pel_tempeff_c!=NULL){
-                     for(k=0;k<x;k++){ free(run->pel_tempeff_c[k]); free(run->ben_tempeff_c[k]); free(run->sinking_rate_c[k]);
-                             free(run->depth_c[k]); free(run->export_attn_c[k]); free(run->export_gamma_c[k]); free(run->export_magg_c[k]); }
-                     free(run->pel_tempeff_c); free(run->ben_tempeff_c); free(run->sinking_rate_c);
-                     free(run->depth_c); free(run->export_attn_c); free(run->export_gamma_c); free(run->export_magg_c);
+                    for(x_idx=0; x_idx<n_x; x_idx++){ 
+                        free(run->pel_tempeff_c[x_idx]); 
+                        free(run->ben_tempeff_c[x_idx]); 
+                        free(run->sinking_rate_c[x_idx]);
+                        free(run->depth_c[x_idx]); 
+                        free(run->export_attn_c[x_idx]); 
+                        free(run->export_gamma_c[x_idx]); 
+                        free(run->export_magg_c[x_idx]); 
+                    }
+                    free(run->pel_tempeff_c); free(run->ben_tempeff_c); 
+                    free(run->sinking_rate_c); free(run->depth_c); 
+                    free(run->export_attn_c); free(run->export_gamma_c); 
+                    free(run->export_magg_c);
              }
      }
-     for(s=0 ; s<n ; s++){
-             if(community->pelagic[s].ts_flag==1){
-                     fclose(community->pelagic[s].fptr_ts);
+     for(pel_species_idx=0 ; pel_species_idx<n ; pel_species_idx++){
+             if(community->pelagic[pel_species_idx].ts_flag==1){
+                     fclose(community->pelagic[pel_species_idx].fptr_ts);
              }
      }
      if(run->no_benthic!=0){
-             for(b=0 ; b<c ; b++){
-                     if(community->benthic[b].ts_flag==1){
-                             fclose(community->benthic[b].fptr_ts);
+             for(ben_species_idx=0 ; ben_species_idx<n_ben_species; ben_species_idx++){
+                     if(community->benthic[ben_species_idx].ts_flag==1){
+                             fclose(community->benthic[ben_species_idx].fptr_ts);
                      }
              }
              if(community->detritus->ts_flag==1){
@@ -2068,32 +2079,32 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      }
      
      /*Close fishing files*/
-     for(s=0 ; s<n ; s++){
-             if(community->pelagic[s].fishing_flag==1){
-                     fclose(community->pelagic[s].fptr_fish_ts);
+     for(pel_species_idx=0 ; pel_species_idx<n ; pel_species_idx++){
+             if(community->pelagic[pel_species_idx].fishing_flag==1){
+                     fclose(community->pelagic[pel_species_idx].fptr_fish_ts);
              }
      }
      if(run->no_benthic!=0){
-             for(b=0 ; b<c ; b++){
-                     if(community->benthic[b].fishing_flag==1){
-                             fclose(community->benthic[b].fptr_fish_ts);
+             for(ben_species_idx=0 ; ben_species_idx<n_ben_species; ben_species_idx++){
+                     if(community->benthic[ben_species_idx].fishing_flag==1){
+                             fclose(community->benthic[ben_species_idx].fptr_fish_ts);
                      }
              }
      }
      
      /*Close reproduction files*/
-     for(s=0 ; s<n ; s++){
-             if(community->pelagic[s].rep_method==1){
-                     if(community->pelagic[s].ts_flag==0){
-                             fclose(community->pelagic[s].fptr_rep_ts);
+     for(pel_species_idx=0 ; pel_species_idx<n ; pel_species_idx++){
+             if(community->pelagic[pel_species_idx].rep_method==1){
+                     if(community->pelagic[pel_species_idx].ts_flag==0){
+                             fclose(community->pelagic[pel_species_idx].fptr_rep_ts);
                      }
              }
      }
      if(run->no_benthic!=0){
-             for(b=0 ; b<c ; b++){
-                     if(community->benthic[b].rep_method==1){
-                             if(community->benthic[b].ts_flag==0){
-                                     fclose(community->benthic[b].fptr_rep_ts);
+             for(ben_species_idx=0 ; ben_species_idx<n_ben_species; ben_species_idx++){
+                     if(community->benthic[ben_species_idx].rep_method==1){
+                             if(community->benthic[ben_species_idx].ts_flag==0){
+                                     fclose(community->benthic[ben_species_idx].fptr_rep_ts);
                              }
                      }
              }
