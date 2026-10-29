@@ -536,9 +536,9 @@ SEXP SizeSpectrum(
                 LENGTH(names_params_r), 
                 sizeof(char *)
         );
-        int i;
-        for (i = 0; i < LENGTH(names_params_r); i++) {
-                names_params[i] = (char *) CHAR(STRING_ELT(names_params_r, i));
+        int name_idx;
+        for (name_idx = 0; name_idx < LENGTH(names_params_r); name_idx++) {
+                names_params[name_idx] = (char *) CHAR(STRING_ELT(names_params_r, name_idx));
         }
         
         SizeSpectrum_internals(
@@ -579,7 +579,7 @@ static void SizeSpectrum_internals(
 // names_params is a list of filenames
 // flags_params is a list of selection 'flag' parameters
 {
-    int s,b;
+    int pel_species_idx, ben_species_idx;
     RUN run;    
     GRID grid;
     COMMUNITY community;
@@ -608,31 +608,66 @@ static void SizeSpectrum_internals(
     
     /*Setup pelagic*/
     temp_pel_params=setup_pelagic_params(run.no_pelagic, pel_params);
-    for(s=0 ; s<run.no_pelagic ; s++){
-            setup_pelagic(&run, &grid, &(community.pelagic[s]), temp_pel_params[s], names_params[s+2], flags_params[4*s+2], flags_params[4*s+3], flags_params[4*s+4], flags_params[4*s+5]);
+    for(pel_species_idx=0 ; pel_species_idx<run.no_pelagic ; pel_species_idx++){
+            setup_pelagic(
+                &run, 
+                &grid, 
+                &(community.pelagic[pel_species_idx]), 
+                temp_pel_params[pel_species_idx], 
+                names_params[pel_species_idx+2], 
+                flags_params[4*pel_species_idx+2], 
+                flags_params[4*pel_species_idx+3], 
+                flags_params[4*pel_species_idx+4], 
+                flags_params[4*pel_species_idx+5]);
     }
     
     if(run.no_benthic!=0){
             /*Setup benthic*/
             temp_ben_params=setup_benthic_params(run.no_benthic, ben_params);
-            for(b=0 ; b<run.no_benthic ; b++){
-                    setup_benthic(&run, &grid, &(community.benthic[b]), temp_ben_params[b], names_params[b+run.no_pelagic+2], flags_params[4*b+(2+(4*run.no_pelagic))], flags_params[4*b+(3+(4*run.no_pelagic))], flags_params[4*b+(4+(4*run.no_pelagic))], flags_params[4*b+(5+(4*run.no_pelagic))]);
+            for(ben_species_idx=0 ; ben_species_idx<run.no_benthic ; ben_species_idx++){
+                    setup_benthic(
+                        &run, 
+                        &grid, 
+                        &(community.benthic[ben_species_idx]), 
+                        temp_ben_params[ben_species_idx], 
+                        names_params[ben_species_idx+run.no_pelagic+2], 
+                        flags_params[4*ben_species_idx+(2+(4*run.no_pelagic))], 
+                        flags_params[4*ben_species_idx+(3+(4*run.no_pelagic))], 
+                        flags_params[4*ben_species_idx+(4+(4*run.no_pelagic))], 
+                        flags_params[4*ben_species_idx+(5+(4*run.no_pelagic))]);
             }
     
             /*Setup detritus*/
-            setup_detritus(&run, &grid, community.detritus, det_params, names_params[run.no_pelagic+run.no_benthic+2], flags_params[2+4*(run.no_pelagic+run.no_benthic)], flags_params[3+4*(run.no_pelagic+run.no_benthic)]);
+            setup_detritus(
+                &run, 
+                &grid, 
+                community.detritus, 
+                det_params, 
+                names_params[run.no_pelagic+run.no_benthic+2], 
+                flags_params[2+4*(run.no_pelagic+run.no_benthic)], 
+                flags_params[3+4*(run.no_pelagic+run.no_benthic)]
+            );
     }
    
     /*Setup differencing matrices*/
     pelmatrix=(MATRIX *)safe_malloc(run.no_pelagic*sizeof(MATRIX),__LINE__,__FILE__);
-    for(s=0 ; s<run.no_pelagic ; s++){
-            setup_matrix((community.pelagic[s].ipelmax-community.pelagic[s].ipelmin+1), &(pelmatrix[s]));
+    for(pel_species_idx=0 ; pel_species_idx<run.no_pelagic ; pel_species_idx++){
+        setup_matrix(
+                (
+                    community.pelagic[pel_species_idx].ipelmax -
+                    community.pelagic[pel_species_idx].ipelmin + 1
+                ), 
+                &(pelmatrix[pel_species_idx])
+        );
     }
     
     if(run.no_benthic!=0){
             benmatrix=(MATRIX *)safe_malloc(run.no_benthic*sizeof(MATRIX),__LINE__,__FILE__);
-            for(b=0 ; b<run.no_benthic ; b++){
-                    setup_matrix((community.benthic[b].ibenmax-community.benthic[b].ibenmin+1), &(benmatrix[b]));
+            for(ben_species_idx=0 ; ben_species_idx<run.no_benthic ; ben_species_idx++){
+                    setup_matrix((
+                        community.benthic[ben_species_idx].ibenmax -
+                        community.benthic[ben_species_idx].ibenmin + 1
+                    ), &(benmatrix[ben_species_idx]));
             }
     }
     
@@ -640,10 +675,28 @@ static void SizeSpectrum_internals(
     setup_matrix(grid.ynum, &ymatrix);
 
     /*Perform all finite differencing*/
-    calculate_results(&run, &grid, &community, pelmatrix, benmatrix, &xmatrix, &ymatrix);
+    calculate_results(
+        &run, 
+        &grid, 
+        &community, 
+        pelmatrix, 
+        benmatrix, 
+        &xmatrix, 
+        &ymatrix
+    );
 
     /*Free all allocated memory*/
-    free_mem(&run, &grid, &community, pelmatrix, benmatrix, &xmatrix, &ymatrix, temp_pel_params, temp_ben_params);
+    free_mem(
+        &run, 
+        &grid, 
+        &community, 
+        pelmatrix, 
+        benmatrix, 
+        &xmatrix, 
+        &ymatrix, 
+        temp_pel_params, 
+        temp_ben_params
+    );
 
 }
 
