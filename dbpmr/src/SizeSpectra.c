@@ -764,47 +764,49 @@ void setup_grid(GRID *grid, double *grid_input)
      
      
      /*Create arrays*/
-     int i,j,k,l;
-     int m,t,x,y;
+     int sc_idx, ts_idx, x_idx, y_idx;
+     int n_m, n_t, n_x, n_y;
      
-     m=grid->mnum;
-     t=grid->tnum;
-     x=grid->xnum;
-     y=grid->ynum;
+     n_m=grid->mnum;
+     n_t=grid->tnum;
+     n_x=grid->xnum;
+     n_y=grid->ynum;
      
-     grid->m_values=(double *)safe_malloc(m*sizeof(double),__LINE__,__FILE__);
-     grid->t_values=(double *)safe_malloc(t*sizeof(double),__LINE__,__FILE__);
-     grid->x_values=(double *)safe_malloc(x*sizeof(double),__LINE__,__FILE__);
-     grid->y_values=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
+     grid->m_values=(double *)safe_malloc(n_m*sizeof(double),__LINE__,__FILE__);
+     grid->t_values=(double *)safe_malloc(n_t*sizeof(double),__LINE__,__FILE__);
+     grid->x_values=(double *)safe_malloc(n_x*sizeof(double),__LINE__,__FILE__);
+     grid->y_values=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
      
      /*Setup values for m*/ 
-     for(i=0 ; i<m ; i++){
-             grid->m_values[i]=grid->mmin+(i*grid->mstep);
+     for(sc_idx=0 ; sc_idx < n_m; sc_idx++){
+             grid->m_values[sc_idx]=grid->mmin + (sc_idx * grid->mstep);
      }
      /*Setup values for t*/
-     for(j=0 ; j<t ; j++){
-             grid->t_values[j]=(j*grid->tstep);
+     for(ts_idx=0 ; ts_idx < n_t ; ts_idx++){
+             grid->t_values[ts_idx]=(ts_idx * grid->tstep);
      }
      /*Setup values for x*/
-     for(k=0 ; k<x ; k++){
-             grid->x_values[k]=grid->xmin+(k*grid->xstep);
+     for(x_idx=0; x_idx < n_x; x_idx++){
+             grid->x_values[x_idx]=grid->xmin + (x_idx * grid->xstep);
      }
      /*Setup values for y*/
-     for(l=0 ; l<y ; l++){
-             grid->y_values[l]=grid->ymin+(l*grid->ystep);
+     for(y_idx=0; y_idx < n_y ; y_idx++){
+             grid->y_values[y_idx]=grid->ymin + (y_idx * grid->ystep);
      }
 }
 
 double **setup_pelagic_params(int no_pelagic, double *pel_params)
 {
-    int i,s;
+    int param_idx, pel_species_idx;
     int no_params=32;
     double **temp_params;
     temp_params=(double **)safe_malloc(no_pelagic*sizeof(double *),__LINE__,__FILE__);
-    for(s=0 ; s<no_pelagic ; s++){
-            temp_params[s]=(double *)safe_malloc(no_params*sizeof(double),__LINE__,__FILE__);
-            for(i=0 ; i<no_params ; i++){
-                    temp_params[s][i]=pel_params[no_params*s+i];
+    for(pel_species_idx=0 ;pel_species_idx < no_pelagic; pel_species_idx++){
+            temp_params[pel_species_idx]=(double *)safe_malloc(no_params*sizeof(double),__LINE__,__FILE__);
+            for(param_idx=0 ; param_idx<no_params ; param_idx++){
+                    temp_params[pel_species_idx][param_idx]=pel_params[
+                        no_params * pel_species_idx + param_idx
+                    ];
             }
     }
     return(temp_params);
@@ -812,14 +814,16 @@ double **setup_pelagic_params(int no_pelagic, double *pel_params)
 
 double **setup_benthic_params(int no_benthic, double *ben_params)
 {
-    int i,b;
+    int param_idx, ben_species_idx;
     int no_params=15;
     double **temp_params;
     temp_params=(double **)safe_malloc(no_benthic*sizeof(double *),__LINE__,__FILE__);
-    for(b=0 ; b<no_benthic ; b++){
-            temp_params[b]=(double *)safe_malloc(no_params*sizeof(double),__LINE__,__FILE__);
-            for(i=0 ; i<no_params ; i++){
-                    temp_params[b][i]=ben_params[no_params*b+i];
+    for(ben_species_idx=0 ; ben_species_idx < no_benthic ; ben_species_idx++){
+            temp_params[ben_species_idx]=(double *)safe_malloc(no_params*sizeof(double),__LINE__,__FILE__);
+            for(param_idx=0 ; param_idx < no_params ; param_idx++){
+                    temp_params[ben_species_idx][param_idx]=ben_params[
+                        no_params * ben_species_idx + param_idx
+                    ];
             }
     }
     return(temp_params);
@@ -870,23 +874,23 @@ void setup_plankton(RUN *run, GRID *grid, PLANKTON *plankton, double *pla_params
      fclose(plankton->fptr_summ);
      
      /*Setup And Initialise Plankton Abundance Arrays*/
-     int i,k,l;
-     int m,x,y;
-     m=grid->mnum;
-     x=grid->xnum;
-     y=grid->ynum;
+     int sc_idx, x_idx, y_idx;
+     int n_m, n_x, n_y;
+     n_m=grid->mnum;
+     n_x=grid->xnum;
+     n_y=grid->ynum;
      
-     plankton->u_values=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
-     plankton->g_values=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
-     for(i=0 ; i<m ; i++){
-             plankton->u_values[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-             plankton->g_values[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-             for(k=0 ; k<x ; k++){
-                     plankton->u_values[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-                     plankton->g_values[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-                     for(l=0 ; l<y ; l++){
-                             plankton->u_values[i][k][l]=0;
-                             plankton->g_values[i][k][l]=0;
+     plankton->u_values=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
+     plankton->g_values=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
+     for(sc_idx=0 ; sc_idx < n_m ; sc_idx++){
+             plankton->u_values[sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+             plankton->g_values[sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+             for(x_idx=0 ; x_idx < n_x ; x_idx++){
+                     plankton->u_values[sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     plankton->g_values[sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     for(y_idx=0 ; y_idx < n_y ; y_idx++){
+                             plankton->u_values[sc_idx][x_idx][y_idx]=0;
+                             plankton->g_values[sc_idx][x_idx][y_idx]=0;
                      }
              }
      }
@@ -905,17 +909,17 @@ void setup_plankton(RUN *run, GRID *grid, PLANKTON *plankton, double *pla_params
              char *result = NULL;       //declaring a pointer for storing each individual value as a char
              
              /*Read in each line one at a time (corresponding to spectra at a spatial point)*/
-             for(k=0 ; k<x ; k++){
-                     for(l=0 ; l<y ; l++){
+             for(x_idx=0 ; x_idx < n_x ; x_idx++){
+                     for(y_idx=0 ; y_idx < n_y ; y_idx++){
                              fgets(input,MAX_LEN,plankton->fptr_ts);
                              input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                              
                              result=(char *)strtok(input,sep);    //this is the 1st value
-                             i=0;
+                             sc_idx=0;
                              while(result!=NULL){
-                                     plankton->u_values[i][k][l]=atof(result);
+                                     plankton->u_values[sc_idx][x_idx][y_idx]=atof(result);
                                      result=(char *)strtok(NULL,sep);
-                                     i++;
+                                     sc_idx++;
                              }
                      }
              }
@@ -928,14 +932,14 @@ void setup_plankton(RUN *run, GRID *grid, PLANKTON *plankton, double *pla_params
      }
      /*Use standard values*/
      else{
-             for(i=0 ; i<(plankton->iplamax+1) ; i++){
-                     for(k=0 ; k<x ; k++){
-                             for(l=0 ; l<y ; l++){
-                                     plankton->u_values[i][k][l]=plankton->u_0*exp(plankton->lambda*grid->m_values[i]);
+             for(sc_idx=0 ; sc_idx < (plankton->iplamax+1) ; sc_idx++){
+                     for(x_idx=0 ; x_idx < n_x ; x_idx++){
+                             for(y_idx=0 ; y_idx < n_y ; y_idx++){
+                                     plankton->u_values[sc_idx][x_idx][y_idx]=plankton->u_0*exp(plankton->lambda*grid->m_values[sc_idx]);
                                      if(run->spatial_dim==1 || run->spatial_dim==2){
-                                              plankton->u_values[i][k][l]*=x_start(grid->x_values[k],0);
+                                              plankton->u_values[sc_idx][x_idx][y_idx]*=x_start(grid->x_values[x_idx],0);
                                               if(run->spatial_dim==2){
-                                                      plankton->u_values[i][k][l]*=y_start(grid->y_values[l],0);
+                                                      plankton->u_values[sc_idx][x_idx][y_idx]*=y_start(grid->y_values[y_idx],0);
                                               }
                                      }
                              }
@@ -1016,8 +1020,8 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
      pelagic->ts_flag=ts_flag;
      pelagic->fishing_flag=fishing_flag;
      
-     int s,n;
-     n=run->no_pelagic;
+     int pel_species_idx, n_pel_species;
+     n_pel_species=run->no_pelagic;
      
 
      /*Create species output filenames*/
@@ -1025,9 +1029,9 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
      snprintf(pelagic->fname_g, sizeof(pelagic->fname_g),"%s/%s/%s.txt",run->filename,pelagic->filename,"growth");
      snprintf(pelagic->fname_m, sizeof(pelagic->fname_m),"%s/%s/%s.txt",run->filename,pelagic->filename,"mortality");
      pelagic->fname_pred=(char **)safe_malloc(n*sizeof(char *),__LINE__,__FILE__);
-     for(s=0 ; s<n ; s++){
-             pelagic->fname_pred[s]=(char *)safe_malloc(40*sizeof(char),__LINE__,__FILE__);
-             snprintf(pelagic->fname_pred[s], 40,"%s/%s/%s%d.txt",run->filename,pelagic->filename,"predation",s);
+     for(pel_species_idx=0 ; pel_species_idx < n_pel_species; pel_species_idx++){
+             pelagic->fname_pred[pel_species_idxar *)safe_malloc(40*sizeof(char),__LINE__,__FILE__);
+             snprintf(pelagic->fname_pred[pel_species_idx], 40,"%s/%s/%s%d.txt",run->filename,pelagic->filename,"predation",pel_species_idx);
      }
      snprintf(pelagic->fname_fish, sizeof(pelagic->fname_fish),"%s/%s/%s.txt",run->filename,pelagic->filename,"fishing");
      snprintf(pelagic->fname_summ, sizeof(pelagic->fname_summ),"%s/%s/%s.txt",run->filename,pelagic->filename,"summary");
@@ -1037,8 +1041,8 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
      pelagic->fptr_g=safe_fopen(pelagic->fname_g,"w",__LINE__,__FILE__);
      pelagic->fptr_m=safe_fopen(pelagic->fname_m,"w",__LINE__,__FILE__);
      pelagic->fptr_pred=(FILE **)safe_malloc(n*sizeof(FILE *),__LINE__,__FILE__);
-     for(s=0 ; s<n ; s++){
-             pelagic->fptr_pred[s]=safe_fopen(pelagic->fname_pred[s],"w",__LINE__,__FILE__);
+     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+             pelagic->fptr_pred[pel_species_idx]=safe_fopen(pelagic->fname_pred[pel_species_idx],"w",__LINE__,__FILE__);
      }
      pelagic->fptr_fish=safe_fopen(pelagic->fname_fish,"w",__LINE__,__FILE__);
      pelagic->fptr_summ=safe_fopen(pelagic->fname_summ,"w",__LINE__,__FILE__);
@@ -1059,11 +1063,11 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
      fprintf(pelagic->fptr_m,"\n");
      print_mass_header(grid, pelagic->fptr_m);
      
-     for(s=0 ; s<n ; s++){
-             fprintf(pelagic->fptr_pred[s],"filetype:      %s\n","predation");
-             fprintf(pelagic->fptr_pred[s],"speciestype:   %s\n","pelagic");
-             fprintf(pelagic->fptr_pred[s],"\n");
-             print_mass_header(grid, pelagic->fptr_pred[s]);
+     for(pel_species_idx=0 ; pel_species_idx < n_pel_species ; pel_species_idx++){
+             fprintf(pelagic->fptr_pred[pel_species_idx],"filetype:      %s\n","predation");
+             fprintf(pelagic->fptr_pred[pel_species_idx],"speciestype:   %s\n","pelagic");
+             fprintf(pelagic->fptr_pred[pel_species_idx],"\n");
+             print_mass_header(grid, pelagic->fptr_pred[pel_species_idx]);
      }
      
      fprintf(pelagic->fptr_fish,"filetype:      %s\n","fishing");
@@ -1080,112 +1084,112 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
      fclose(pelagic->fptr_r);
      fclose(pelagic->fptr_g);
      fclose(pelagic->fptr_m);
-     for(s=0 ; s<n ; s++){
-             fclose(pelagic->fptr_pred[s]);
+     for(pel_species_idx=0 ; pel_species_idx < n_pel_species ; pel_species_idx++){
+             fclose(pelagic->fptr_pred[pel_species_idx]);
      }
      fclose(pelagic->fptr_fish);
      fclose(pelagic->fptr_summ);
      
      /*Setup Species Abundance Arrays*/
-     int i,k,l;
-     int m,x,y;
-     m=grid->mnum;
-     x=grid->xnum;
-     y=grid->ynum;
+     int sc_idx, x_idx, yy_idx;
+     int n_m, n_x, n_y;
+     n_m=grid->mnum;
+     n_x=grid->xnum;
+     n_y=grid->ynum;
      
      /*Setup 3D size-space arrays*/
-     pelagic->mu_pred_values=(double****)safe_malloc(n*sizeof(double***),__LINE__,__FILE__);
-     pelagic->u_values=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
-     pelagic->g_values=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
-     pelagic->mu_values=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
-     for(s=0 ; s<n ; s++){
-             pelagic->mu_pred_values[s]=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
+     pelagic->mu_pred_values=(double****)safe_malloc(n_pel_species*sizeof(double***),__LINE__,__FILE__);
+     pelagic->u_values=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
+     pelagic->g_values=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
+     pelagic->mu_values=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
+     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+             pelagic->mu_pred_values[pel_species_idx]=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
      }
-     pelagic->mu_fish_values=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
+     pelagic->mu_fish_values=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
      
-     pelagic->pla_bio=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
-     pelagic->pel_bio=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
-     pelagic->ben_bio=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
-     pelagic->a_refuge=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);   /*reef refuge availability a(w)*/
+     pelagic->pla_bio=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
+     pelagic->pel_bio=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
+     pelagic->ben_bio=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
+     pelagic->a_refuge=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);   /*reef refuge availability a(w)*/
 
-     pelagic->phi_values=(double *)safe_malloc(m*sizeof(double),__LINE__,__FILE__);
-     pelagic->refuge_values=(double *)safe_malloc(m*sizeof(double),__LINE__,__FILE__);   /*per prey-size refuge density*/
-     for(i=0 ; i<m ; i++){
-             pelagic->u_values[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-             pelagic->g_values[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-             pelagic->mu_values[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-             for(s=0 ; s<n ; s++){
-                     pelagic->mu_pred_values[s][i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
+     pelagic->phi_values=(double *)safe_malloc(n_m*sizeof(double),__LINE__,__FILE__);
+     pelagic->refuge_values=(double *)safe_malloc(n_m*sizeof(double),__LINE__,__FILE__);   /*per prey-size refuge density*/
+     for(sc_idx=0 ; sc_idx<n_m ; sc_idx++){
+             pelagic->u_values[sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+             pelagic->g_values[sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+             pelagic->mu_values[sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+             for(pel_species_idx=0 ; pel_species_idx < n_pel_species ; pel_species_idx++){
+                     pelagic->mu_pred_values[pel_species_idx][sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
              }
-             pelagic->mu_fish_values[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
+             pelagic->mu_fish_values[sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
              
-             pelagic->pla_bio[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-             pelagic->pel_bio[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-             pelagic->ben_bio[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-             pelagic->a_refuge[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
+             pelagic->pla_bio[sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+             pelagic->pel_bio[sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+             pelagic->ben_bio[sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+             pelagic->a_refuge[sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
 
-             pelagic->phi_values[i]=0;
-             pelagic->refuge_values[i]=0;
-             for(k=0 ; k<x ; k++){
-                     pelagic->u_values[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-                     pelagic->g_values[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-                     pelagic->mu_values[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-                     for(s=0 ; s<n ; s++){
-                             pelagic->mu_pred_values[s][i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
+             pelagic->phi_values[sc_idx]=0;
+             pelagic->refuge_values[sc_idx]=0;
+             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                     pelagic->u_values[sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     pelagic->g_values[sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     pelagic->mu_values[sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+                             pelagic->mu_pred_values[pel_species_idx][sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
                      }
-                     pelagic->mu_fish_values[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
+                     pelagic->mu_fish_values[sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
                      
-                     pelagic->pla_bio[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-                     pelagic->pel_bio[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-                     pelagic->ben_bio[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-                     pelagic->a_refuge[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-                     for(l=0 ; l<y ; l++){
-                             pelagic->u_values[i][k][l]=0;
-                             pelagic->g_values[i][k][l]=0;
-                             pelagic->mu_values[i][k][l]=0;
-                             for(s=0 ; s<n ; s++){
-                                     pelagic->mu_pred_values[s][i][k][l]=0;
+                     pelagic->pla_bio[sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     pelagic->pel_bio[sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     pelagic->ben_bio[sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     pelagic->a_refuge[sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                             pelagic->u_values[sc_idx][x_idx][y_idx]=0;
+                             pelagic->g_values[sc_idx][x_idx][y_idx]=0;
+                             pelagic->mu_values[sc_idx][x_idx][y_idx]=0;
+                             for(pel_species_idx=0 ; pel_species_idx < n_pel_species ; pel_species_idx++){
+                                     pelagic->mu_pred_values[pel_species_idx][sc_idx][x_idx][y_idx]=0;
                              }
-                             pelagic->mu_fish_values[i][k][l]=0;
+                             pelagic->mu_fish_values[sc_idx][x_idx][y_idx]=0;
                              
-                             pelagic->pla_bio[i][k][l]=0;
-                             pelagic->pel_bio[i][k][l]=0;
-                             pelagic->ben_bio[i][k][l]=0;
-                             pelagic->a_refuge[i][k][l]=1.0;   /*default fully exposed (a=1) -> standard dbpmr*/
+                             pelagic->pla_bio[sc_idx][x_idx][y_idx]=0;
+                             pelagic->pel_bio[sc_idx][x_idx][y_idx]=0;
+                             pelagic->ben_bio[sc_idx][x_idx][y_idx]=0;
+                             pelagic->a_refuge[sc_idx][x_idx][y_idx]=1.0;   /*default fully exposed (a=1) -> standard dbpmr*/
                      }
              }
      }
      
      /*Setup 2D space arrays*/
-     pelagic->pla_total=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-     pelagic->pel_total=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-     pelagic->ben_total=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
+     pelagic->pla_total=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+     pelagic->pel_total=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+     pelagic->ben_total=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
      
-     pelagic->fish_total=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-     pelagic->pred_total=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-     pelagic->reproduction=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-     pelagic->rec0_c=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-     pelagic->rec0_frozen_c=(int **)safe_malloc(x*sizeof(int *),__LINE__,__FILE__);
-     for(k=0 ; k<x ; k++){
-             pelagic->pla_total[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-             pelagic->pel_total[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-             pelagic->ben_total[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
+     pelagic->fish_total=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+     pelagic->pred_total=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+     pelagic->reproduction=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+     pelagic->rec0_c=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+     pelagic->rec0_frozen_c=(int **)safe_malloc(n_x*sizeof(int *),__LINE__,__FILE__);
+     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+             pelagic->pla_total[x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+             pelagic->pel_total[x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+             pelagic->ben_total[x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
 
-             pelagic->fish_total[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-             pelagic->pred_total[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-             pelagic->reproduction[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-             pelagic->rec0_c[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-             pelagic->rec0_frozen_c[k]=(int *)safe_malloc(y*sizeof(int),__LINE__,__FILE__);
-             for(l=0 ; l<y ; l++){
-                     pelagic->pla_total[k][l]=0;
-                     pelagic->pel_total[k][l]=0;
-                     pelagic->ben_total[k][l]=0;
+             pelagic->fish_total[x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+             pelagic->pred_total[x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+             pelagic->reproduction[x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+             pelagic->rec0_c[x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+             pelagic->rec0_frozen_c[x_idx]=(int *)safe_malloc(n_y*sizeof(int),__LINE__,__FILE__);
+             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                     pelagic->pla_total[x_idx][y_idx]=0;
+                     pelagic->pel_total[x_idx][y_idx]=0;
+                     pelagic->ben_total[x_idx][y_idx]=0;
 
-                     pelagic->fish_total[k][l]=0;
-                     pelagic->pred_total[k][l]=0;
-                     pelagic->reproduction[k][l]=0;
-                     pelagic->rec0_c[k][l]=0.0;
-                     pelagic->rec0_frozen_c[k][l]=0;
+                     pelagic->fish_total[x_idx][y_idx]=0;
+                     pelagic->pred_total[x_idx][y_idx]=0;
+                     pelagic->reproduction[x_idx][y_idx]=0;
+                     pelagic->rec0_c[x_idx][y_idx]=0.0;
+                     pelagic->rec0_frozen_c[x_idx][y_idx]=0;
              }
      }
           
@@ -1202,17 +1206,17 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
              pelagic->fptr_ts=safe_fopen(pelagic->fname_ts,"r",__LINE__,__FILE__);
              
              /*Read in each line one at a time (corresponding to spectra at a spatial point)*/
-             for(k=0 ; k<x ; k++){
-                     for(l=0 ; l<y ; l++){
+             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                     for(y_idx=0 ; y_idx<n_y ; y_idx++){
                              fgets(input,MAX_LEN,pelagic->fptr_ts);
                              input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                              
                              result=(char *)strtok(input,sep);    //this is the 1st value
-                             i=0;
+                             sc_idx=0;
                              while(result!=NULL){
-                                     pelagic->u_values[i][k][l]=atof(result);
+                                     pelagic->u_values[sc_idx][x_idx][y_idx]=atof(result);
                                      result=(char *)strtok(NULL,sep);
-                                     i++;
+                                     sc_idx++;
                              }
                      }
              }
@@ -1223,14 +1227,14 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
              }
      }
      else{
-             for(i=pelagic->ipelmin ; i<(pelagic->ipelmax+1) ; i++){
-                     for(k=0 ; k<x ; k++){
-                             for(l=0 ; l<y ; l++){
-                                     pelagic->u_values[i][k][l]=pelagic->u_0*exp(pelagic->lambda*grid->m_values[i]);
+             for(sc_idx=pelagic->ipelmin ; sc_idx<(pelagic->ipelmax+1) ; sc_idx++){
+                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                     pelagic->u_values[sc_idx][x_idx][y_idx]=pelagic->u_0*exp(pelagic->lambda*grid->m_values[sc_idx]);
                                      if(run->spatial_dim==1 || run->spatial_dim==2){
-                                              pelagic->u_values[i][k][l]*=x_start(grid->x_values[k],0);
+                                              pelagic->u_values[sc_idx][x_idx][y_idx]*=x_start(grid->x_values[x_idx],0);
                                               if(run->spatial_dim==2){
-                                                      pelagic->u_values[i][k][l]*=y_start(grid->y_values[l],0);
+                                                      pelagic->u_values[sc_idx][x_idx][y_idx]*=y_start(grid->y_values[y_idx],0);
                                               }
                                      }
                              }
@@ -1249,9 +1253,9 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
      if(pelagic->ts_flag==0){
              /*set eggs equal to intial values*/
              if(pelagic->rep_method==0){
-                     for(k=0 ; k<x ; k++){
-                             for(l=0 ; l<y ; l++){
-                                     pelagic->reproduction[k][l]=pelagic->u_values[pelagic->ipelmin][k][l];
+                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                     pelagic->reproduction[x_idx][y_idx]=pelagic->u_values[pelagic->ipelmin][x_idx][y_idx];
                              }
                      }
              }
@@ -1264,8 +1268,8 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
 
      
      /*Setup values for predator-prey fedding kernel*/
-     for(i=0 ; i<(pelagic->ipelmax+1) ; i++){
-             pelagic->phi_values[i]=phi((grid->m_values[i]-grid->m_values[0]),pelagic->q_0, pelagic->sig, pelagic->trunc);
+     for(sc_idx=0 ; sc_idx<(pelagic->ipelmax+1) ; sc_idx++){
+             pelagic->phi_values[sc_idx]=phi((grid->m_values[sc_idx]-grid->m_values[0]),pelagic->q_0, pelagic->sig, pelagic->trunc);
      }
 
      /* --- Reef prey-refuge plugin (opt-in; Rogers, Blanchard & Mumby 2014) ---
@@ -1283,8 +1287,8 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
              FILE *rf = fopen(rfn, "r");
              if(rf){
                      double v; int cnt=0;
-                     for(i=0 ; i<grid->mnum && fscanf(rf,"%lf",&v)==1 ; i++){
-                             pelagic->refuge_values[i]=v; if(v>0) cnt++;
+                     for(sc_idx=0 ; sc_idx < n_m && fscanf(rf,"%lf",&v)==1 ; sc_idx++){
+                             pelagic->refuge_values[sc_idx]=v; if(v>0) cnt++;
                      }
                      fclose(rf);
                      if(cnt>0) pelagic->refuge_on = 1;   /*only activate when a positive refuge is supplied*/
@@ -1387,63 +1391,63 @@ void setup_benthic(RUN *run, GRID *grid, BENTHIC *benthic, double *ben_params, c
      fclose(benthic->fptr_summ);
      
      /*Setup Species Abundance Arrays*/
-     int i,k,l;
-     int m,x,y;
-     m=grid->mnum;
-     x=grid->xnum;
-     y=grid->ynum;
+     int sc_idx, x_idx, y_idx;
+     int n_m, n_x, n_y;
+     n_m=grid->mnum;
+     n_x=grid->xnum;
+     n_y=grid->ynum;
      
-     benthic->u_values=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
-     benthic->g_values=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
-     benthic->mu_values=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
-     benthic->mu_pred_values=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
-     benthic->mu_fish_values=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
+     benthic->u_values=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
+     benthic->g_values=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
+     benthic->mu_values=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
+     benthic->mu_pred_values=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
+     benthic->mu_fish_values=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
      
-     benthic->det_bio=(double ***)safe_malloc(m*sizeof(double **),__LINE__,__FILE__);
-     for(i=0 ; i<m ; i++){
-             benthic->u_values[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-             benthic->g_values[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-             benthic->mu_values[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-             benthic->mu_pred_values[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-             benthic->mu_fish_values[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
+     benthic->det_bio=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
+     for(sc_idx=0 ; sc_idx<n_m ; sc_idx++){
+             benthic->u_values[sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+             benthic->g_values[sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+             benthic->mu_values[sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+             benthic->mu_pred_values[sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+             benthic->mu_fish_values[sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
              
-             benthic->det_bio[i]=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-             for(k=0 ; k<x ; k++){
-                     benthic->u_values[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-                     benthic->g_values[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-                     benthic->mu_values[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-                     benthic->mu_pred_values[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-                     benthic->mu_fish_values[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
+             benthic->det_bio[sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                     benthic->u_values[sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     benthic->g_values[sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     benthic->mu_values[sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     benthic->mu_pred_values[sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     benthic->mu_fish_values[sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
                      
-                     benthic->det_bio[i][k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-                     for(l=0 ; l<y ; l++){
-                             benthic->u_values[i][k][l]=0;
-                             benthic->g_values[i][k][l]=0;
-                             benthic->mu_values[i][k][l]=0;
-                             benthic->mu_pred_values[i][k][l]=0;
-                             benthic->mu_fish_values[i][k][l]=0;
+                     benthic->det_bio[i][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                             benthic->u_values[sc_idx][x_idx][y_idx]=0;
+                             benthic->g_values[sc_idx][x_idx][y_idx]=0;
+                             benthic->mu_values[sc_idx][x_idx][y_idx]=0;
+                             benthic->mu_pred_values[sc_idx][x_idx][y_idx]=0;
+                             benthic->mu_fish_values[sc_idx][x_idx][y_idx]=0;
 
-                             benthic->det_bio[i][k][l]=0;
+                             benthic->det_bio[sc_idx][x_idx][y_idx]=0;
                      }
              }
      }
-     benthic->det_total=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
+     benthic->det_total=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
      
-     benthic->fish_total=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-     benthic->pred_total=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-     benthic->reproduction=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-     for(k=0 ; k<x ; k++){
-             benthic->det_total[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
+     benthic->fish_total=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+     benthic->pred_total=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+     benthic->reproduction=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+             benthic->det_total[x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
              
-             benthic->fish_total[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-             benthic->pred_total[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-             benthic->reproduction[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-             for(l=0 ; l<y ; l++){
-                     benthic->det_total[k][l]=0;
+             benthic->fish_total[x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+             benthic->pred_total[x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+             benthic->reproduction[x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                     benthic->det_total[x_idx][y_idx]=0;
                      
-                     benthic->fish_total[k][l]=0;
-                     benthic->pred_total[k][l]=0;
-                     benthic->reproduction[k][l]=0;
+                     benthic->fish_total[x_idx][y_idx]=0;
+                     benthic->pred_total[x_idx][y_idx]=0;
+                     benthic->reproduction[x_idx][y_idx]=0;
              }
      }
           
@@ -1460,17 +1464,17 @@ void setup_benthic(RUN *run, GRID *grid, BENTHIC *benthic, double *ben_params, c
              benthic->fptr_ts=safe_fopen(benthic->fname_ts,"r",__LINE__,__FILE__);
              
              /*Read in each line one at a time (corresponding to spectra at a spatial point)*/
-             for(k=0 ; k<x ; k++){
-                     for(l=0 ; l<y ; l++){
+             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                     for(y_idx=0 ; y_idx<n_y ; y_idx++){
                              fgets(input,MAX_LEN,benthic->fptr_ts);
                              input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                              
                              result=(char *)strtok(input,sep);    //this is the 1st value
-                             i=0;
+                             sc_idx=0;
                              while(result!=NULL){
-                                     benthic->u_values[i][k][l]=atof(result);
+                                     benthic->u_values[sc_idx][x_idx][y_idx]=atof(result);
                                      result=(char *)strtok(NULL,sep);
-                                     i++;
+                                     sc_idx++;
                              }
                      }
              }
@@ -1481,14 +1485,14 @@ void setup_benthic(RUN *run, GRID *grid, BENTHIC *benthic, double *ben_params, c
              }
      }
      else{
-             for(i=benthic->ibenmin ; i<(benthic->ibenmax+1) ; i++){
-                     for(k=0 ; k<x ; k++){
-                             for(l=0 ; l<y ; l++){
-                                     benthic->u_values[i][k][l]=benthic->u_0*exp(benthic->lambda*grid->m_values[i]);
+             for(sc_idx=benthic->ibenmin ; sc_idx<(benthic->ibenmax+1) ; sc_idx++){
+                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                     benthic->u_values[sc_idx][x_idx][y_idx]=benthic->u_0*exp(benthic->lambda*grid->m_values[sc_idx]);
                                      if(run->spatial_dim==1 || run->spatial_dim==2){
-                                              benthic->u_values[i][k][l]*=x_start(grid->x_values[k],0);
+                                              benthic->u_values[sc_idx][x_idx][y_idx]*=x_start(grid->x_values[x_idx],0);
                                               if(run->spatial_dim==2){
-                                                      benthic->u_values[i][k][l]*=y_start(grid->y_values[l],0);
+                                                      benthic->u_values[sc_idx][x_idx][y_idx]*=y_start(grid->y_values[y_idx],0);
                                               }
                                      }
                              }
@@ -1507,9 +1511,9 @@ void setup_benthic(RUN *run, GRID *grid, BENTHIC *benthic, double *ben_params, c
      if(benthic->ts_flag==0){
              /*set eggs equal to intial values*/
              if(benthic->rep_method==0){
-                     for(k=0 ; k<x ; k++){
-                             for(l=0 ; l<y ; l++){
-                                     benthic->reproduction[k][l]=benthic->u_values[benthic->ibenmin][k][l];
+                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                     benthic->reproduction[x_idx][y_idx]=benthic->u_values[benthic->ibenmin][x_idx][y_idx];
                              }
                      }
              }
@@ -1549,22 +1553,22 @@ void setup_detritus(RUN *run, GRID *grid, DETRITUS *detritus, double *det_params
      fclose(detritus->fptr_summ);
      
      /*Setup And Initialise detritus Abundance Arrays*/
-     int k,l;
-     int x,y;
-     x=grid->xnum;
-     y=grid->ynum;
+     int x_idx, y_idx;
+     int n_x, n_y;
+     n_x=grid->xnum;
+     n_y=grid->ynum;
      
-     detritus->w_values=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-     detritus->g_values=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-     detritus->mu_values=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-     for(k=0 ; k<x ; k++){
-             detritus->w_values[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-             detritus->g_values[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-             detritus->mu_values[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-             for(l=0 ; l<y ; l++){
-                     detritus->w_values[k][l]=0;
-                     detritus->g_values[k][l]=0;
-                     detritus->mu_values[k][l]=0;
+     detritus->w_values=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+     detritus->g_values=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+     detritus->mu_values=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+             detritus->w_values[x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+             detritus->g_values[x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+             detritus->mu_values[x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                     detritus->w_values[x_idx][y_idx]=0;
+                     detritus->g_values[x_idx][y_idx]=0;
+                     detritus->mu_values[x_idx][y_idx]=0;
              }
      }
           
@@ -1582,14 +1586,14 @@ void setup_detritus(RUN *run, GRID *grid, DETRITUS *detritus, double *det_params
              detritus->fptr_ts=safe_fopen(detritus->fname_ts,"r",__LINE__,__FILE__);
              
              /*Read in each line one at a time (corresponding to spectra at a spatial point)*/
-             for(k=0 ; k<x ; k++){
-                     for(l=0 ; l<y ; l++){
+             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                     for(y_idx=0 ; y_idx<n_y ; y_idx++){
                              fgets(input,MAX_LEN,detritus->fptr_ts);
                              input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                              
                              result=(char *)strtok(input,sep);    //this is the 1st value
                              while(result!=NULL){
-                                     detritus->w_values[k][l]=atof(result);
+                                     detritus->w_values[x_idx][y_idx]=atof(result);
                                      result=(char *)strtok(NULL,sep);
                              }
                      }
@@ -1602,9 +1606,9 @@ void setup_detritus(RUN *run, GRID *grid, DETRITUS *detritus, double *det_params
      }
      /*Use standard values*/
      else{
-          for(k=0 ; k<x ; k++){
-                  for(l=0 ; l<y ; l++){
-                          detritus->w_values[k][l]=detritus->w_0;
+          for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                  for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                          detritus->w_values[x_idx][y_idx]=detritus->w_0;
                   }
           }
      }
