@@ -3203,27 +3203,27 @@ void xmove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *xmat, doub
      (2) DIFFUSION by Crank-Nicolson with ZERO-FLUX (Neumann) boundaries.
    With no movement (C=D=0 and Diffun=0) both steps are the identity -> output unchanged. */
 {
-     int i,k,l,s;
-     int x,y,n;
+     int sc_idx, x_idx, y_idx, pel_species_idx;
+     int n_x, n_y, n_pel_species;
      double dt,dx,C,D,r;
 
      dt=grid->tstep;
      dx=grid->xstep;
-     x=grid->xnum;
-     y=grid->ynum;
-     n=run->no_pelagic;
+     n_x=grid->xnum;
+     n_y=grid->ynum;
+     n_pel_species=run->no_pelagic;
 
-     double *uadv=(double *)safe_malloc(x*sizeof(double),__LINE__,__FILE__);   /* state after advection */
-     double *flux=(double *)safe_malloc(x*sizeof(double),__LINE__,__FILE__);   /* flux[k] = flux across the face between cells k and k+1 */
-     double *vface=(double *)safe_malloc(x*sizeof(double),__LINE__,__FILE__);  /* advective velocity at face k (depends on g,mu only) */
+     double *uadv=(double *)safe_malloc(n_x*sizeof(double),__LINE__,__FILE__);   /* state after advection */
+     double *flux=(double *)safe_malloc(n_x*sizeof(double),__LINE__,__FILE__);   /* flux[k] = flux across the face between cells k and k+1 */
+     double *vface=(double *)safe_malloc(n_x*sizeof(double),__LINE__,__FILE__);  /* advective velocity at face k (depends on g,mu only) */
 
-     for(s=0 ; s<n ; s++){
-             for(i=community->pelagic[s].ipelmin ; i<(community->pelagic[s].ipelmax+1) ; i++){
-                     C=Cfun(grid->m_values[i], grid->t_values[time], grid, &(community->pelagic[s]));
-                     D=Dfun(grid->m_values[i], grid->t_values[time], grid, &(community->pelagic[s]));
-                     r=Diffun(grid->m_values[i], grid->t_values[time], grid, &(community->pelagic[s]))*(dt/(dx*dx));
+     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+             for(ssc_idx=community->pelagic[pel_species_idx].ipelmin ; sc_idx<(community->pelagic[s].ipelmax+1) ; sc_idx++){
+                     C=Cfun(grid->m_values[sc_idx], grid->t_values[time], grid, &(community->pelagic[pel_species_idx]));
+                     D=Dfun(grid->m_values[sc_idx], grid->t_values[time], grid, &(community->pelagic[pel_species_idx]));
+                     r=Diffun(grid->m_values[sc_idx], grid->t_values[time], grid, &(community->pelagic[pel_species_idx]))*(dt/(dx*dx));
                      int noadv=(C==0.0 && D==0.0);   /* no advection -> identity; also avoids 0*NaN if a crashed cell left NaN in g/mu */
-                     for(l=0 ; l<y ; l++){
+                     for(y_idx=0 ; y_idx<n_y; y_idx++){
                              /* --- 1. advection: conservative upwind flux form; zero flux at both walls.
                                 CFL SUB-STEPPING: the explicit upwind update is stable only for Courant number
                                 |v|*dt/dx <= 1; a large prey/pred coefficient would otherwise flush a cell in one
@@ -3232,40 +3232,40 @@ void xmove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *xmat, doub
                                 saturates smoothly instead of exploding. Velocities depend on g,mu only (fixed
                                 across the sub-steps); only the upwind donor value is refreshed each sub-step. */
                              double vmax=0.0;
-                             for(k=0 ; k<x-1 ; k++){
-                                     vface[k]= noadv ? 0.0 :
-                                               (C*(community->pelagic[s].g_values[i][k+1][y_idx]-community->pelagic[s].g_values[i][k][y_idx])
-                                               -D*(community->pelagic[s].mu_values[i][k+1][y_idx]-community->pelagic[s].mu_values[i][k][y_idx]))/dx;
-                                     if(fabs(vface[k])>vmax) vmax=fabs(vface[k]);
+                             for(x_idx=0 ; x_idx<n_x-1 ; x_idx++){
+                                     vface[x_idx]= noadv ? 0.0 :
+                                               (C*(community->pelagic[pel_species_idx].g_values[sc_idx][x_idx+1][y_idx]-community->pelagic[pel_species_idx].g_values[sc_idx][x_idx][y_idx])
+                                               -D*(community->pelagic[pel_species_idx].mu_values[sc_idx][x_idx+1][y_idx]-community->pelagic[pel_species_idx].mu_values[sc_idx][x_idx][y_idx]))/dx;
+                                     if(fabs(vface[x_idx])>vmax) vmax=fabs(vface[x_idx]);
                              }
-                             for(k=0 ; k<x ; k++) uadv[k]=temp_pelagic[s][i][k][y_idx];
+                             for(x_idx=0 ; x_idx<n_x ; x_idx++) uadv[x_idx]=temp_pelagic[pel_species_idx][sc_idx][x_idx][y_idx];
                              int nsub=(int)ceil(vmax*dt/dx); if(nsub<1) nsub=1;
                              double dts=dt/(double)nsub;
                              for(int sub=0 ; sub<nsub ; sub++){
-                                     for(k=0 ; k<x-1 ; k++){
-                                             double uup=(vface[k]>0.0)? uadv[k] : uadv[k+1];   /* upwind donor */
-                                             flux[k]=vface[k]*uup;
+                                     for(x_idx=0 ; x_idx<n_x-1 ; x_idx++){
+                                             double uup=(vface[x_idx]>0.0)? uadv[x_idx] : uadv[x_idx+1];   /* upwind donor */
+                                             flux[x_idx]=vface[x_idx]*uup;
                                      }
-                                     for(k=0 ; k<x ; k++){
-                                             double Fr=(k<x-1)? flux[k]   : 0.0;   /* right-face flux (0 at the x-max wall) */
-                                             double Fl=(k>0)  ? flux[k-1] : 0.0;   /* left-face  flux (0 at the x=0   wall) */
-                                             uadv[k]=uadv[k]-(dts/dx)*(Fr-Fl);     /* flux[] precomputed -> in-place is safe */
-                                             if(uadv[k]<0.0) uadv[k]=0.0;          /* clamp tiny upwind undershoots */
+                                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                                             double Fr=(x_idx<n_x-1)? flux[x_idx]   : 0.0;   /* right-face flux (0 at the x-max wall) */
+                                             double Fl=(x_idx>0)  ? flux[x_idx-1] : 0.0;   /* left-face  flux (0 at the x=0   wall) */
+                                             uadv[x_idx]=uadv[x_idx]-(dts/dx)*(Fr-Fl);     /* flux[] precomputed -> in-place is safe */
+                                             if(uadv[x_idx]<0.0) uadv[x_idx]=0.0;          /* clamp tiny upwind undershoots */
                                      }
                              }
                              /* --- 2. diffusion: Crank-Nicolson with zero-flux (Neumann) BCs; conserves mass --- */
                              /* RHS (I + r/2 L): xmat->r = RHS * uadv via trimul */
                              xmat->b[0]=1.0-r/2.0;  xmat->c[0]=r/2.0;
-                             for(k=1 ; k<x-1 ; k++){ xmat->a[k]=r/2.0; xmat->b[k]=1.0-r; xmat->c[k]=r/2.0; }
-                             xmat->a[x-1]=r/2.0;    xmat->b[x-1]=1.0-r/2.0;
-                             for(k=0 ; k<x ; k++) xmat->u[k]=uadv[k];
+                             for(x_idx=1 ; x_idx<n_x-1 ; x_idx++){ xmat->a[x_idx]=r/2.0; xmat->b[x_idx]=1.0-r; xmat->c[x_idx]=r/2.0; }
+                             xmat->a[n_x-1]=r/2.0;    xmat->b[n_x-1]=1.0-r/2.0;
+                             for(x_idx=0 ; x_idx<n_x ; x_idx++) xmat->u[x_idx]=uadv[x_idx];
                              trimul(xmat);
                              /* LHS (I - r/2 L): solve LHS * unew = r */
                              xmat->b[0]=1.0+r/2.0;  xmat->c[0]=-r/2.0;
-                             for(k=1 ; k<x-1 ; k++){ xmat->a[k]=-r/2.0; xmat->b[k]=1.0+r; xmat->c[k]=-r/2.0; }
-                             xmat->a[x-1]=-r/2.0;   xmat->b[x-1]=1.0+r/2.0;
+                             for(x_idx=1 ; x_idx<n_x-1 ; x_idx++){ xmat->a[x_idx]=-r/2.0; xmat->b[x_idx]=1.0+r; xmat->c[x_idx]=-r/2.0; }
+                             xmat->a[n_x-1]=-r/2.0;   xmat->b[n_x-1]=1.0+r/2.0;
                              tridag(xmat);
-                             for(k=0 ; k<x ; k++) community->pelagic[s].u_values[i][k][y_idx]=xmat->u[k];
+                             for(x_idx=0 ; x_idx<n_x ; x_idx++) community->pelagic[s].u_values[i][x_idx][y_idx]=xmat->u[x_idx];
                      }
              }
      }
@@ -3278,62 +3278,62 @@ void ymove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *ymat, doub
 /* Spatial movement in y, operator-split (same fix as xmove_solver — see issue #41):
    conservative upwind FLUX advection + Crank-Nicolson diffusion, both with ZERO-FLUX walls. */
 {
-     int i,k,l,s;
-     int x,y,n;
+     int sc_idx, x_idx, y_idx, pel_species_idx;
+     int n_x, n_y, n_pel_species;
      double dt,dy,C,D,r;
 
      dt=grid->tstep;
      dy=grid->ystep;
-     x=grid->xnum;
-     y=grid->ynum;
-     n=run->no_pelagic;
+     n_x=grid->xnum;
+     n_y=grid->ynum;
+     n_pel_species=run->no_pelagic;
 
-     double *uadv=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-     double *flux=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);   /* flux[l] = flux across the face between cells l and l+1 */
-     double *vface=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);  /* advective velocity at face l (depends on g,mu only) */
+     double *uadv=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+     double *flux=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);   /* flux[l] = flux across the face between cells l and l+1 */
+     double *vface=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);  /* advective velocity at face l (depends on g,mu only) */
 
-     for(s=0 ; s<n ; s++){
-             for(i=community->pelagic[s].ipelmin ; i<(community->pelagic[s].ipelmax+1) ; i++){
-                     C=Cfun(grid->m_values[i], grid->t_values[time], grid, &(community->pelagic[s]));
-                     D=Dfun(grid->m_values[i], grid->t_values[time], grid, &(community->pelagic[s]));
-                     r=Diffun(grid->m_values[i], grid->t_values[time], grid, &(community->pelagic[s]))*(dt/(dy*dy));
+     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+             for(sc_idx=community->pelagic[pel_species_idx].ipelmin ; sc_idx<(community->pelagic[pel_species_idx].ipelmax+1) ; sc_idx++){
+                     C=Cfun(grid->m_values[sc_idx], grid->t_values[time], grid, &(community->pelagic[pel_species_idx]));
+                     D=Dfun(grid->m_values[sc_idx], grid->t_values[time], grid, &(community->pelagic[pel_species_idx]));
+                     r=Diffun(grid->m_values[sc_idx], grid->t_values[time], grid, &(community->pelagic[pel_species_idx]))*(dt/(dy*dy));
                      int noadv=(C==0.0 && D==0.0);   /* no advection -> identity; also avoids 0*NaN if g/mu carry NaN */
-                     for(k=0 ; k<x ; k++){
+                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
                              /* --- 1. advection: conservative upwind flux form; zero flux at both walls.
                                 CFL sub-stepped (see xmove_solver for the rationale). --- */
                              double vmax=0.0;
-                             for(l=0 ; l<y-1 ; l++){
-                                     vface[l]= noadv ? 0.0 :
-                                               (C*(community->pelagic[s].g_values[i][k][l+1]-community->pelagic[s].g_values[i][k][l])
-                                               -D*(community->pelagic[s].mu_values[i][k][l+1]-community->pelagic[s].mu_values[i][k][l]))/dy;
-                                     if(fabs(vface[l])>vmax) vmax=fabs(vface[l]);
+                             for(y_idx=0 ; y_idx<n_y-1 ; y_idx++){
+                                     vface[y_idx]= noadv ? 0.0 :
+                                               (C*(community->pelagic[pel_species_idx].g_values[sc_idx][x_idx][y_idx+1]-community->pelagic[pel_species_idx].g_values[sc_idx][x_idx][y_idx])
+                                               -D*(community->pelagic[pel_species_idx].mu_values[sc_idx][x_idx][y_idx+1]-community->pelagic[pel_species_idx].mu_values[sc_idx][x_idx][y_idx]))/dy;
+                                     if(fabs(vface[y_idx])>vmax) vmax=fabs(vface[y_idx]);
                              }
-                             for(l=0 ; l<y ; l++) uadv[l]=temp_pelagic[s][i][k][l];
+                             for(y_idx=0 ; y_idx<n_y ; y_idx++) uadv[y_idx]=temp_pelagic[pel_species_idx][sc_idx][x_idx][y_idx];
                              int nsub=(int)ceil(vmax*dt/dy); if(nsub<1) nsub=1;
                              double dts=dt/(double)nsub;
                              for(int sub=0 ; sub<nsub ; sub++){
-                                     for(l=0 ; l<y-1 ; l++){
-                                             double uup=(vface[l]>0.0)? uadv[l] : uadv[l+1];   /* upwind donor */
-                                             flux[l]=vface[l]*uup;
+                                     for(y_idx=0 ; y_idx<n_y-1 ; y_idx++){
+                                             double uup=(vface[y_idx]>0.0)? uadv[y_idx] : uadv[y_idx+1];   /* upwind donor */
+                                             flux[y_idx]=vface[y_idx]*uup;
                                      }
-                                     for(l=0 ; l<y ; l++){
-                                             double Fr=(l<y-1)? flux[l]   : 0.0;   /* right-face flux (0 at the y-max wall) */
-                                             double Fl=(l>0)  ? flux[l-1] : 0.0;   /* left-face  flux (0 at the y=0   wall) */
-                                             uadv[l]=uadv[l]-(dts/dy)*(Fr-Fl);     /* flux[] precomputed -> in-place is safe */
-                                             if(uadv[l]<0.0) uadv[l]=0.0;
+                                     for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                             double Fr=(l<n_y-1)? flux[y_idx]   : 0.0;   /* right-face flux (0 at the y-max wall) */
+                                             double Fl=(l>0)  ? flux[y_idx-1] : 0.0;   /* left-face  flux (0 at the y=0   wall) */
+                                             uadv[y_idx]=uadv[y_idx]-(dts/dy)*(Fr-Fl);     /* flux[] precomputed -> in-place is safe */
+                                             if(uadv[y_idx]<0.0) uadv[y_idx]=0.0;
                                      }
                              }
                              /* --- 2. diffusion: Crank-Nicolson with zero-flux (Neumann) BCs --- */
                              ymat->b[0]=1.0-r/2.0;  ymat->c[0]=r/2.0;
-                             for(l=1 ; l<y-1 ; l++){ ymat->a[l]=r/2.0; ymat->b[l]=1.0-r; ymat->c[l]=r/2.0; }
-                             ymat->a[y-1]=r/2.0;    ymat->b[y-1]=1.0-r/2.0;
-                             for(l=0 ; l<y ; l++) ymat->u[l]=uadv[l];
+                             for(y_idx=1 ; y_idx<n_y-1 ; y_idx++){ ymat->a[y_idx]=r/2.0; ymat->b[y_idx]=1.0-r; ymat->c[y_idx]=r/2.0; }
+                             ymat->a[n_y-1]=r/2.0;    ymat->b[n_y-1]=1.0-r/2.0;
+                             for(y_idx=0 ; y_idx<n_y ; y_idx++) ymat->u[y_idx]=uadv[y_idx];
                              trimul(ymat);
                              ymat->b[0]=1.0+r/2.0;  ymat->c[0]=-r/2.0;
-                             for(l=1 ; l<y-1 ; l++){ ymat->a[l]=-r/2.0; ymat->b[l]=1.0+r; ymat->c[l]=-r/2.0; }
-                             ymat->a[y-1]=-r/2.0;   ymat->b[y-1]=1.0+r/2.0;
+                             for(y_idx=1 ; y_idx<y-1 ; y_idx++){ ymat->a[y_idx]=-r/2.0; ymat->b[y_idx]=1.0+r; ymat->c[y_idx]=-r/2.0; }
+                             ymat->a[n_y-1]=-r/2.0;   ymat->b[n_y-1]=1.0+r/2.0;
                              tridag(ymat);
-                             for(l=0 ; l<y ; l++) community->pelagic[s].u_values[i][k][l]=ymat->u[l];
+                             for(y_idx=0 ; y_idx<n_y ; y_idx++) community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx]=ymat->u[y_idx];
                      }
              }
      }
