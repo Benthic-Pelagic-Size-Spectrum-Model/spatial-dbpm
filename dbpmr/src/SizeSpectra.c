@@ -2775,17 +2775,17 @@ void print_detritus_summary(GRID *grid, DETRITUS *detritus, int time)
 void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, MATRIX *benmatrix, double ***temp_plankton, double ****temp_pelagic, double ****temp_benthic, double **temp_detritus)
 /*Impliments the differencing scheme to obtain the values at the next time step*/
 {
-     int i,k,l,s,b;
-     int x,y,n,c;
+     int sc_idx, x_idx, y_idx, pel_species_idx, ben_species_idx;
+     int n_x, n_y, n_pel_species, n_ben_species;
      double dt,dm;
      
      dm=grid->mstep;
      dt=grid->tstep;
      
-     x=grid->xnum;
-     y=grid->ynum;
-     n=run->no_pelagic;
-     c=run->no_benthic;
+     n_x=grid->xnum;
+     n_y=grid->ynum;
+     n_pel_species=run->no_pelagic;
+     n_ben_species=run->no_benthic;
 
      /*Advance the environmental-forcing plugin one timestep (if active), in lockstep with the
        plankton re-read below. Parse this timestep's row into the recognised channels, then:
@@ -2801,22 +2801,22 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                 temperature is applied in the feeding/mortality integrals (via run->*_tempeff_c[k][l]).
                 Only pel_tempeff/ben_tempeff/sinking_rate are made per-cell in this mode. */
              char fline[1024]; double vals[64];
-             for(k=0 ; k<x ; k++){
-                     for(l=0 ; l<y ; l++){
+             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                     for(y_idx=0 ; y_idx<n_y ; y_idx++){
                              if(fgets(fline,sizeof(fline),run->fptr_forcing)==NULL) break;
                              int nv=0; char *tok=strtok(fline,",");
                              while(tok!=NULL && nv<64){ vals[nv++]=atof(tok); tok=strtok(NULL,","); }
-                             run->pel_tempeff_c[k][l]  = (run->col_pel_tempeff>=0 && run->col_pel_tempeff<nv) ? vals[run->col_pel_tempeff] : 1.0;
-                             run->ben_tempeff_c[k][l]  = (run->col_ben_tempeff>=0 && run->col_ben_tempeff<nv) ? vals[run->col_ben_tempeff] : 1.0;
-                             run->sinking_rate_c[k][l] = (run->col_sinking_rate>=0 && run->col_sinking_rate<nv) ? vals[run->col_sinking_rate] : 1.0;
-                             run->depth_c[k][l]        = (run->col_depth>=0 && run->col_depth<nv) ? vals[run->col_depth] : 1.0;
-                             run->export_attn_c[k][l]  = (run->col_export_attn>=0 && run->col_export_attn<nv) ? vals[run->col_export_attn] : 0.0;
-                             run->export_gamma_c[k][l] = (run->col_export_gamma>=0 && run->col_export_gamma<nv) ? vals[run->col_export_gamma] : 0.0;
-                             run->export_magg_c[k][l]  = (run->col_export_magg>=0 && run->col_export_magg<nv) ? vals[run->col_export_magg] : -1e30;
+                             run->pel_tempeff_c[x_idx][y_idx]  = (run->col_pel_tempeff>=0 && run->col_pel_tempeff<nv) ? vals[run->col_pel_tempeff] : 1.0;
+                             run->ben_tempeff_c[x_idx][y_idx]  = (run->col_ben_tempeff>=0 && run->col_ben_tempeff<nv) ? vals[run->col_ben_tempeff] : 1.0;
+                             run->sinking_rate_c[x_idx][y_idx] = (run->col_sinking_rate>=0 && run->col_sinking_rate<nv) ? vals[run->col_sinking_rate] : 1.0;
+                             run->depth_c[x_idx][y_idx]        = (run->col_depth>=0 && run->col_depth<nv) ? vals[run->col_depth] : 1.0;
+                             run->export_attn_c[x_idx][y_idx]  = (run->col_export_attn>=0 && run->col_export_attn<nv) ? vals[run->col_export_attn] : 0.0;
+                             run->export_gamma_c[x_idx][y_idx] = (run->col_export_gamma>=0 && run->col_export_gamma<nv) ? vals[run->col_export_gamma] : 0.0;
+                             run->export_magg_c[x_idx][y_idx]  = (run->col_export_magg>=0 && run->col_export_magg<nv) ? vals[run->col_export_magg] : -1e30;
                      }
              }
-             for(s=0 ; s<n ; s++){ community->pelagic[s].A=community->pelagic[s].A_base; community->pelagic[s].mu_0=community->pelagic[s].mu_0_base; }
-             for(b=0 ; b<c ; b++){ community->benthic[b].A=community->benthic[b].A_base; community->benthic[b].mu_0=community->benthic[b].mu_0_base; }
+             for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){ community->pelagic[pel_species_idx].A=community->pelagic[pel_species_idx].A_base; community->pelagic[pel_species_idx].mu_0=community->pelagic[pel_species_idx].mu_0_base; }
+             for(ben_species_idx ben_species_idx<n_ben_species ; ben_species_idx++){ community->benthic[ben_species_idx].A=community->benthic[ben_species_idx].A_base; community->benthic[ben_species_idx].mu_0=community->benthic[ben_species_idx].mu_0_base; }
      }
      else if(run->forcing_flag==1){
              char fline[1024];
@@ -2842,15 +2842,15 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                 encounter-rate justification, mortality does not. Read once. */
              static int tom = -1;
              if(tom < 0){ char *e = getenv("TEMP_ON_MORT"); tom = e ? atoi(e) : 1; }
-             for(s=0 ; s<n ; s++){
-                     community->pelagic[s].A    = community->pelagic[s].A_base    * run->pel_tempeff;
-                     community->pelagic[s].mu_0 = tom ? community->pelagic[s].mu_0_base * run->pel_tempeff
-                                                      : community->pelagic[s].mu_0_base;
+             for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+                     community->pelagic[pel_species_idx].A    = community->pelagic[pel_species_idx].A_base    * run->pel_tempeff;
+                     community->pelagic[pel_species_idx].mu_0 = tom ? community->pelagic[pel_species_idx].mu_0_base * run->pel_tempeff
+                                                      : community->pelagic[pel_species_idx].mu_0_base;
              }
-             for(b=0 ; b<c ; b++){
-                     community->benthic[b].A    = community->benthic[b].A_base    * run->ben_tempeff;
-                     community->benthic[b].mu_0 = tom ? community->benthic[b].mu_0_base * run->ben_tempeff
-                                                      : community->benthic[b].mu_0_base;
+             for(ben_species_idx=0 ; ben_species_idx<n_ben_species ; ben_species_idx++){
+                     community->benthic[ben_species_idx].A    = community->benthic[ben_species_idx].A_base    * run->ben_tempeff;
+                     community->benthic[ben_species_idx].mu_0 = tom ? community->benthic[ben_species_idx].mu_0_base * run->ben_tempeff
+                                                      : community->benthic[ben_species_idx].mu_0_base;
              }
      }
 
@@ -2860,12 +2860,12 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
      
      temp_det_g=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
      temp_det_mu=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-     for(k=0 ; k<x ; k++){
-             temp_det_g[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-             temp_det_mu[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-             for(l=0 ; l<y ; l++){
-                     temp_det_g[k][l]=0;
-                     temp_det_mu[k][l]=0;
+     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+             temp_det_g[x_idx]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
+             temp_det_mu[x_idx]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
+             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                     temp_det_g[x_idx][y_idx]=0;
+                     temp_det_mu[x_idx][y_idx]=0;
              }
      }
      /*******************/
@@ -2873,10 +2873,10 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
      /*******************/
      if(community->plankton->ts_flag==0){
              // Calculate values for Plankton Size Spectra using internal dynamics //
-             for(i=community->plankton->iplamin ; i<(community->plankton->iplamax+1) ; i++){
-                     for(k=0 ; k<x ; k++){
-                             for(l=0 ; l<y ; l++){
-                                     community->plankton->u_values[i][k][l]=temp_plankton[i][k][l];  //All plankton systems are invariant
+             for(sc_idx=community->plankton->iplamin ; sc_idx<(community->plankton->iplamax+1) ; sc_idx++){
+                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                     community->plankton->u_values[sc_idx][x_idx][y_idx]=temp_plankton[sc_idx][x_idx][y_idx];  //All plankton systems are invariant
                              }
                      }
              }
@@ -2890,17 +2890,17 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
              
              /*Read in a single timestep*/
              /* each line one at a time (corresponding to spectra at a spatial point)*/
-             for(k=0 ; k<x ; k++){
-                     for(l=0 ; l<y ; l++){
+             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                     for(y_idx=0 ; y_idx<n_y ; y_idx++){
                              fgets(input,MAX_LEN,community->plankton->fptr_ts);
                              input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                              
                              result=(char *)strtok(input,sep);    //this is the 1st value
-                             i=0;
+                             sc_idx=0;
                              while(result!=NULL){
-                                     community->plankton->u_values[i][k][l]=atof(result);
+                                     community->plankton->u_values[sc_idx][x_idx][y_idx]=atof(result);
                                      result=(char *)strtok(NULL,sep);
-                                     i++;
+                                     sc_idx++;
                              }
                      }
              }
@@ -2910,25 +2910,25 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
      /******************/
      /* Pelagic System */
      /******************/     
-     for(s=0 ; s<n ; s++){
+     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
              if(community->pelagic[s].ts_flag==0){
-                     for(k=0 ; k<x ; k++){
-                             for(l=0 ; l<y ; l++){
-                                     for(i=0 ; i<pelmatrix[s].size ; i++){
-                                             pelmatrix[s].a[i]=-(dt/dm)*community->pelagic[s].g_values[i-1+community->pelagic[s].ipelmin][k][l];
-                                             pelmatrix[s].b[i]=(1+(dt*community->pelagic[s].mu_values[i+community->pelagic[s].ipelmin][k][l])+(dt/dm)*community->pelagic[s].g_values[i+community->pelagic[s].ipelmin][k][l]);
-                                             pelmatrix[s].c[i]=0;
-                                             pelmatrix[s].r[i]=temp_pelagic[s][i+community->pelagic[s].ipelmin][k][l];
+                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                     for(sc_idx=0 ; sc_idx<pelmatrix[pel_species_idx].size ; sc_idx++){
+                                             pelmatrix[pel_species_idx].a[sc_idx]=-(dt/dm)*community->pelagic[pel_species_idx].g_values[sc_idx-1+community->pelagic[pel_species_idx].ipelmin][x_idx][y_idx];
+                                             pelmatrix[pel_species_idx].b[sc_idx]=(1+(dt*community->pelagic[pel_species_idx].mu_values[sc_idx+community->pelagic[pel_species_idx].ipelmin][x_idx][y_idx])+(dt/dm)*community->pelagic[pel_species_idx].g_values[sc_idx+community->pelagic[pel_species_idx].ipelmin][x_idx][y_idx]);
+                                             pelmatrix[pel_species_idx].c[sc_idx]=0;
+                                             pelmatrix[pel_species_idx].r[sc_idx]=temp_pelagic[pel_species_idx][i+community->pelagic[pel_species_idx].ipelmin][x_idx][y_idx];
                                      }
-                                     pelmatrix[s].a[0]=0;
-                                     tridag(&(pelmatrix[s]));
-                                     for(i=0 ; i<pelmatrix[s].size ; i++){
-                                             community->pelagic[s].u_values[i+community->pelagic[s].ipelmin][k][l]=pelmatrix[s].u[i];
+                                     pelmatrix[pel_species_idx].a[0]=0;
+                                     tridag(&(pelmatrix[pel_species_idx]));
+                                     for(i=0 ; i<pelmatrix[pel_species_idx].size ; i++){
+                                             community->pelagic[pel_species_idx].u_values[i+community->pelagic[pel_species_idx].ipelmin][x_idx][y_idx]=pelmatrix[pel_species_idx].u[sc_idx];
                                      }
                              }
                      }
              }
-             if(community->pelagic[s].ts_flag==1){
+             if(community->pelagic[pel_species_idx].ts_flag==1){
                      int MAX_LEN=grid->mnum*15; //this is the upper bound for the row length in characters
                      char *input;               //input string to store line as string
                      input=(char *)safe_malloc(MAX_LEN*sizeof(char),__LINE__,__FILE__); 
@@ -2937,17 +2937,17 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
              
                      /*Read in a single timestep*/
                      /* each line one at a time (corresponding to spectra at a spatial point)*/
-                     for(k=0 ; k<x ; k++){
-                             for(l=0 ; l<y ; l++){
-                                     fgets(input,MAX_LEN,community->pelagic[s].fptr_ts);
+                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                     fgets(input,MAX_LEN,community->pelagic[pel_species_idx].fptr_ts);
                                      input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                                      
                                      result=(char *)strtok(input,sep);    //this is the 1st value
-                                     i=0;
+                                     sc_idx=0;
                                      while(result!=NULL){
-                                             community->pelagic[s].u_values[i][k][l]=atof(result);
+                                             community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx]=atof(result);
                                              result=(char *)strtok(NULL,sep);
-                                             i++;
+                                             sc_idx++;
                                      }
                              }
                      }
@@ -2959,25 +2959,25 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
      /* Benthic System */
      /******************/
      if(run->no_benthic!=0){
-             for(b=0 ; b<c ; b++){
-                     if(community->benthic[b].ts_flag==0){
-                             for(k=0 ; k<x ; k++){
-                                     for(l=0 ; l<y ; l++){
-                                             for(i=0 ; i<benmatrix[b].size ; i++){
-                                                     benmatrix[b].a[i]=-(dt/dm)*community->benthic[b].g_values[i-1+community->benthic[b].ibenmin][k][l];
-                                                     benmatrix[b].b[i]=(1+(dt*community->benthic[b].mu_values[i+community->benthic[b].ibenmin][k][l])+(dt/dm)*community->benthic[b].g_values[i+community->benthic[b].ibenmin][k][l]);
-                                                     benmatrix[b].c[i]=0;
-                                                     benmatrix[b].r[i]=temp_benthic[b][i+community->benthic[b].ibenmin][k][l];
+             for(ben_species_idx=0 ; ben_species_idx<n_ben_species ; ben_species_idx++){
+                     if(community->benthic[ben_species_idx].ts_flag==0){
+                             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                                     for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                             for(sc_idx=0 ; sc_idx<benmatrix[ben_species_idx].size ; sc_idx++){
+                                                     benmatrix[ben_species_idx].a[sc_idx]=-(dt/dm)*community->benthic[ben_species_idx].g_values[sc_idx-1+community->benthic[ben_species_idx].ibenmin][x_idx][y_idx];
+                                                     benmatrix[ben_species_idx].b[sc_idx]=(1+(dt*community->benthic[ben_species_idx].mu_values[sc_idx+community->benthic[ben_species_idx].ibenmin][x_idx][y_idx])+(dt/dm)*community->benthic[ben_species_idx].g_values[sc_idx+community->benthic[ben_species_idx].ibenmin][x_idx][y_idx]);
+                                                     benmatrix[ben_species_idx].c[sc_idx]=0;
+                                                     benmatrix[ben_species_idx].r[sc_idx]=temp_benthic[ben_species_idx][sc_idx+community->benthic[ben_species_idx].ibenmin][x_idx][y_idx];
                                              }
-                                             benmatrix[b].a[0]=0;
-                                             tridag(&(benmatrix[b]));
-                                             for(i=0 ; i<benmatrix[b].size ; i++){
-                                                     community->benthic[b].u_values[i+community->benthic[b].ibenmin][k][l]=benmatrix[b].u[i];
+                                             benmatrix[ben_species_idx].a[0]=0;
+                                             tridag(&(benmatrix[ben_species_idx]));
+                                             for(sc_idx=0 ; sc_idx<benmatrix[ben_species_idx].size ; sc_idx++){
+                                                     community->benthic[ben_species_idx].u_values[sc_idx+community->benthic[ben_species_idx].ibenmin][x_idx][y_idx]=benmatrix[ben_species_idx].u[i];
                                              }
                                      }
                              }
                      }
-                     if(community->benthic[b].ts_flag==1){
+                     if(community->benthic[ben_species_idx].ts_flag==1){
                              int MAX_LEN=grid->mnum*15; //this is the upper bound for the row length in characters
                              char *input;               //input string to store line as string
                              input=(char *)safe_malloc(MAX_LEN*sizeof(char),__LINE__,__FILE__); 
@@ -2986,17 +2986,17 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                              
                              /*Read in a single timestep*/
                              /* each line one at a time (corresponding to spectra at a spatial point)*/
-                             for(k=0 ; k<x ; k++){
-                                     for(l=0 ; l<y ; l++){
-                                             fgets(input,MAX_LEN,community->benthic[b].fptr_ts);
+                             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                                     for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                             fgets(input,MAX_LEN,community->benthic[ben_species_idx].fptr_ts);
                                              input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                                              
                                              result=(char *)strtok(input,sep);    //this is the 1st value
-                                             i=0;
+                                             sc_idx=0;
                                              while(result!=NULL){
-                                                     community->benthic[b].u_values[i][k][l]=atof(result);
+                                                     community->benthic[ben_species_idx].u_values[sc_idx][x_idx][y_idx]=atof(result);
                                                      result=(char *)strtok(NULL,sep);
-                                                     i++;
+                                                     sc_idx++;
                                              }
                                      }
                              }
@@ -3008,8 +3008,8 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
              /* Detritus System */
              /*******************/
              if(community->detritus->ts_flag==0){
-                     for(k=0 ; k<x ; k++){
-                             for(l=0 ; l<y ; l++){
+                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                             for(y_idx=0 ; y_idx<n_y ; y_idx++){
                                      /* Analytical (exponential) integrator for the detritus pool.
                                         Over a step the fish/plankton state is fixed, so detritus obeys a
                                         LINEAR ODE  dW/dt = I - kappa*W , with input I = g_values (constant)
@@ -3021,8 +3021,8 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                                         kappa*dt > 1 and drives the NaN/collapse cascade. Removes the
                                         timestep stability limit on the detritus pool. */
                                      {
-                                       double W0 = temp_detritus[k][l];
-                                       double In = community->detritus->g_values[k][l];        /* gross input rate I */
+                                       double W0 = temp_detritus[x_idx][y_idx];
+                                       double In = community->detritus->g_values[x_idx][y_idx];        /* gross input rate I */
                                        /* Dunne et al. (2007) eq.3 burial: a fraction of the incoming detrital
                                           flux is buried (permanently lost) before joining the pool, EXACTLY as
                                           sizemodel does: burial = input_w*(0.013+0.53*iw^2/(7+iw)^2) applied to
@@ -3036,7 +3036,7 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                                                double bfrac = 0.013 + 0.53*In*In/((7.0+In)*(7.0+In));
                                                In = In * (1.0 - bfrac);                         /* net of burial   */
                                        }
-                                       double loss = community->detritus->mu_values[k][l];     /* = kappa*W0   */
+                                       double loss = community->detritus->mu_values[x_idx][y_idx];     /* = kappa*W0   */
                                        double kappa = (W0 > 1e-30) ? loss / W0 : 0.0;
                                        /* Alternative/opt-in residence-time closure: a first-order loss W/tau on the
                                           detritus POOL (remineralisation/export from the benthic layer), added to the
@@ -3051,17 +3051,17 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                                        }
                                        if(kappa > 1e-30){
                                                double Wstar = In / kappa;
-                                               community->detritus->w_values[k][l] = Wstar + (W0 - Wstar)*exp(-kappa*dt);
+                                               community->detritus->w_values[x_idx][y_idx] = Wstar + (W0 - Wstar)*exp(-kappa*dt);
                                        }else{
-                                               community->detritus->w_values[k][l] = W0 + In*dt;   /* kappa -> 0 limit */
+                                               community->detritus->w_values[x_idx][y_idx] = W0 + In*dt;   /* kappa -> 0 limit */
                                        }
                                        /* defensive backstop only against a non-finite upstream rate */
-                                       if(!isfinite(community->detritus->w_values[k][l]) || community->detritus->w_values[k][l]<0){
-                                               community->detritus->w_values[k][l]=0;
+                                       if(!isfinite(community->detritus->w_values[x_idx][y_idx]) || community->detritus->w_values[x_idx][y_idx]<0){
+                                               community->detritus->w_values[x_idx][y_idx]=0;
                                        }
                                      }
-                                     temp_det_g[k][l]=community->detritus->g_values[k][l];
-                                     temp_det_mu[k][l]=community->detritus->mu_values[k][l];
+                                     temp_det_g[x_idx][y_idx]=community->detritus->g_values[x_idx][y_idx];
+                                     temp_det_mu[x_idx][y_idx]=community->detritus->mu_values[x_idx][y_idx];
                              }
                      }
              }
@@ -3074,14 +3074,14 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
              
                      /*Read in a single timestep*/
                      /* each line one at a time (corresponding to spectra at a spatial point)*/
-                     for(k=0 ; k<x ; k++){
-                             for(l=0 ; l<y ; l++){
+                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                             for(y_idx=0 ; y_idx<n_y ; y_idx++){
                                      fgets(input,MAX_LEN,community->detritus->fptr_ts);
                                      input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                                      
                                      result=(char *)strtok(input,sep);    //this is the 1st value
                                      while(result!=NULL){
-                                             community->detritus->w_values[k][l]=atof(result);
+                                             community->detritus->w_values[x_idx][y_idx]=atof(result);
                                              result=(char *)strtok(NULL,sep);
                                      }
                              }
@@ -3096,20 +3096,20 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
              calculate_g_and_mu(run, grid, community);
      
              //Use new g and mu to claculate final u values
-             for(s=0 ; s<n ; s++){
-                     if(community->pelagic[s].ts_flag==0){
-                             for(k=0 ; k<x ; k++){
-                                     for(l=0 ; l<y ; l++){
-                                             for(i=0 ; i<pelmatrix[s].size ; i++){
-                                                     pelmatrix[s].a[i]=-(dt/dm)*community->pelagic[s].g_values[i-1+community->pelagic[s].ipelmin][k][l];
-                                                     pelmatrix[s].b[i]=(1+(dt*community->pelagic[s].mu_values[i+community->pelagic[s].ipelmin][k][l])+(dt/dm)*community->pelagic[s].g_values[i+community->pelagic[s].ipelmin][k][l]);
-                                                     pelmatrix[s].c[i]=0;
-                                                     pelmatrix[s].r[i]=temp_pelagic[s][i+community->pelagic[s].ipelmin][k][l];
+             for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+                     if(community->pelagic[pel_species_idx].ts_flag==0){
+                             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                                     for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                             for(sc_idx=0 ; sc_idx<pelmatrix[pel_species_idx].size ; sc_idx++){
+                                                     pelmatrix[pel_species_idx].a[sc_idx]=-(dt/dm)*community->pelagic[pel_species_idx].g_values[sc_idx-1+community->pelagic[pel_species_idx].ipelmin][x_idx][y_idx];
+                                                     pelmatrix[pel_species_idx].b[sc_idx]=(1+(dt*community->pelagic[pel_species_idx].mu_values[sc_idx+community->pelagic[pel_species_idx].ipelmin][x_idx][y_idx])+(dt/dm)*community->pelagic[pel_species_idx].g_values[sc_idx+community->pelagic[pel_species_idx].ipelmin][x_idx][y_idx]);
+                                                     pelmatrix[pel_species_idx].c[sc_idx]=0;
+                                                     pelmatrix[pel_species_idx].r[sc_idx]=temp_pelagic[pel_species_idx][sc_idx+community->pelagic[pel_species_idx].ipelmin][x_idx][y_idx];
                                              }
-                                             pelmatrix[s].a[0]=0;
-                                             tridag(&(pelmatrix[s]));
-                                             for(i=0 ; i<pelmatrix[s].size ; i++){
-                                                     community->pelagic[s].u_values[i+community->pelagic[s].ipelmin][k][l]=pelmatrix[s].u[i];
+                                             pelmatrix[pel_species_idx].a[0]=0;
+                                             tridag(&(pelmatrix[pel_species_idx]));
+                                             for(sc_idx=0 ; sc_idx<pelmatrix[pel_species_idx].size ; sc_idx++){
+                                                     community->pelagic[pel_species_idx].u_values[sc_idx+community->pelagic[pel_species_idx].ipelmin][x_idx][y_idx]=pelmatrix[pel_species_idx].u[sc_idx];
                                              }
                                      }
                              }
@@ -3117,20 +3117,20 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
              }
              
              if(run->no_benthic!=0){
-                     for(b=0 ; b<c ; b++){
-                             if(community->benthic[b].ts_flag==0){
-                                     for(k=0 ; k<x ; k++){
-                                             for(l=0 ; l<y ; l++){
-                                                     for(i=0 ; i<benmatrix[b].size ; i++){
-                                                             benmatrix[b].a[i]=-(dt/dm)*community->benthic[b].g_values[i-1+community->benthic[b].ibenmin][k][l];
-                                                             benmatrix[b].b[i]=(1+(dt*community->benthic[b].mu_values[i+community->benthic[b].ibenmin][k][l])+(dt/dm)*community->benthic[b].g_values[i+community->benthic[b].ibenmin][k][l]);
-                                                             benmatrix[b].c[i]=0;
-                                                             benmatrix[b].r[i]=temp_benthic[b][i+community->benthic[b].ibenmin][k][l];
+                     for(ben_species_idx=0 ; ben_species_idx<n_ben_species ; ben_species_idx++){
+                             if(community->benthic[ben_species_idx].ts_flag==0){
+                                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                                             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                                     for(sc_idx=0 ; sc_idx<benmatrix[ben_species_idx].size ; sc_idx++){
+                                                             benmatrix[ben_species_idx].a[sc_idx]=-(dt/dm)*community->benthic[ben_species_idx].g_values[sc_idx-1+community->benthic[ben_species_idx].ibenmin][x_idx][y_idx];
+                                                             benmatrix[ben_species_idx].b[sc_idx]=(1+(dt*community->benthic[ben_species_idx].mu_values[sc_idx+community->benthic[ben_species_idx].ibenmin][x_idx][y_idx])+(dt/dm)*community->benthic[ben_species_idx].g_values[sc_idx+community->benthic[ben_species_idx].ibenmin][x_idx][y_idx]);
+                                                             benmatrix[ben_species_idx].c[sc_idx]=0;
+                                                             benmatrix[ben_species_idx].r[sc_idx]=temp_benthic[ben_species_idx][sc_idx+community->benthic[ben_species_idx].ibenmin][x_idx][y_idx];
                                                      }
-                                                     benmatrix[b].a[0]=0;
-                                                     tridag(&(benmatrix[b]));
-                                                     for(i=0 ; i<benmatrix[b].size ; i++){
-                                                             community->benthic[b].u_values[i+community->benthic[b].ibenmin][k][l]=benmatrix[b].u[i];
+                                                     benmatrix[ben_species_idx].a[0]=0;
+                                                     tridag(&(benmatrix[ben_species_idx]));
+                                                     for(sc_idx=0 ; sc_idx<benmatrix[ben_species_idx].size ; sc_idx++){
+                                                             community->benthic[ben_species_idx].u_values[sc_idx+community->benthic[ben_species_idx].ibenmin][x_idx][y_idx]=benmatrix[ben_species_idx].u[sc_idx];
                                                      }
                                              }
                                      }
@@ -3138,9 +3138,9 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                      }
                      
                      if(community->detritus->ts_flag==0){
-                             for(k=0 ; k<x ; k++){
-                                     for(l=0 ; l<y ; l++){
-                                             community->detritus->w_values[k][l]=temp_detritus[k][l]+(dt/2)*((community->detritus->g_values[k][l]+temp_det_g[k][l])-(community->detritus->mu_values[k][l]+temp_det_mu[k][l]));
+                             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                                     for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                             community->detritus->w_values[x_idx][y_idx]=temp_detritus[x_idx][y_idx]+(dt/2)*((community->detritus->g_values[x_idx][y_idx]+temp_det_g[x_idx][y_idx])-(community->detritus->mu_values[x_idx][y_idx]+temp_det_mu[x_idx][y_idx]));
                                      }
                              }
                      }
@@ -3150,33 +3150,33 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
      /***************************/
      /* Add reproduction values */ 
      /***************************/
-     for(k=0 ; k<x ; k++){
-             for(l=0 ; l<y ; l++){
-                     for(s=0 ; s<n ; s++){
+     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
                              /*If values aren't given by timeseries*/
-                             if(community->pelagic[s].ts_flag==0){
+                             if(community->pelagic[pel_species_idx].ts_flag==0){
                                      /*Specifying Total Eggs*/
-                                     if(community->pelagic[s].rep_method==0 || community->pelagic[s].rep_method==1){
-                                             community->pelagic[s].u_values[community->pelagic[s].ipelmin][k][l]=community->pelagic[s].reproduction[k][l];
+                                     if(community->pelagic[pel_species_idx].rep_method==0 || community->pelagic[pel_species_idx].rep_method==1){
+                                             community->pelagic[pel_species_idx].u_values[community->pelagic[pel_species_idx].ipelmin][x_idx][y_idx]=community->pelagic[pel_species_idx].reproduction[x_idx][y_idx];
                                      }
                                      /*Adding Eggs*/
-                                     if(community->pelagic[s].rep_method==2 || community->pelagic[s].rep_method==3){
-                                             community->pelagic[s].u_values[community->pelagic[s].ipelmin][k][l]+=community->pelagic[s].reproduction[k][l];
+                                     if(community->pelagic[pel_species_idx].rep_method==2 || community->pelagic[pel_species_idx].rep_method==3){
+                                             community->pelagic[pel_species_idx].u_values[community->pelagic[pel_species_idx].ipelmin][x_idx][y_idx]+=community->pelagic[pel_species_idx].reproduction[x_idx][y_idx];
                                      }
                              }
                      }
                      
                      if(run->no_benthic!=0){
-                             for(b=0 ; b<c ; b++){
+                             for(ben_species_idx=0 ; ben_species_idx<n_ben_species; ben_species_idx++){
                                      /*If values aren't given by timeseries*/
-                                     if(community->benthic[b].ts_flag==0){
+                                     if(community->benthic[ben_species_idx].ts_flag==0){
                                              /*Constant Egg amount*/
-                                             if(community->benthic[b].rep_method==0){
-                                                     community->benthic[b].u_values[community->benthic[b].ibenmin][k][l]=community->benthic[b].u_0*exp(community->benthic[b].lambda*community->benthic[b].benmin);
+                                             if(community->benthic[ben_species_idx].rep_method==0){
+                                                     community->benthic[ben_species_idx].u_values[community->benthic[ben_species_idx].ibenmin][x_idx][y_idx]=community->benthic[ben_species_idx].u_0*exp(community->benthic[ben_species_idx].lambda*community->benthic[ben_species_idx].benmin);
                                              }
                                              /*Eggs produced according to biomass intake*/
-                                             if(community->benthic[b].rep_method==1 || community->benthic[b].rep_method==2){
-                                                     community->benthic[b].u_values[community->benthic[b].ibenmin][k][l]+=community->benthic[b].reproduction[k][l];
+                                             if(community->benthic[ben_species_idx].rep_method==1 || community->benthic[ben_species_idx].rep_method==2){
+                                                     community->benthic[ben_species_idx].u_values[community->benthic[ben_species_idx].ibenmin][x_idx][y_idx]+=community->benthic[ben_species_idx].reproduction[x_idx][y_idx];
                                              }
                                      }
                              }
@@ -3185,9 +3185,9 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
      }
      
      /*Free pointers*/
-     for(k=0 ; k<x ; k++){
-             free(temp_det_g[k]);
-             free(temp_det_mu[k]);
+     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+             free(temp_det_g[x_idx]);
+             free(temp_det_mu[x_idx]);
      }
      free(temp_det_g);
      free(temp_det_mu);
@@ -3234,11 +3234,11 @@ void xmove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *xmat, doub
                              double vmax=0.0;
                              for(k=0 ; k<x-1 ; k++){
                                      vface[k]= noadv ? 0.0 :
-                                               (C*(community->pelagic[s].g_values[i][k+1][l]-community->pelagic[s].g_values[i][k][l])
-                                               -D*(community->pelagic[s].mu_values[i][k+1][l]-community->pelagic[s].mu_values[i][k][l]))/dx;
+                                               (C*(community->pelagic[s].g_values[i][k+1][y_idx]-community->pelagic[s].g_values[i][k][y_idx])
+                                               -D*(community->pelagic[s].mu_values[i][k+1][y_idx]-community->pelagic[s].mu_values[i][k][y_idx]))/dx;
                                      if(fabs(vface[k])>vmax) vmax=fabs(vface[k]);
                              }
-                             for(k=0 ; k<x ; k++) uadv[k]=temp_pelagic[s][i][k][l];
+                             for(k=0 ; k<x ; k++) uadv[k]=temp_pelagic[s][i][k][y_idx];
                              int nsub=(int)ceil(vmax*dt/dx); if(nsub<1) nsub=1;
                              double dts=dt/(double)nsub;
                              for(int sub=0 ; sub<nsub ; sub++){
@@ -3265,7 +3265,7 @@ void xmove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *xmat, doub
                              for(k=1 ; k<x-1 ; k++){ xmat->a[k]=-r/2.0; xmat->b[k]=1.0+r; xmat->c[k]=-r/2.0; }
                              xmat->a[x-1]=-r/2.0;   xmat->b[x-1]=1.0+r/2.0;
                              tridag(xmat);
-                             for(k=0 ; k<x ; k++) community->pelagic[s].u_values[i][k][l]=xmat->u[k];
+                             for(k=0 ; k<x ; k++) community->pelagic[s].u_values[i][k][y_idx]=xmat->u[k];
                      }
              }
      }
