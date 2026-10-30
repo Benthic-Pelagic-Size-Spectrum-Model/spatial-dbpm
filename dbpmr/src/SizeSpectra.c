@@ -18,6 +18,7 @@ typedef struct run_info
     int spatial_dim;
     int coupled_flag; // flag for coupled info; 0-uncoupled, 1-coupled
     int diff_method;  // flag for integration method; 0-fast (poss. unstable), 1-slow (more stable)
+    int return_memory;
 
     char fname_summ[40];
     FILE *fptr_summ;
@@ -82,6 +83,7 @@ typedef struct grid_info
     int mnum;          // number of steps
     double moutstep;   // output to print every m
     double *m_values;  // actual log(m) values
+    int nout_m; // number of output m steps
 
     double t1, tmax; // time discretisation
     double tstep;
@@ -89,18 +91,21 @@ typedef struct grid_info
     double toutmin, toutmax;
     double toutstep;
     double *t_values;
+    int nout_t; // number of output timesteps
 
     double xmin, xmax; // x-space discretisation (if required)
     double xstep;
     int xnum;
     double xoutstep;
     double *x_values;
+    int nout_x; // number of output x steps
 
     double ymin, ymax; // y-space discretisation (if required)
     double ystep;
     int ynum;
     double youtstep;
     double *y_values;
+    int nout_y; // number of output y steps
 
 } GRID;
 
@@ -373,12 +378,22 @@ typedef struct vectors
 
 } MATRIX;
 
+typedef struct output_info {
+    int on; // Records whether outputs are going to be stored and returned in memory
+    int *m_sel, *x_sel, *y_sel; // Holders of all indices for output indices (not every index on grid, just output ones)
+    int next_time;
+
+    double *t_out;
+    double *pla_u;
+
+} OUTPUT;
+
 //-----------------------//
 // Function Declarations //
 //-----------------------//
 
 /*Setup Functions*/
-void setup_run(RUN *, int *, char *);
+void setup_run(RUN *, int *, char *, int *);
 void setup_grid(GRID *, double *);
 void setup_plankton(RUN *, GRID *, PLANKTON *, double *, char *, int, int);         // sets up plankton values
 void setup_pelagic(RUN *, GRID *, PELAGIC *, double *, char *, int, int, int, int); // sets up pelagic values
@@ -392,7 +407,7 @@ double **setup_benthic_params(int, double *); // Converts 1D vector of benthic p
 void setup_matrix(int, MATRIX *);
 
 /*Timestepping and Output Function*/
-void calculate_results(RUN *, GRID *, COMMUNITY *, MATRIX *, MATRIX *, MATRIX *, MATRIX *);
+void calculate_results(RUN *, GRID *, COMMUNITY *, MATRIX *, MATRIX *, MATRIX *, MATRIX *, OUTPUT *);
 
 void print_run(RUN *, FILE *);
 void print_grid(GRID *, FILE *);
@@ -468,7 +483,7 @@ void *safe_malloc(size_t, int, char *);        // Wrappered function for memory 
 FILE *safe_fopen(char *, char *, int, char *); // Wrappered function for file opening
 
 /*Protype of the internal size-spectrum function (no interface with R)*/
-static void SizeSpectrum_internals(int *, double *, double *, double *, double *, double *, char **, int *, int *);
+static SEXP SizeSpectrum_internals(int *, double *, double *, double *, double *, double *, char **, int *, int *);
 
 // This is the new R interface. SizeSpectrum() is now a wrapper function that
 // takes the objects from R (.Call()). SizeSpectrum() checks the SEXP objects from
@@ -479,7 +494,7 @@ static void SizeSpectrum_internals(int *, double *, double *, double *, double *
 // file output, memory output or both.
 SEXP SizeSpectrum(SEXP run_params_r, SEXP grid_params_r, SEXP plankton_params_r, SEXP pelagic_params_r,
                   SEXP benthic_params_r, SEXP detritus_params_r, SEXP names_params_r, SEXP flags_params_r,
-                  SEXP output_params_r)
+                SEXP output_params_r)
 {
     // Ensure that all of the SEXP objects are of the correct type after
     // passing in from R.
@@ -511,9 +526,9 @@ SEXP SizeSpectrum(SEXP run_params_r, SEXP grid_params_r, SEXP plankton_params_r,
     {
         error("plankton_params_r must have 6 elements");
     }
-    if (LENGTH(output_params_r) != 2)
+    if (LENGTH(output_params_r) != 1)
     {
-        error("output_params_r must have 2 elements");
+        error("output_params_r must have 1 element");
     }
 
     int npel = INTEGER(run_params_r)[0];
@@ -570,9 +585,9 @@ SEXP SizeSpectrum(SEXP run_params_r, SEXP grid_params_r, SEXP plankton_params_r,
         names_params[name_idx] = (char *)CHAR(STRING_ELT(names_params_r, name_idx));
     }
 
-    SizeSpectrum_internals(run_params, grid_params, pla_params, pel_params, ben_params, det_params, names_params,
+    result = SizeSpectrum_internals(run_params, grid_params, pla_params, pel_params, ben_params, det_params, names_params,
                            flags_params, output_params);
-    return (R_NilValue);
+    return (result);
 }
 
 //-----------------------------------------------------------------------------//
@@ -595,14 +610,18 @@ static void SizeSpectrum_internals(int *run_params, double *grid_params, double 
     RUN run;
     GRID grid;
     COMMUNITY community;
+    OUTPUT out;
     MATRIX *pelmatrix;
     MATRIX *benmatrix = NULL;
     MATRIX xmatrix, ymatrix;
     double **temp_pel_params;
     double **temp_ben_params;
 
+    SEXP result = R_NilValue;
+    if (run.return_memory) result = PROTECT(allocVector(VECSXP, 1; 2)); 
+
     /*Setup run*/
-    setup_run(&run, run_params, names_params[0]);
+    setup_run(&run, run_params, names_params[0], output_params);
 
     /*Setup grid*/
     setup_grid(&grid, grid_params);
@@ -675,13 +694,16 @@ static void SizeSpectrum_internals(int *run_params, double *grid_params, double 
 
     /*Free all allocated memory*/
     free_mem(&run, &grid, &community, pelmatrix, benmatrix, &xmatrix, &ymatrix, temp_pel_params, temp_ben_params);
+
+    if (run.return_memory) UNPROTECT(1);
+    return (result)
 }
 
 //-----------------//
 // Setup Functions //
 //-----------------//
 
-void setup_run(RUN *run, int *run_params, char *filename)
+void setup_run(RUN *run, int *run_params, char *filename, int *output_params)
 {
     run->filename = filename;
     run->no_pelagic = run_params[0];
@@ -689,6 +711,7 @@ void setup_run(RUN *run, int *run_params, char *filename)
     run->spatial_dim = run_params[2];
     run->coupled_flag = run_params[3];
     run->diff_method = run_params[4];
+    run->return_memory = output_params[0];
 
     /*Create summary output filenames*/
     snprintf(run->fname_summ, sizeof(run->fname_summ), "%s/%s.txt", run->filename, "parameters");
