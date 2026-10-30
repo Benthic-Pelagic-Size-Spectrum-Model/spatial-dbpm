@@ -18,8 +18,6 @@ typedef struct run_info
     int spatial_dim;
     int coupled_flag; // flag for coupled info; 0-uncoupled, 1-coupled
     int diff_method;  // flag for integration method; 0-fast (poss. unstable), 1-slow (more stable)
-    int write_files; // flag for whether to write files for outputs
-    int return_memory; // flag for whether to return outputs in-memory to R session
 
     char fname_summ[40];
     FILE *fptr_summ;
@@ -603,10 +601,6 @@ static void SizeSpectrum_internals(int *run_params, double *grid_params, double 
     double **temp_pel_params;
     double **temp_ben_params;
 
-    // Setup output_flags before any files have been interacted with
-    run.write_files = output_params[0];
-    run.return_memory = output_params[1];
-
     /*Setup run*/
     setup_run(&run, run_params, names_params[0]);
 
@@ -696,20 +690,18 @@ void setup_run(RUN *run, int *run_params, char *filename)
     run->coupled_flag = run_params[3];
     run->diff_method = run_params[4];
 
-    if (run->write_files) {
-            /*Create summary output filenames*/
-                snprintf(run->fname_summ, sizeof(run->fname_summ), "%s/%s.txt", run->filename, "parameters");
+    /*Create summary output filenames*/
+    snprintf(run->fname_summ, sizeof(run->fname_summ), "%s/%s.txt", run->filename, "parameters");
 
-                /*Open output files*/
-                run->fptr_summ = safe_fopen(run->fname_summ, "w", __LINE__, __FILE__);
+    /*Open output files*/
+    run->fptr_summ = safe_fopen(run->fname_summ, "w", __LINE__, __FILE__);
 
-                fprintf(run->fptr_summ, "filetype:      %s\n", "parameters");
-                fprintf(run->fptr_summ, "speciestype:   %s\n", "NA");
-                fprintf(run->fptr_summ, "\n");
+    fprintf(run->fptr_summ, "filetype:      %s\n", "parameters");
+    fprintf(run->fptr_summ, "speciestype:   %s\n", "NA");
+    fprintf(run->fptr_summ, "\n");
 
-                /*Close ouput files*/
-                fclose(run->fptr_summ);
-    }
+    /*Close ouput files*/
+    fclose(run->fptr_summ);
 }
 
 void setup_grid(GRID *grid, double *grid_input)
@@ -838,33 +830,30 @@ void setup_plankton(RUN *run, GRID *grid, PLANKTON *plankton, double *pla_params
     plankton->initial_flag = initial_flag;
     plankton->ts_flag = ts_flag;
 
-    if (run->write_files) {
-            /*Create plankton output filenames*/
-                snprintf(plankton->fname_r, sizeof(plankton->fname_r), "%s/%s/%s.txt", run->filename, plankton->filename,
-                        "results");
-                snprintf(plankton->fname_summ, sizeof(plankton->fname_summ), "%s/%s/%s.txt", run->filename, plankton->filename,
-                        "summary");
+    /*Create plankton output filenames*/
+    snprintf(plankton->fname_r, sizeof(plankton->fname_r), "%s/%s/%s.txt", run->filename, plankton->filename,
+             "results");
+    snprintf(plankton->fname_summ, sizeof(plankton->fname_summ), "%s/%s/%s.txt", run->filename, plankton->filename,
+             "summary");
 
-                /*Open output files*/
-                plankton->fptr_r = safe_fopen(plankton->fname_r, "w", __LINE__, __FILE__);
-                plankton->fptr_summ = safe_fopen(plankton->fname_summ, "w", __LINE__, __FILE__);
+    /*Open output files*/
+    plankton->fptr_r = safe_fopen(plankton->fname_r, "w", __LINE__, __FILE__);
+    plankton->fptr_summ = safe_fopen(plankton->fname_summ, "w", __LINE__, __FILE__);
 
-                /*Initialise output files*/
-                fprintf(plankton->fptr_r, "filetype:      %s\n", "results");
-                fprintf(plankton->fptr_r, "speciestype:   %s\n", "plankton");
-                fprintf(plankton->fptr_r, "\n");
-                print_mass_header(grid, plankton->fptr_r);
+    /*Initialise output files*/
+    fprintf(plankton->fptr_r, "filetype:      %s\n", "results");
+    fprintf(plankton->fptr_r, "speciestype:   %s\n", "plankton");
+    fprintf(plankton->fptr_r, "\n");
+    print_mass_header(grid, plankton->fptr_r);
 
-                fprintf(plankton->fptr_summ, "filetype:      %s\n", "summary");
-                fprintf(plankton->fptr_summ, "speciestype:   %s\n", "plankton");
-                fprintf(plankton->fptr_summ, "\n");
-                print_plankton_header(plankton->fptr_summ);
+    fprintf(plankton->fptr_summ, "filetype:      %s\n", "summary");
+    fprintf(plankton->fptr_summ, "speciestype:   %s\n", "plankton");
+    fprintf(plankton->fptr_summ, "\n");
+    print_plankton_header(plankton->fptr_summ);
 
-                /*Close ouput files*/
-                fclose(plankton->fptr_r);
-                fclose(plankton->fptr_summ);
-    }
-
+    /*Close ouput files*/
+    fclose(plankton->fptr_r);
+    fclose(plankton->fptr_summ);
 
     /*Setup And Initialise Plankton Abundance Arrays*/
     int sc_idx, x_idx, y_idx;
@@ -1039,8 +1028,7 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
     int pel_species_idx, n_pel_species;
     n_pel_species = run->no_pelagic;
 
-    if (run->write_files) {
-        /*Create species output filenames*/
+    /*Create species output filenames*/
     snprintf(pelagic->fname_r, sizeof(pelagic->fname_r), "%s/%s/%s.txt", run->filename, pelagic->filename, "results");
     snprintf(pelagic->fname_g, sizeof(pelagic->fname_g), "%s/%s/%s.txt", run->filename, pelagic->filename, "growth");
     snprintf(pelagic->fname_m, sizeof(pelagic->fname_m), "%s/%s/%s.txt", run->filename, pelagic->filename, "mortality");
@@ -1112,8 +1100,6 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
     }
     fclose(pelagic->fptr_fish);
     fclose(pelagic->fptr_summ);
-    }
-    
 
     /*Setup Species Abundance Arrays*/
     int sc_idx, x_idx, y_idx;
@@ -1407,8 +1393,7 @@ void setup_benthic(RUN *run, GRID *grid, BENTHIC *benthic, double *ben_params, c
     benthic->ts_flag = ts_flag;
     benthic->fishing_flag = fishing_flag;
 
-    if (run->write_files) {
-        /*Create species output filenames*/
+    /*Create species output filenames*/
     snprintf(benthic->fname_r, sizeof(benthic->fname_r), "%s/%s/%s.txt", run->filename, benthic->filename, "results");
     snprintf(benthic->fname_g, sizeof(benthic->fname_g), "%s/%s/%s.txt", run->filename, benthic->filename, "growth");
     snprintf(benthic->fname_m, sizeof(benthic->fname_m), "%s/%s/%s.txt", run->filename, benthic->filename, "mortality");
@@ -1465,8 +1450,6 @@ void setup_benthic(RUN *run, GRID *grid, BENTHIC *benthic, double *ben_params, c
     fclose(benthic->fptr_pred);
     fclose(benthic->fptr_fish);
     fclose(benthic->fptr_summ);
-    }
-    
 
     /*Setup Species Abundance Arrays*/
     int sc_idx, x_idx, y_idx;
@@ -1644,8 +1627,7 @@ void setup_detritus(RUN *run, GRID *grid, DETRITUS *detritus, double *det_params
     detritus->initial_flag = initial_flag;
     detritus->ts_flag = ts_flag;
 
-    if (run->write_files) {
-         /*Create detritus output filenames*/
+    /*Create detritus output filenames*/
     snprintf(detritus->fname_summ, sizeof(detritus->fname_summ), "%s/%s/%s.txt", run->filename, detritus->filename,
              "summary");
 
@@ -1659,8 +1641,6 @@ void setup_detritus(RUN *run, GRID *grid, DETRITUS *detritus, double *det_params
 
     /*Close output files*/
     fclose(detritus->fptr_summ);
-    }
-   
 
     /*Setup And Initialise detritus Abundance Arrays*/
     int x_idx, y_idx;
