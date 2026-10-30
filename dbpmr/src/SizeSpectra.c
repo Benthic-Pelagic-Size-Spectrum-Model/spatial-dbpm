@@ -443,7 +443,7 @@ void *safe_malloc(size_t, int, char *);           //Wrappered function for memor
 FILE *safe_fopen(char *, char *, int, char *);    //Wrappered function for file opening
 
 /*Protype of the internal size-spectrum function (no interface with R)*/
-static void SizeSpectrum_internals(int *, double *, double *, double *, double *, double *, char **, int *);
+static void SizeSpectrum_internals(int *, double *, double *, double *, double *, double *, char **, int *, int *);
 
 // This is the new R interface. SizeSpectrum() is now a wrapper function that
 // takes the objects from R (.Call()). SizeSpectrum() checks the SEXP objects from
@@ -467,7 +467,7 @@ SEXP SizeSpectrum(
         // passing in from R.
         if (
                 !isInteger(run_params_r) || !isInteger(flags_params_r) || 
-                isInteger(output_params_r)
+                !isInteger(output_params_r)
         ) {error("run, flags and output *_params_r R objects must be integer vectors");}
         if (
                 !isReal(grid_params_r) || !isReal(plankton_params_r) ||
@@ -1028,9 +1028,9 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
      snprintf(pelagic->fname_r, sizeof(pelagic->fname_r),"%s/%s/%s.txt",run->filename,pelagic->filename,"results");
      snprintf(pelagic->fname_g, sizeof(pelagic->fname_g),"%s/%s/%s.txt",run->filename,pelagic->filename,"growth");
      snprintf(pelagic->fname_m, sizeof(pelagic->fname_m),"%s/%s/%s.txt",run->filename,pelagic->filename,"mortality");
-     pelagic->fname_pred=(char **)safe_malloc(n*sizeof(char *),__LINE__,__FILE__);
+     pelagic->fname_pred=(char **)safe_malloc(n_pel_species*sizeof(char *),__LINE__,__FILE__);
      for(pel_species_idx=0 ; pel_species_idx < n_pel_species; pel_species_idx++){
-             pelagic->fname_pred[pel_species_idxar *)safe_malloc(40*sizeof(char),__LINE__,__FILE__);
+             pelagic->fname_pred[pel_species_idxar]=(char *)safe_malloc(40*sizeof(char),__LINE__,__FILE__);
              snprintf(pelagic->fname_pred[pel_species_idx], 40,"%s/%s/%s%d.txt",run->filename,pelagic->filename,"predation",pel_species_idx);
      }
      snprintf(pelagic->fname_fish, sizeof(pelagic->fname_fish),"%s/%s/%s.txt",run->filename,pelagic->filename,"fishing");
@@ -1091,7 +1091,7 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
      fclose(pelagic->fptr_summ);
      
      /*Setup Species Abundance Arrays*/
-     int sc_idx, x_idx, yy_idx;
+     int sc_idx, x_idx, y_idx;
      int n_m, n_x, n_y;
      n_m=grid->mnum;
      n_x=grid->xnum;
@@ -1419,7 +1419,7 @@ void setup_benthic(RUN *run, GRID *grid, BENTHIC *benthic, double *ben_params, c
                      benthic->mu_pred_values[sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
                      benthic->mu_fish_values[sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
                      
-                     benthic->det_bio[i][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+                     benthic->det_bio[sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
                      for(y_idx=0 ; y_idx<n_y ; y_idx++){
                              benthic->u_values[sc_idx][x_idx][y_idx]=0;
                              benthic->g_values[sc_idx][x_idx][y_idx]=0;
@@ -1636,9 +1636,9 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
 /* Sets up output txt files and implements time stepping process*/
 {
     // Indices for each variable with readable names
-    int sc_idx, ts_idx, x_idx, y_idx, pel_species_idx, ben_species_idx
+    int sc_idx, ts_idx, x_idx, y_idx, pel_species_idx, ben_species_idx;
     // Counts for each variable with readable names
-    int n_m, n_t, n_x, n_y, n_pel_species, n_ben_species
+    int n_m, n_t, n_x, n_y, n_pel_species, n_ben_species;
     double time1=0, time2=0, timed=0;  //variables for countdown timer
      
      n_m=grid->mnum;
@@ -1754,8 +1754,8 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
                      }
              }
      }
-     temp_pelagic=(double ****)safe_malloc(n*sizeof(double ***),__LINE__,__FILE__);
-     for(pel_species_idx=0 ; pel_species_idx < nn_pel_species ; pel_species_idx++){
+     temp_pelagic=(double ****)safe_malloc(n_pel_species*sizeof(double ***),__LINE__,__FILE__);
+     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
              temp_pelagic[pel_species_idx]=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
              for(sc_idx=0 ; sc_idx< n_m ; sc_idx++){
                      temp_pelagic[pel_species_idx][sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
@@ -1769,11 +1769,11 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      }
      
      if(run->no_benthic!=0){
-             temp_benthic=(double ****)safe_malloc(c*sizeof(double ***),__LINE__,__FILE__);
+             temp_benthic=(double ****)safe_malloc(n_ben_species*sizeof(double ***),__LINE__,__FILE__);
              for(ben_species_idx=0 ; ben_species_idx<n_ben_species ; ben_species_idx++){
-                     temp_benthic[b]=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
-                     for(i=0 ; sc_idx< n_m ; i++){
-                             temp_benthicben_species_idxb][sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+                     temp_benthic[ben_species_idx]=(double ***)safe_malloc(n_m*sizeof(double **),__LINE__,__FILE__);
+                     for(sc_idx=0 ; sc_idx<n_m ; sc_idx++){
+                             temp_benthic[ben_species_idx][sc_idx]=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
                              for(x_idx=0 ; x_idx<n_x ; x_idx++){
                                      temp_benthic[ben_species_idx][sc_idx][x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
                                      for(y_idx=0 ; y_idx<n_y ; y_idx++){
@@ -1877,7 +1877,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
              }
 
              /*Store previous time step in temporary array for each species*/
-             for(sc_idx=0 ; sc_idx<n_n_m ; sc_idx++){
+             for(sc_idx=0 ; sc_idx<n_m ; sc_idx++){
                      for(x_idx=0 ; x_idx<n_x ; x_idx++){
                              for(y_idx=0 ; y_idx<n_y ; y_idx++){
                                      temp_plankton[sc_idx][x_idx][y_idx]=community->plankton->u_values[sc_idx][x_idx][y_idx];
@@ -1939,7 +1939,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
                              for(sc_idx=0 ; sc_idx<n_m ; sc_idx++){
                                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
                                              for(y_idx=0 ; y_idx<n_y ; y_idx++){
-                                                     temp_pelagic[s][sc_idx][x_idx][y_idx]=community->pelagic[s].u_values[sc_idx][x_idx][y_idx];
+                                                     temp_pelagic[pel_species_idx][sc_idx][x_idx][y_idx]=community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx];
                                              }
                                      }
                              }
@@ -1982,8 +1982,8 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
                              }
                              if(run->no_benthic!=0){
                                      for(ben_species_idx=0 ; ben_species_idx<n_ben_species ;ben_species_idx++){
-                                             print_timestep_benthic(grid, &(community->benthic[b]),ts_idx);
-                                             print_benthic_summary(grid, &(community->benthic[b]),ts_idx);
+                                             print_timestep_benthic(grid, &(community->benthic[ben_species_idx]),ts_idx);
+                                             print_benthic_summary(grid, &(community->benthic[ben_species_idx]),ts_idx);
                                      }
                                      print_detritus_summary(grid, community->detritus,ts_idx);
                              }
@@ -1998,7 +1998,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      }
      if(run->no_benthic!=0){
              for(ben_species_idx=0 ; ben_species_idx<n_ben_species ;ben_species_idx++){
-                     print_detailed_benthic(grid, &(community->benthic[b]),n_t-1);
+                     print_detailed_benthic(grid, &(community->benthic[ben_species_idx]),n_t-1);
              }
      }
 
@@ -2018,7 +2018,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
                      }
                      free(temp_pelagic[pel_species_idx][sc_idx]);
              }
-             free(temp_pelagic[s]);
+             free(temp_pelagic[pel_species_idx]);
      }
      free(temp_pelagic);
      
@@ -2425,7 +2425,7 @@ void print_timestep_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, int time)
                      for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
                              fprintf(pelagic->fptr_pred[pel_species_idx],"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
                      }
-                     fprintf(pelagic->fptr_fish,"%.10f,%f,%f,",(grid->t_values[tn_ime]),grid->x_values[x_idx],grid->y_values[y_idx]);
+                     fprintf(pelagic->fptr_fish,"%.10f,%f,%f,",(grid->t_values[time]),grid->x_values[x_idx],grid->y_values[y_idx]);
                      for(sc_idx=0 ; sc_idx<(n_m-1) ; sc_idx+=(int)rint(grid->moutstep/grid->mstep)){
                              fprintf(pelagic->fptr_r,"%.16f,",pelagic->u_values[sc_idx][x_idx][y_idx]);
                              fprintf(pelagic->fptr_g,"%.16f,",pelagic->g_values[sc_idx][x_idx][y_idx]);
@@ -2439,7 +2439,7 @@ void print_timestep_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, int time)
                      fprintf(pelagic->fptr_g,"%.16f\n",pelagic->g_values[n_m-1][x_idx][y_idx]);
                      fprintf(pelagic->fptr_m,"%.16f\n",pelagic->mu_values[n_m-1][x_idx][y_idx]);
                      for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
-                             fprintf(pelagic->fptr_pred[s],"%.16f\n",pelagic->mu_pred_values[pel_species_idx][n_m-1][x_idx][y_idx]);
+                             fprintf(pelagic->fptr_pred[pel_species_idx],"%.16f\n",pelagic->mu_pred_values[pel_species_idx][n_m-1][x_idx][y_idx]);
                      }
                      fprintf(pelagic->fptr_fish,"%.16f\n",pelagic->mu_fish_values[n_m-1][x_idx][y_idx]);
              }
@@ -2497,7 +2497,7 @@ void print_detailed_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, int time)
                              fprintf(pelagic->fptr_r,"%.16f,",pelagic->u_values[sc_idx][x_idx][y_idx]);
                              fprintf(pelagic->fptr_g,"%.16f,",pelagic->g_values[sc_idx][x_idx][y_idx]);
                              fprintf(pelagic->fptr_m,"%.16f,",pelagic->mu_values[sc_idx][x_idx][y_idx]);
-                             for(pel_species_idx=0 ; pel_species_idx<n ; pel_species_idx++){
+                             for(pel_species_idx=0; pel_species_idx<n_pel_species; pel_species_idx++){
                                      fprintf(pelagic->fptr_pred[pel_species_idx],"%.16f,",pelagic->mu_pred_values[pel_species_idx][sc_idx][x_idx][y_idx]);
                              }
                              fprintf(pelagic->fptr_fish,"%.16f,",pelagic->mu_fish_values[sc_idx][x_idx][y_idx]);
@@ -2798,7 +2798,7 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
      if(run->forcing_flag==1 && run->forcing_percell){
              /* PER-CELL forcing: read x*y rows this timestep (one per cell, x-outer y-inner) into the
                 per-cell temperature/sinking arrays. A and mu_0 are held at BASE here; the per-cell
-                temperature is applied in the feeding/mortality integrals (via run->*_tempeff_c[k][l]).
+                temperature is applied in the feeding/mortality integrals (via run->*_tempeff_c[x_idx][l]).
                 Only pel_tempeff/ben_tempeff/sinking_rate are made per-cell in this mode. */
              char fline[1024]; double vals[64];
              for(x_idx=0 ; x_idx<n_x ; x_idx++){
@@ -2816,7 +2816,7 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                      }
              }
              for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){ community->pelagic[pel_species_idx].A=community->pelagic[pel_species_idx].A_base; community->pelagic[pel_species_idx].mu_0=community->pelagic[pel_species_idx].mu_0_base; }
-             for(ben_species_idx ben_species_idx<n_ben_species ; ben_species_idx++){ community->benthic[ben_species_idx].A=community->benthic[ben_species_idx].A_base; community->benthic[ben_species_idx].mu_0=community->benthic[ben_species_idx].mu_0_base; }
+             for(ben_species_idx=0 ben_species_idx<n_ben_species ; ben_species_idx++){ community->benthic[ben_species_idx].A=community->benthic[ben_species_idx].A_base; community->benthic[ben_species_idx].mu_0=community->benthic[ben_species_idx].mu_0_base; }
      }
      else if(run->forcing_flag==1){
              char fline[1024];
@@ -2858,11 +2858,11 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
      double **temp_det_g;
      double **temp_det_mu;
      
-     temp_det_g=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
-     temp_det_mu=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
+     temp_det_g=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
+     temp_det_mu=(double **)safe_malloc(n_x*sizeof(double *),__LINE__,__FILE__);
      for(x_idx=0 ; x_idx<n_x ; x_idx++){
-             temp_det_g[x_idx]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
-             temp_det_mu[x_idx]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
+             temp_det_g[x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
+             temp_det_mu[x_idx]=(double *)safe_malloc(n_y*sizeof(double),__LINE__,__FILE__);
              for(y_idx=0 ; y_idx<n_y ; y_idx++){
                      temp_det_g[x_idx][y_idx]=0;
                      temp_det_mu[x_idx][y_idx]=0;
@@ -2911,18 +2911,18 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
      /* Pelagic System */
      /******************/     
      for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
-             if(community->pelagic[s].ts_flag==0){
+             if(community->pelagic[pel_species_idx].ts_flag==0){
                      for(x_idx=0 ; x_idx<n_x ; x_idx++){
                              for(y_idx=0 ; y_idx<n_y ; y_idx++){
                                      for(sc_idx=0 ; sc_idx<pelmatrix[pel_species_idx].size ; sc_idx++){
                                              pelmatrix[pel_species_idx].a[sc_idx]=-(dt/dm)*community->pelagic[pel_species_idx].g_values[sc_idx-1+community->pelagic[pel_species_idx].ipelmin][x_idx][y_idx];
                                              pelmatrix[pel_species_idx].b[sc_idx]=(1+(dt*community->pelagic[pel_species_idx].mu_values[sc_idx+community->pelagic[pel_species_idx].ipelmin][x_idx][y_idx])+(dt/dm)*community->pelagic[pel_species_idx].g_values[sc_idx+community->pelagic[pel_species_idx].ipelmin][x_idx][y_idx]);
                                              pelmatrix[pel_species_idx].c[sc_idx]=0;
-                                             pelmatrix[pel_species_idx].r[sc_idx]=temp_pelagic[pel_species_idx][i+community->pelagic[pel_species_idx].ipelmin][x_idx][y_idx];
+                                             pelmatrix[pel_species_idx].r[sc_idx]=temp_pelagic[pel_species_idx][sc_idx+community->pelagic[pel_species_idx].ipelmin][x_idx][y_idx];
                                      }
                                      pelmatrix[pel_species_idx].a[0]=0;
                                      tridag(&(pelmatrix[pel_species_idx]));
-                                     for(i=0 ; i<pelmatrix[pel_species_idx].size ; i++){
+                                     for(sc_idx=0 ; sc_idx<pelmatrix[pel_species_idx].size ; sc_idx++){
                                              community->pelagic[pel_species_idx].u_values[i+community->pelagic[pel_species_idx].ipelmin][x_idx][y_idx]=pelmatrix[pel_species_idx].u[sc_idx];
                                      }
                              }
@@ -2972,7 +2972,7 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                                              benmatrix[ben_species_idx].a[0]=0;
                                              tridag(&(benmatrix[ben_species_idx]));
                                              for(sc_idx=0 ; sc_idx<benmatrix[ben_species_idx].size ; sc_idx++){
-                                                     community->benthic[ben_species_idx].u_values[sc_idx+community->benthic[ben_species_idx].ibenmin][x_idx][y_idx]=benmatrix[ben_species_idx].u[i];
+                                                     community->benthic[ben_species_idx].u_values[sc_idx+community->benthic[ben_species_idx].ibenmin][x_idx][y_idx]=benmatrix[ben_species_idx].u[sc_idx];
                                              }
                                      }
                              }
@@ -3214,11 +3214,11 @@ void xmove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *xmat, doub
      n_pel_species=run->no_pelagic;
 
      double *uadv=(double *)safe_malloc(n_x*sizeof(double),__LINE__,__FILE__);   /* state after advection */
-     double *flux=(double *)safe_malloc(n_x*sizeof(double),__LINE__,__FILE__);   /* flux[k] = flux across the face between cells k and k+1 */
+     double *flux=(double *)safe_malloc(n_x*sizeof(double),__LINE__,__FILE__);   /* flux[x_idx] = flux across the face between cells k and k+1 */
      double *vface=(double *)safe_malloc(n_x*sizeof(double),__LINE__,__FILE__);  /* advective velocity at face k (depends on g,mu only) */
 
      for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
-             for(ssc_idx=community->pelagic[pel_species_idx].ipelmin ; sc_idx<(community->pelagic[s].ipelmax+1) ; sc_idx++){
+             for(sc_idx=community->pelagic[pel_species_idx].ipelmin ; sc_idx<(community->pelagic[pel_species_idx].ipelmax+1) ; sc_idx++){
                      C=Cfun(grid->m_values[sc_idx], grid->t_values[time], grid, &(community->pelagic[pel_species_idx]));
                      D=Dfun(grid->m_values[sc_idx], grid->t_values[time], grid, &(community->pelagic[pel_species_idx]));
                      r=Diffun(grid->m_values[sc_idx], grid->t_values[time], grid, &(community->pelagic[pel_species_idx]))*(dt/(dx*dx));
@@ -3265,7 +3265,7 @@ void xmove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *xmat, doub
                              for(x_idx=1 ; x_idx<n_x-1 ; x_idx++){ xmat->a[x_idx]=-r/2.0; xmat->b[x_idx]=1.0+r; xmat->c[x_idx]=-r/2.0; }
                              xmat->a[n_x-1]=-r/2.0;   xmat->b[n_x-1]=1.0+r/2.0;
                              tridag(xmat);
-                             for(x_idx=0 ; x_idx<n_x ; x_idx++) community->pelagic[s].u_values[i][x_idx][y_idx]=xmat->u[x_idx];
+                             for(x_idx=0 ; x_idx<n_x ; x_idx++) community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx]=xmat->u[x_idx];
                      }
              }
      }
@@ -3317,8 +3317,8 @@ void ymove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *ymat, doub
                                              flux[y_idx]=vface[y_idx]*uup;
                                      }
                                      for(y_idx=0 ; y_idx<n_y ; y_idx++){
-                                             double Fr=(l<n_y-1)? flux[y_idx]   : 0.0;   /* right-face flux (0 at the y-max wall) */
-                                             double Fl=(l>0)  ? flux[y_idx-1] : 0.0;   /* left-face  flux (0 at the y=0   wall) */
+                                             double Fr=(y_idx<n_y-1)? flux[y_idx]   : 0.0;   /* right-face flux (0 at the y-max wall) */
+                                             double Fl=(y_idx>0)  ? flux[y_idx-1] : 0.0;   /* left-face  flux (0 at the y=0   wall) */
                                              uadv[y_idx]=uadv[y_idx]-(dts/dy)*(Fr-Fl);     /* flux[] precomputed -> in-place is safe */
                                              if(uadv[y_idx]<0.0) uadv[y_idx]=0.0;
                                      }
@@ -3330,7 +3330,7 @@ void ymove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *ymat, doub
                              for(y_idx=0 ; y_idx<n_y ; y_idx++) ymat->u[y_idx]=uadv[y_idx];
                              trimul(ymat);
                              ymat->b[0]=1.0+r/2.0;  ymat->c[0]=-r/2.0;
-                             for(y_idx=1 ; y_idx<y-1 ; y_idx++){ ymat->a[y_idx]=-r/2.0; ymat->b[y_idx]=1.0+r; ymat->c[y_idx]=-r/2.0; }
+                             for(y_idx=1 ; y_idx<n_y-1 ; y_idx++){ ymat->a[y_idx]=-r/2.0; ymat->b[y_idx]=1.0+r; ymat->c[y_idx]=-r/2.0; }
                              ymat->a[n_y-1]=-r/2.0;   ymat->b[n_y-1]=1.0+r/2.0;
                              tridag(ymat);
                              for(y_idx=0 ; y_idx<n_y ; y_idx++) community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx]=ymat->u[y_idx];
@@ -3429,7 +3429,7 @@ void calculate_g_and_mu(RUN *run, GRID *grid, COMMUNITY *community)
                                      /* per-cell pelagic temperature multiplier on FEEDING + PREDATION (1 when off). */
                                      double tmP = run->forcing_percell ? run->pel_tempeff_c[x_idx][y_idx] : 1.0;
                                      for(pel_sub_idx=0 ; pel_sub_idx<n_pel_species ; pel_sub_idx++){
-                                              community->pelagic[pel_species_idx].mu_pred_values[pel_sub_idx][sc_idx][x_idx][y_idx]=tmP*mu_pel_pred(s, ss, sc_idx, x_idx, y_idx, run, grid, community);
+                                              community->pelagic[pel_species_idx].mu_pred_values[pel_sub_idx][sc_idx][x_idx][y_idx]=tmP*mu_pel_pred(pel_species_idx, pel_sub_idx, sc_idx, x_idx, y_idx, run, grid, community);
                                      }
                                      community->pelagic[pel_species_idx].mu_values[sc_idx][x_idx][y_idx]=mu_pel(pel_species_idx, sc_idx, x_idx, y_idx, run, grid, community);
 
@@ -3639,7 +3639,7 @@ double g_det(int xspace, int yspace, RUN *run, GRID *grid, COMMUNITY *community)
                              /*Dead pelagic stuff. Use the BASE (un-temperature-scaled) background
                                mortality: sizemodel removes temperature from the mortality feeding
                                the detritus pool.*/
-                             double dead = community->pelagic[pel_species_idx].mu_0_base*exp(community->pelagic[s].beta*grid->m_values[sc_idx])*community->pelagic[s].u_values[sc_idx][xspace][yspace]*exp(grid->m_values[sc_idx])*grid->mstep
+                             double dead = community->pelagic[pel_species_idx].mu_0_base*exp(community->pelagic[pel_species_idx].beta*grid->m_values[sc_idx])*community->pelagic[pel_species_idx].u_values[sc_idx][xspace][yspace]*exp(grid->m_values[sc_idx])*grid->mstep
                                          + community->pelagic[pel_species_idx].mu_s*((log10(exp(grid->m_values[sc_idx]))-log10(exp(community->pelagic[pel_species_idx].pelmin)))/((log10(exp(community->pelagic[pel_species_idx].pelmax))+community->pelagic[pel_species_idx].epsilon)-log10(exp(grid->m_values[sc_idx]))))*community->pelagic[pel_species_idx].u_values[sc_idx][xspace][yspace]*exp(grid->m_values[sc_idx])*grid->mstep;
                              if(size_dep){
                                      double faeces = (community->pelagic[pel_species_idx].Ex_pla*community->pelagic[pel_species_idx].pla_bio[sc_idx][xspace][yspace]+community->pelagic[pel_species_idx].Ex_pel*community->pelagic[pel_species_idx].pel_bio[sc_idx][xspace][yspace]+community->pelagic[pel_species_idx].Ex_ben*community->pelagic[pel_species_idx].ben_bio[sc_idx][xspace][yspace])*community->pelagic[pel_species_idx].u_values[sc_idx][xspace][yspace]*grid->mstep;
@@ -3669,7 +3669,7 @@ double g_det(int xspace, int yspace, RUN *run, GRID *grid, COMMUNITY *community)
      }
 
      /*Surface-origin inputs sink: scale by the time-varying sinking_rate (= export ratio),
-       exactly as sizemodel multiplies its pelagic detritus inputs by sinking_rate[i]. Seafloor
+       exactly as sizemodel multiplies its pelagic detritus inputs by sinking_rate[sc_idx]. Seafloor
        (dead-benthos) inputs are added unscaled. Default sinking_rate 1.
 
        REFERENCE-THICKNESS NOTE (matches sizemodel by design): DBPM densities are per-VOLUME,
@@ -3785,17 +3785,17 @@ double mu_ben(int species, int size, int xspace, int yspace, RUN *run, GRID *gri
 
 void calculate_fishing(RUN *run, GRID *grid, COMMUNITY *community)
 {
-     int i,k,l,s,b;
-     int x,y,n,c;
+     int sc_idx, x_idx, y_idx, pel_species_idx, ben_species_idx;
+     int n_x, n_y, n_pel_species, n_ben_species;
      
-     x=grid->xnum;
-     y=grid->ynum;
-     n=run->no_pelagic;
-     c=run->no_benthic;
+     n_x=grid->xnum;
+     n_y=grid->ynum;
+     n_pel_species=run->no_pelagic;
+     n_ben_species=run->no_benthic;
      
      /*Pelagic Fishing*/
-     for(s=0 ; s<n ; s++){
-             if(community->pelagic[s].fishing_flag==1){
+     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+             if(community->pelagic[pel_species_idx].fishing_flag==1){
                      int MAX_LEN=grid->mnum*15; //this is the upper bound for the row length in characters
                      char *input;               //input string to store line as string
                      input=(char *)safe_malloc(MAX_LEN*sizeof(char),__LINE__,__FILE__); 
@@ -3803,17 +3803,17 @@ void calculate_fishing(RUN *run, GRID *grid, COMMUNITY *community)
                      char *result = NULL;       //declaring a pointer for storing each individual value as a char
                      
                      /*Read in each line one at a time (corresponding to fishing mortality at a spatial point)*/
-                     for(k=0 ; k<x ; k++){
-                             for(l=0 ; l<y ; l++){
-                                     fgets(input,MAX_LEN,community->pelagic[s].fptr_fish_ts);
+                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                     fgets(input,MAX_LEN,community->pelagic[pel_species_idx].fptr_fish_ts);
                                      input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                                      
                                      result=(char *)strtok(input,sep);    //this is the 1st value
-                                     i=0;
+                                     sc_idx=0;
                                      while(result!=NULL){
-                                             community->pelagic[s].mu_fish_values[i][k][l]=atof(result);
+                                             community->pelagic[pel_species_idx].mu_fish_values[sc_idx][x_idx][y_idx]=atof(result);
                                              result=(char *)strtok(NULL,sep);
-                                             i++;
+                                             sc_idx++;
                                      }
                              }
                      }
@@ -3823,8 +3823,8 @@ void calculate_fishing(RUN *run, GRID *grid, COMMUNITY *community)
      
      /*Benthic Fishing*/
      if(run->no_benthic!=0){
-             for(b=0 ; b<c ; b++){
-                     if(community->benthic[b].fishing_flag==1){
+             for(ben_species_idx=0 ; ben_species_idx<n_ben_species; ben_species_idx++){
+                     if(community->benthic[ben_species_idx].fishing_flag==1){
                              int MAX_LEN=grid->mnum*15; //this is the upper bound for the row length in characters
                              char *input;               //input string to store line as string
                              input=(char *)safe_malloc(MAX_LEN*sizeof(char),__LINE__,__FILE__); 
@@ -3832,17 +3832,17 @@ void calculate_fishing(RUN *run, GRID *grid, COMMUNITY *community)
                              char *result = NULL;       //declaring a pointer for storing each individual value as a char
                              
                              /*Read in each line one at a time (corresponding to fishing mortality at a spatial point)*/
-                             for(k=0 ; k<x ; k++){
-                                     for(l=0 ; l<y ; l++){
-                                             fgets(input,MAX_LEN,community->benthic[b].fptr_fish_ts);
+                             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                                     for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                             fgets(input,MAX_LEN,community->benthic[ben_species_idx].fptr_fish_ts);
                                              input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                                              
                                              result=(char *)strtok(input,sep);    //this is the 1st value
-                                             i=0;
+                                             sc_idx=0;
                                              while(result!=NULL){
-                                                     community->benthic[b].mu_fish_values[i][k][l]=atof(result);
+                                                     community->benthic[ben_species_idx].mu_fish_values[sc_idx][x_idx][y_idx]=atof(result);
                                                      result=(char *)strtok(NULL,sep);
-                                                     i++;
+                                                     sc_idx++;
                                              }
                                      }
                              }
@@ -3860,34 +3860,34 @@ void calculate_fishing(RUN *run, GRID *grid, COMMUNITY *community)
         concentrates where biomass is). Runs per cell -> ready for gridded. */
      if(run->col_gravity>=0){
              double bhd=20.0;                 /* benthic habitat depth (sizemodel default) */
-             for(k=0 ; k<x ; k++){
-                     for(l=0 ; l<y ; l++){
+             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                     for(y_idx=0 ; y_idx<n_y; y_idx++){
                              /* pelagic column thickness (depth channel; 1 if absent) - per-cell under FORCING_PERCELL */
-                             double dcorr=run->forcing_percell ? run->depth_c[k][l] : run->depth;
+                             double dcorr=run->forcing_percell ? run->depth_c[x_idx][y_idx] : run->depth;
                              double Bpel=0.0, Bben=0.0;
-                             for(s=0 ; s<n ; s++){
-                                     if(community->pelagic[s].fishing_flag!=1) continue;
-                                     for(i=community->pelagic[s].ipelmin ; i<(community->pelagic[s].ipelmax+1) ; i++)
-                                             if(community->pelagic[s].mu_fish_values[i][k][l]>0.0)
-                                                     Bpel += community->pelagic[s].u_values[i][k][l]*exp(grid->m_values[i])*grid->mstep;
+                             for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+                                     if(community->pelagic[pel_species_idx].fishing_flag!=1) continue;
+                                     for(sc_idx=community->pelagic[pel_species_idx].ipelmin ; sc_idx<(community->pelagic[pel_species_idx].ipelmax+1) ; sc_idx++)
+                                             if(community->pelagic[pel_species_idx].mu_fish_values[sc_idx][x_idx][y_idx]>0.0)
+                                                     Bpel += community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx]*exp(grid->m_values[sc_idx])*grid->mstep;
                              }
-                             for(b=0 ; b<c ; b++){
-                                     if(community->benthic[b].fishing_flag!=1) continue;
-                                     for(i=community->benthic[b].ibenmin ; i<(community->benthic[b].ibenmax+1) ; i++)
-                                             if(community->benthic[b].mu_fish_values[i][k][l]>0.0)
-                                                     Bben += community->benthic[b].u_values[i][k][l]*exp(grid->m_values[i])*grid->mstep;
+                             for(ben_species_idx=0 ; ben_species_idx<n_ben_species ; ben_species_idx++){
+                                     if(community->benthic[ben_species_idx].fishing_flag!=1) continue;
+                                     for(sc_idx=community->benthic[ben_species_idx].ibenmin ; sc_idx<(community->benthic[ben_species_idx].ibenmax+1) ; sc_idx++)
+                                             if(community->benthic[ben_species_idx].mu_fish_values[sc_idx][x_idx][y_idx]>0.0)
+                                                     Bben += community->benthic[ben_species_idx].u_values[sc_idx][x_idx][y_idx]*exp(grid->m_values[sc_idx])*grid->mstep;
                              }
                              double Ap=Bpel*dcorr, Ab=Bben*bhd, tot=Ap+Ab;
                              double sp = (tot>0.0) ? Ap/tot : 0.5;
                              double sb = (tot>0.0) ? Ab/tot : 0.5;
-                             for(s=0 ; s<n ; s++)
-                                     if(community->pelagic[s].fishing_flag==1)
-                                             for(i=community->pelagic[s].ipelmin ; i<(community->pelagic[s].ipelmax+1) ; i++)
-                                                     community->pelagic[s].mu_fish_values[i][k][l] *= sp;
-                             for(b=0 ; b<c ; b++)
-                                     if(community->benthic[b].fishing_flag==1)
-                                             for(i=community->benthic[b].ibenmin ; i<(community->benthic[b].ibenmax+1) ; i++)
-                                                     community->benthic[b].mu_fish_values[i][k][l] *= sb;
+                             for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++)
+                                     if(community->pelagic[pel_species_idx].fishing_flag==1)
+                                             for(sc_idx=community->pelagic[pel_species_idx].ipelmin ; sc_idx<(community->pelagic[pel_species_idx].ipelmax+1) ; sc_idx++)
+                                                     community->pelagic[pel_species_idx].mu_fish_values[sc_idx][x_idx][y_idx] *= sp;
+                             for(ben_species_idx=0 ; ben_species_idx<n_ben_species ; ben_species_idx++)
+                                     if(community->benthic[ben_species_idx].fishing_flag==1)
+                                             for(sc_idx=community->benthic[ben_species_idx].ibenmin ; sc_idx<(community->benthic[ben_species_idx].ibenmax+1) ; sc_idx++)
+                                                     community->benthic[ben_species_idx].mu_fish_values[sc_idx][x_idx][y_idx] *= sb;
                      }
              }
      }
@@ -3895,20 +3895,20 @@ void calculate_fishing(RUN *run, GRID *grid, COMMUNITY *community)
 
 void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
 {
-     int i,k,l,s,b;
-     int x,y,n,c;
+     int sc_idx, x_idx, y_idx, pel_species_idx, ben_species_idx;
+     int n_x, n_y, n_pel_species, n_ben_species;
      
      double pla,pel,ben,det;
      
-     x=grid->xnum;
-     y=grid->ynum;
-     n=run->no_pelagic;
-     c=run->no_benthic;
+     n_x=grid->xnum;
+     n_y=grid->ynum;
+     n_pel_species=run->no_pelagic;
+     n_ben_species=run->no_benthic;
      
      /*Pelagic Reproduction*/
-     for(s=0 ; s<n ; s++){
+     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
              //read in egg values from file
-             if(community->pelagic[s].rep_method==1){
+             if(community->pelagic[pel_species_idx].rep_method==1){
                      int MAX_LEN=15; //this is the upper bound for the row length in characters
                      char *input;               //input string to store line as string
                      input=(char *)safe_malloc(MAX_LEN*sizeof(char),__LINE__,__FILE__); 
@@ -3916,14 +3916,14 @@ void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
                      char *result = NULL;       //declaring a pointer for storing each individual value as a char
                      
                      /*Read in each line one at a time (corresponding to spectra at a spatial point)*/
-                     for(k=0 ; k<x ; k++){
-                             for(l=0 ; l<y ; l++){
-                                     fgets(input,MAX_LEN,community->pelagic[s].fptr_rep_ts);
+                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                             for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                     fgets(input,MAX_LEN,community->pelagic[pel_species_idx].fptr_rep_ts);
                                      input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                                      
                                      result=(char *)strtok(input,sep);    //this is the 1st value
                                      while(result!=NULL){
-                                             community->pelagic[s].reproduction[k][l]=atof(result);
+                                             community->pelagic[pel_species_idx].reproduction[x_idx][y_idx]=atof(result);
                                              result=(char *)strtok(NULL,sep);
                                      }
                              }
@@ -3931,48 +3931,48 @@ void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
                      free(input);
              }
              //biomass energy allocation
-             if(community->pelagic[s].rep_method==2){
-                     for(k=0 ; k<x ; k++){
-                             for(l=0 ; l<y ; l++){
+             if(community->pelagic[pel_species_idx].rep_method==2){
+                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                             for(y_idx=0 ; y_idx<n_y ; y_idx++){
                                      pla=0;
                                      pel=0;
                                      ben=0;
-                                     for(i=community->pelagic[s].ipelmat ; i<(community->pelagic[s].ipelmax+1) ; i++){
-                                             pla+=community->pelagic[s].pla_bio[i][k][l]*community->pelagic[s].u_values[i][k][l]*grid->mstep;
-                                             pel+=community->pelagic[s].pel_bio[i][k][l]*community->pelagic[s].u_values[i][k][l]*grid->mstep;
-                                             ben+=community->pelagic[s].ben_bio[i][k][l]*community->pelagic[s].u_values[i][k][l]*grid->mstep;
+                                     for(sc_idx=community->pelagic[pel_species_idx].ipelmat ; sc_idx<(community->pelagic[pel_species_idx].ipelmax+1) ; sc_idx++){
+                                             pla+=community->pelagic[pel_species_idx].pla_bio[sc_idx][x_idx][y_idx]*community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx]*grid->mstep;
+                                             pel+=community->pelagic[pel_species_idx].pel_bio[sc_idx][x_idx][y_idx]*community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx]*grid->mstep;
+                                             ben+=community->pelagic[pel_species_idx].ben_bio[sc_idx][x_idx][y_idx]*community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx]*grid->mstep;
                                      }
-                                     community->pelagic[s].reproduction[k][l]=((community->pelagic[s].R_pla*pla+community->pelagic[s].R_pel*pel+community->pelagic[s].R_ben*ben)*grid->tstep)/(grid->mstep*exp(community->pelagic[s].pelmin));
+                                     community->pelagic[pel_species_idx].reproduction[x_idx][y_idx]=((community->pelagic[pel_species_idx].R_pla*pla+community->pelagic[pel_species_idx].R_pel*pel+community->pelagic[pel_species_idx].R_ben*ben)*grid->tstep)/(grid->mstep*exp(community->pelagic[pel_species_idx].pelmin));
                                      /*Connectivity/immigration floor (0-D): recruitment cannot fall below imm_frac of the
                                        unfished-peak recruitment (external larval subsidy for open oligotrophic systems). rec0
                                        tracks the running peak of NATURAL recruitment, frozen the instant the floor first binds,
                                        so the subsidy can never inflate its own reference (no positive feedback).*/
-                                     if(community->pelagic[s].imm_frac>0){
-                                             /*Per-cell reference (rec0_c[k][l]): each cell keeps its OWN running-peak
+                                     if(community->pelagic[pel_species_idx].imm_frac>0){
+                                             /*Per-cell reference (rec0_c[x_idx][y_idx]): each cell keeps its OWN running-peak
                                                recruitment and freeze flag, so the floor never couples cells in a
                                                spatial_dim>=1 run. For spatial_dim=0 (x=y=1) this is the [0][0] scalar,
                                                bit-identical to the former per-species scalar.*/
-                                             if(!community->pelagic[s].rec0_frozen_c[k][l] &&
-                                                community->pelagic[s].reproduction[k][l]>community->pelagic[s].rec0_c[k][l])
-                                                     community->pelagic[s].rec0_c[k][l]=community->pelagic[s].reproduction[k][l];
-                                             double fl=community->pelagic[s].imm_frac*community->pelagic[s].rec0_c[k][l];
-                                             if(community->pelagic[s].reproduction[k][l]<fl){
-                                                     community->pelagic[s].reproduction[k][l]=fl;
-                                                     community->pelagic[s].rec0_frozen_c[k][l]=1;
+                                             if(!community->pelagic[pel_species_idx].rec0_frozen_c[x_idx][y_idx] &&
+                                                community->pelagic[pel_species_idx].reproduction[x_idx][y_idx]>community->pelagic[pel_species_idx].rec0_c[x_idx][y_idx])
+                                                     community->pelagic[pel_species_idx].rec0_c[x_idx][y_idx]=community->pelagic[pel_species_idx].reproduction[x_idx][y_idx];
+                                             double fl=community->pelagic[pel_species_idx].imm_frac*community->pelagic[pel_species_idx].rec0_c[x_idx][y_idx];
+                                             if(community->pelagic[pel_species_idx].reproduction[x_idx][y_idx]<fl){
+                                                     community->pelagic[pel_species_idx].reproduction[x_idx][y_idx]=fl;
+                                                     community->pelagic[pel_species_idx].rec0_frozen_c[x_idx][y_idx]=1;
                                              }
                                      }
                              }
                      }
              }
              //fecundity calculation
-             if(community->pelagic[s].rep_method==3){
-                     for(k=0 ; k<x ; k++){
-                             for(l=0 ; l<y ; l++){
+             if(community->pelagic[pel_species_idx].rep_method==3){
+                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                             for(y_idx=0 ; y_idx<n_y ; y_idx++){
                                      pel=0;
-                                     for(i=community->pelagic[s].ipelmat ; i<(community->pelagic[s].ipelmax+1) ; i++){
-                                             pel+=community->pelagic[s].u_values[i][k][l]*exp(grid->m_values[i])*grid->mstep;
+                                     for(sc_idx=community->pelagic[pel_species_idx].ipelmat ; sc_idx<(community->pelagic[pel_species_idx].ipelmax+1) ; sc_idx++){
+                                             pel+=community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx]*exp(grid->m_values[sc_idx])*grid->mstep;
                                      }
-                                     community->pelagic[s].reproduction[k][l]=pel*492*grid->tstep;
+                                     community->pelagic[pel_species_idx].reproduction[x_idx][y_idx]=pel*492*grid->tstep;
                              }
                      }
              }
@@ -3980,9 +3980,9 @@ void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
      
      /*Benthic Reproduction*/
      if(run->no_benthic!=0){
-             for(b=0 ; b<c ; b++){
+             for(ben_species_idx=0 ; ben_species_idx<n_ben_species ; ben_species_idx++){
                      //read in egg values from file
-                     if(community->benthic[b].rep_method==1){
+                     if(community->benthic[ben_species_idx].rep_method==1){
                              int MAX_LEN=15; //this is the upper bound for the row length in characters
                              char *input;               //input string to store line as string
                              input=(char *)safe_malloc(MAX_LEN*sizeof(char),__LINE__,__FILE__); 
@@ -3990,14 +3990,14 @@ void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
                              char *result = NULL;       //declaring a pointer for storing each individual value as a char
                              
                              /*Read in each line one at a time (corresponding to spectra at a spatial point)*/
-                             for(k=0 ; k<x ; k++){
-                                     for(l=0 ; l<y ; l++){
-                                             fgets(input,MAX_LEN,community->benthic[b].fptr_rep_ts);
+                             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                                     for(y_idx=0 ; y_idx<n_y ; y_idx++){
+                                             fgets(input,MAX_LEN,community->benthic[ben_species_idx].fptr_rep_ts);
                                              input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                                              
                                              result=(char *)strtok(input,sep);    //this is the 1st value
                                              while(result!=NULL){
-                                                     community->benthic[b].reproduction[k][l]=atof(result);
+                                                     community->benthic[ben_species_idx].reproduction[x_idx][y_idx]=atof(result);
                                                      result=(char *)strtok(NULL,sep);
                                              }
                                      }
@@ -4005,26 +4005,26 @@ void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
                              free(input);
                      }
                      //biomass energy allocation
-                     if(community->benthic[b].rep_method==2){
-                             for(k=0 ; k<x ; k++){
-                                     for(l=0 ; l<y ; l++){
+                     if(community->benthic[ben_species_idx].rep_method==2){
+                             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                                     for(y_idx=0 ; y_idx<n_y ; y_idx++){
                                              det=0;
-                                             for(i=community->benthic[b].ibenmat ; i<(community->benthic[b].ibenmax+1) ; i++){
-                                                     det+=community->benthic[b].det_bio[i][k][l]*community->benthic[b].u_values[i][k][l]*grid->mstep;
+                                             for(sc_idx=community->benthic[ben_species_idx].ibenmat ; sc_idx<(community->benthic[ben_species_idx].ibenmax+1) ; sc_idx++){
+                                                     det+=community->benthic[ben_species_idx].det_bio[sc_idx][x_idx][y_idx]*community->benthic[ben_species_idx].u_values[sc_idx][x_idx][y_idx]*grid->mstep;
                                              }
-                                             community->benthic[b].reproduction[k][l]=(community->benthic[b].R_det*det*grid->tstep)/(grid->mstep*exp(community->benthic[b].benmin));
+                                             community->benthic[ben_species_idx].reproduction[x_idx][y_idx]=(community->benthic[ben_species_idx].R_det*det*grid->tstep)/(grid->mstep*exp(community->benthic[ben_species_idx].benmin));
                                      }
                              }
                      }
                      //fecundity calculation
-                     if(community->benthic[b].rep_method==3){
-                             for(k=0 ; k<x ; k++){
-                                     for(l=0 ; l<y ; l++){
+                     if(community->benthic[ben_species_idx].rep_method==3){
+                             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                                     for(y_idx=0 ; y_idx<n_y ; y_idx++){
                                              ben=0;
-                                             for(i=community->benthic[b].ibenmat ; i<(community->benthic[b].ibenmax+1) ; i++){
-                                                     ben+=community->benthic[b].u_values[i][k][l]*exp(grid->m_values[i])*grid->mstep;
+                                             for(sc_idx=community->benthic[ben_species_idx].ibenmat ; sc_idx<(community->benthic[ben_species_idx].ibenmax+1) ; sc_idx++){
+                                                     ben+=community->benthic[ben_species_idx].u_values[sc_idx][x_idx][y_idx]*exp(grid->m_values[sc_idx])*grid->mstep;
                                              }
-                                             community->benthic[b].reproduction[k][l]=ben*492*grid->tstep;
+                                             community->benthic[ben_species_idx].reproduction[x_idx][y_idx]=ben*492*grid->tstep;
                                      }
                              }
                      }
@@ -4120,12 +4120,12 @@ double y_start(double y, double t)
 void free_mem(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, MATRIX *benmatrix, MATRIX *xmatrix, MATRIX *ymatrix, double **temp_pel_params, double **temp_ben_params)
 /*Frees all memory allocated within code*/
 {
-     int i,k,s,ss,b;
-     int m,x,n,c;
-     m=grid->mnum;
-     x=grid->xnum;
-     n=run->no_pelagic;
-     c=run->no_benthic;
+     int sc_idx, x_idx, pel_species_idx, pel_sub_idx, ben_species_idx;
+     int n_m, n_x, n_pel_species, n_ben_species;
+     n_m=grid->mnum;
+     n_x=grid->xnum;
+     n_pel_species=run->no_pelagic;
+     n_ben_species=run->no_benthic;
      
      /*Free grid values*/
      free(grid->m_values);
@@ -4134,83 +4134,83 @@ void free_mem(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, MAT
      free(grid->y_values);
      
      /*Free pelagic values*/
-             for(s=0 ; s<n ; s++){
-                     for(i=0 ; i<m ; i++){
-                             for(k=0 ; k<x ; k++){
-                                     free(community->pelagic[s].u_values[i][k]);
-                                     free(community->pelagic[s].g_values[i][k]);
-                                     free(community->pelagic[s].mu_values[i][k]);
-                                     for(ss=0 ; ss<n ; ss++){
-                                              free(community->pelagic[s].mu_pred_values[ss][i][k]);
+             for(pel_species_idx=0; pel_species_idx<n_pel_species; pel_species_idx++){
+                     for(sc_idx=0 ; sc_idx<n_m ; sc_idx++){
+                             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                                     free(community->pelagic[pel_species_idx].u_values[sc_idx][x_idx]);
+                                     free(community->pelagic[pel_species_idx].g_values[sc_idx][x_idx]);
+                                     free(community->pelagic[pel_species_idx].mu_values[sc_idx][x_idx]);
+                                     for(pel_sub_idx=0 ; pel_sub_idx<n_pel_species ; pel_sub_idx++){
+                                              free(community->pelagic[pel_species_idx].mu_pred_values[pel_sub_idx][sc_idx][x_idx]);
                                      }
-                                     free(community->pelagic[s].mu_fish_values[i][k]);
-                                     free(community->pelagic[s].pla_bio[i][k]);
-                                     free(community->pelagic[s].pel_bio[i][k]);
-                                     free(community->pelagic[s].ben_bio[i][k]);
-                                     free(community->pelagic[s].a_refuge[i][k]);
+                                     free(community->pelagic[pel_species_idx].mu_fish_values[sc_idx][x_idx]);
+                                     free(community->pelagic[pel_species_idx].pla_bio[sc_idx][x_idx]);
+                                     free(community->pelagic[pel_species_idx].pel_bio[sc_idx][x_idx]);
+                                     free(community->pelagic[pel_species_idx].ben_bio[sc_idx][x_idx]);
+                                     free(community->pelagic[pel_species_idx].a_refuge[sc_idx][x_idx]);
                              }
-                             free(community->pelagic[s].u_values[i]);
-                             free(community->pelagic[s].g_values[i]);
-                             free(community->pelagic[s].mu_values[i]);
-                             for(ss=0 ; ss<n ; ss++){
-                                      free(community->pelagic[s].mu_pred_values[ss][i]);
+                             free(community->pelagic[pel_species_idx].u_values[sc_idx]);
+                             free(community->pelagic[pel_species_idx].g_values[sc_idx]);
+                             free(community->pelagic[pel_species_idx].mu_values[sc_idx]);
+                             for(pel_sub_idx=0 ; pel_sub_idx<n_pel_species ; pel_sub_idx++){
+                                      free(community->pelagic[pel_species_idx].mu_pred_values[pel_sub_idx][sc_idx]);
                              }
-                             free(community->pelagic[s].mu_fish_values[i]);
-                             free(community->pelagic[s].pla_bio[i]);
-                             free(community->pelagic[s].pel_bio[i]);
-                             free(community->pelagic[s].ben_bio[i]);
-                             free(community->pelagic[s].a_refuge[i]);
+                             free(community->pelagic[pel_species_idx].mu_fish_values[sc_idx]);
+                             free(community->pelagic[pel_species_idx].pla_bio[sc_idx]);
+                             free(community->pelagic[pel_species_idx].pel_bio[sc_idx]);
+                             free(community->pelagic[pel_species_idx].ben_bio[sc_idx]);
+                             free(community->pelagic[pel_species_idx].a_refuge[sc_idx]);
                      }
-                     free(community->pelagic[s].u_values);
-                     free(community->pelagic[s].g_values);
-                     free(community->pelagic[s].mu_values);
-                     for(ss=0 ; ss<n ; ss++){
-                              free(community->pelagic[s].mu_pred_values[ss]);
+                     free(community->pelagic[pel_species_idx].u_values);
+                     free(community->pelagic[pel_species_idx].g_values);
+                     free(community->pelagic[pel_species_idx].mu_values);
+                     for(pel_sub_idx=0 ; pel_sub_idx<n_pel_species ; pel_sub_idx++){
+                              free(community->pelagic[pel_species_idx].mu_pred_values[pel_sub_idx]);
                      }
-                     free(community->pelagic[s].mu_fish_values);
-                     free(community->pelagic[s].pla_bio);
-                     free(community->pelagic[s].pel_bio);
-                     free(community->pelagic[s].ben_bio);
-                     free(community->pelagic[s].a_refuge);
-                     free(community->pelagic[s].phi_values);
-                     free(community->pelagic[s].refuge_values);
-                     free(temp_pel_params[s]);
+                     free(community->pelagic[pel_species_idx].mu_fish_values);
+                     free(community->pelagic[pel_species_idx].pla_bio);
+                     free(community->pelagic[pel_species_idx].pel_bio);
+                     free(community->pelagic[pel_species_idx].ben_bio);
+                     free(community->pelagic[pel_species_idx].a_refuge);
+                     free(community->pelagic[pel_species_idx].phi_values);
+                     free(community->pelagic[pel_species_idx].refuge_values);
+                     free(temp_pel_params[pel_species_idx]);
                      
-                     free(community->pelagic[s].fname_pred);
-                     free(community->pelagic[s].fptr_pred);
+                     free(community->pelagic[pel_species_idx].fname_pred);
+                     free(community->pelagic[pel_species_idx].fptr_pred);
              }
              free(temp_pel_params);
      
-             for(s=0 ; s<n ; s++){
-                     for(k=0 ; k<x ; k++){
-                             free(community->pelagic[s].pla_total[k]);
-                             free(community->pelagic[s].pel_total[k]);
-                             free(community->pelagic[s].ben_total[k]);
-                             free(community->pelagic[s].fish_total[k]);
-                             free(community->pelagic[s].pred_total[k]);
-                             free(community->pelagic[s].reproduction[k]);
-                             free(community->pelagic[s].rec0_c[k]);
-                             free(community->pelagic[s].rec0_frozen_c[k]);
+             for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                             free(community->pelagic[pel_species_idx].pla_total[x_idx]);
+                             free(community->pelagic[pel_species_idx].pel_total[x_idx]);
+                             free(community->pelagic[pel_species_idx].ben_total[x_idx]);
+                             free(community->pelagic[pel_species_idx].fish_total[x_idx]);
+                             free(community->pelagic[pel_species_idx].pred_total[x_idx]);
+                             free(community->pelagic[pel_species_idx].reproduction[x_idx]);
+                             free(community->pelagic[pel_species_idx].rec0_c[x_idx]);
+                             free(community->pelagic[pel_species_idx].rec0_frozen_c[x_idx]);
                      }
-                     free(community->pelagic[s].pla_total);
-                     free(community->pelagic[s].pel_total);
-                     free(community->pelagic[s].ben_total);
-                     free(community->pelagic[s].fish_total);
-                     free(community->pelagic[s].pred_total);
-                     free(community->pelagic[s].reproduction);
-                     free(community->pelagic[s].rec0_c);
-                     free(community->pelagic[s].rec0_frozen_c);
+                     free(community->pelagic[pel_species_idx].pla_total);
+                     free(community->pelagic[pel_species_idx].pel_total);
+                     free(community->pelagic[pel_species_idx].ben_total);
+                     free(community->pelagic[pel_species_idx].fish_total);
+                     free(community->pelagic[pel_species_idx].pred_total);
+                     free(community->pelagic[pel_species_idx].reproduction);
+                     free(community->pelagic[pel_species_idx].rec0_c);
+                     free(community->pelagic[pel_species_idx].rec0_frozen_c);
              }
      free(community->pelagic);
      
      /*Free Plankton pointer*/     
-             for(i=0 ; i<m ; i++){
-                     for(k=0 ; k<x ; k++){
-                             free(community->plankton->u_values[i][k]);
-                             free(community->plankton->g_values[i][k]);
+             for(sc_idx=0 ; sc_idx<n_m ; sc_idx++){
+                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                             free(community->plankton->u_values[sc_idx][x_idx]);
+                             free(community->plankton->g_values[sc_idx][x_idx]);
                      }
-                     free(community->plankton->u_values[i]);
-                     free(community->plankton->g_values[i]);
+                     free(community->plankton->u_values[sc_idx]);
+                     free(community->plankton->g_values[sc_idx]);
              }
              free(community->plankton->u_values);
              free(community->plankton->g_values);
@@ -4218,50 +4218,50 @@ void free_mem(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, MAT
      
      if(run->no_benthic!=0){
              /*Free Benthic pointer*/
-             for(b=0 ; b<c ; b++){
-                     for(i=0 ; i<m ; i++){
-                             for(k=0 ; k<x ; k++){
-                                     free(community->benthic[b].u_values[i][k]);
-                                     free(community->benthic[b].g_values[i][k]);
-                                     free(community->benthic[b].mu_values[i][k]);
-                                     free(community->benthic[b].mu_pred_values[i][k]);
-                                     free(community->benthic[b].mu_fish_values[i][k]);
-                                     free(community->benthic[b].det_bio[i][k]);
+             for(ben_species_idx=0 ; ben_species_idx<n_ben_species ; ben_species_idx++){
+                     for(sc_idx=0 ; sc_idx<n_m ; sc_idx++){
+                             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                                     free(community->benthic[ben_species_idx].u_values[sc_idx][x_idx]);
+                                     free(community->benthic[ben_species_idx].g_values[sc_idx][x_idx]);
+                                     free(community->benthic[ben_species_idx].mu_values[sc_idx][x_idx]);
+                                     free(community->benthic[ben_species_idx].mu_pred_values[sc_idx][x_idx]);
+                                     free(community->benthic[ben_species_idx].mu_fish_values[sc_idx][x_idx]);
+                                     free(community->benthic[ben_species_idx].det_bio[sc_idx][x_idx]);
                              }
-                             free(community->benthic[b].u_values[i]);
-                             free(community->benthic[b].g_values[i]);
-                             free(community->benthic[b].mu_values[i]);
-                             free(community->benthic[b].mu_pred_values[i]);
-                             free(community->benthic[b].mu_fish_values[i]);
-                             free(community->benthic[b].det_bio[i]);
+                             free(community->benthic[ben_species_idx].u_values[sc_idx]);
+                             free(community->benthic[ben_species_idx].g_values[sc_idx]);
+                             free(community->benthic[ben_species_idx].mu_values[sc_idx]);
+                             free(community->benthic[ben_species_idx].mu_pred_values[sc_idx]);
+                             free(community->benthic[ben_species_idx].mu_fish_values[sc_idx]);
+                             free(community->benthic[ben_species_idx].det_bio[sc_idx]);
                      }
-                     free(community->benthic[b].u_values);
-                     free(community->benthic[b].g_values);
-                     free(community->benthic[b].mu_values);
-                     free(community->benthic[b].mu_pred_values);
-                     free(community->benthic[b].mu_fish_values);
-                     free(community->benthic[b].det_bio);
-                     free(temp_ben_params[b]);
+                     free(community->benthic[ben_species_idx].u_values);
+                     free(community->benthic[ben_species_idx].g_values);
+                     free(community->benthic[ben_species_idx].mu_values);
+                     free(community->benthic[ben_species_idx].mu_pred_values);
+                     free(community->benthic[ben_species_idx].mu_fish_values);
+                     free(community->benthic[ben_species_idx].det_bio);
+                     free(temp_ben_params[ben_species_idx]);
              }
              free(temp_ben_params);
-             for(b=0 ; b<c ; b++){
-                     for(k=0 ; k<x ; k++){
-                             free(community->benthic[b].det_total[k]);
-                             free(community->benthic[b].fish_total[k]);
-                             free(community->benthic[b].pred_total[k]);
-                             free(community->benthic[b].reproduction[k]);
+             for(ben_species_idx=0 ; ben_species_idx<n_ben_species ; ben_species_idx++){
+                     for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                             free(community->benthic[ben_species_idx].det_total[x_idx]);
+                             free(community->benthic[ben_species_idx].fish_total[x_idx]);
+                             free(community->benthic[ben_species_idx].pred_total[x_idx]);
+                             free(community->benthic[ben_species_idx].reproduction[x_idx]);
                      }
-                     free(community->benthic[b].det_total);
-                     free(community->benthic[b].fish_total);
-                     free(community->benthic[b].pred_total);
-                     free(community->benthic[b].reproduction);
+                     free(community->benthic[ben_species_idx].det_total);
+                     free(community->benthic[ben_species_idx].fish_total);
+                     free(community->benthic[ben_species_idx].pred_total);
+                     free(community->benthic[ben_species_idx].reproduction);
              }
      free(community->benthic);
              
      /*Free Detritus*/
-             for(k=0 ; k<x ; k++){
-                     free(community->detritus->w_values[k]);
-                     free(community->detritus->g_values[k]);
+             for(x_idx=0 ; x_idx<n_x ; x_idx++){
+                     free(community->detritus->w_values[x_idx]);
+                     free(community->detritus->g_values[x_idx]);
              }
              free(community->detritus->w_values);
              free(community->detritus->g_values);
@@ -4269,22 +4269,22 @@ void free_mem(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, MAT
      }
      
      /*Free matrix pointers*/
-     for(s=0 ; s<n ; s++){
-             free(pelmatrix[s].a);
-             free(pelmatrix[s].b);
-             free(pelmatrix[s].c);
-             free(pelmatrix[s].r);
-             free(pelmatrix[s].u);
+     for(pel_species_idx=0 ; pel_species_idx<n_pel_species ; pel_species_idx++){
+             free(pelmatrix[pel_species_idx].a);
+             free(pelmatrix[pel_species_idx].b);
+             free(pelmatrix[pel_species_idx].c);
+             free(pelmatrix[pel_species_idx].r);
+             free(pelmatrix[pel_species_idx].u);
      }
      free(pelmatrix);
      
      if(run->no_benthic!=0){
-             for(b=0 ; b<c ; b++){
-                     free(benmatrix[b].a);
-                     free(benmatrix[b].b);
-                     free(benmatrix[b].c);
-                     free(benmatrix[b].r);
-                     free(benmatrix[b].u);
+             for(ben_species_idx=0 ; ben_species_idx<n_ben_species ; ben_species_idx++){
+                     free(benmatrix[ben_species_idx].a);
+                     free(benmatrix[ben_species_idx].b);
+                     free(benmatrix[ben_species_idx].c);
+                     free(benmatrix[ben_species_idx].r);
+                     free(benmatrix[ben_species_idx].u);
              }
              free(benmatrix);
      }
