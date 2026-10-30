@@ -585,7 +585,7 @@ SEXP SizeSpectrum(SEXP run_params_r, SEXP grid_params_r, SEXP plankton_params_r,
         names_params[name_idx] = (char *)CHAR(STRING_ELT(names_params_r, name_idx));
     }
 
-    result = SizeSpectrum_internals(run_params, grid_params, pla_params, pel_params, ben_params, det_params, names_params,
+    SEXP result = SizeSpectrum_internals(run_params, grid_params, pla_params, pel_params, ben_params, det_params, names_params,
                            flags_params, output_params);
     return (result);
 }
@@ -594,7 +594,7 @@ SEXP SizeSpectrum(SEXP run_params_r, SEXP grid_params_r, SEXP plankton_params_r,
 // This is the internal function that does the work of the program called by R //
 //-----------------------------------------------------------------------------//
 
-static void SizeSpectrum_internals(int *run_params, double *grid_params, double *pla_params, double *pel_params,
+static SEXP SizeSpectrum_internals(int *run_params, double *grid_params, double *pla_params, double *pel_params,
                                    double *ben_params, double *det_params, char **names_params, int *flags_params,
                                    int *output_params)
 // run_params is an array of run parameters
@@ -617,14 +617,14 @@ static void SizeSpectrum_internals(int *run_params, double *grid_params, double 
     double **temp_pel_params;
     double **temp_ben_params;
 
-    SEXP result = R_NilValue;
-    if (run.return_memory) result = PROTECT(allocVector(VECSXP, 1; 2)); 
-
     /*Setup run*/
     setup_run(&run, run_params, names_params[0], output_params);
 
     /*Setup grid*/
     setup_grid(&grid, grid_params);
+
+    SEXP result = R_NilValue;
+    if (run.return_memory) result = PROTECT(allocVector(VECSXP, 2)); 
 
     /*Setup community*/
     community.plankton = (PLANKTON *)safe_malloc(sizeof(PLANKTON), __LINE__, __FILE__);
@@ -696,7 +696,7 @@ static void SizeSpectrum_internals(int *run_params, double *grid_params, double 
     free_mem(&run, &grid, &community, pelmatrix, benmatrix, &xmatrix, &ymatrix, temp_pel_params, temp_ben_params);
 
     if (run.return_memory) UNPROTECT(1);
-    return (result)
+    return (result);
 }
 
 //-----------------//
