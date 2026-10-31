@@ -285,7 +285,17 @@ tiny<-1e-7
 # Call C code #
 #-------------#
 
-  x<-.C(C_SizeSpectrum, run.params, grid.params, pla.params, pel.params, ben.params, det.params, names.params, flags.params)
+  x <- .Call(
+    C_SizeSpectrum, 
+    as.integer(run.params), 
+    as.double(grid.params), 
+    as.double(pla.params), 
+    as.double(pel.params), 
+    as.double(ben.params), 
+    as.double(det.params), 
+    as.character(names.params), 
+    as.integer(flags.params)
+  )
 
 #-----------------------------------------------------------------#
 # Return filenames of files that have been produced by the C code #

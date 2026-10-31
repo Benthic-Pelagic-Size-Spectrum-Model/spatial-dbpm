@@ -21,3 +21,5 @@ docs/
 
 # ISIMIP3a workflow lives in its own repo (dbpm_isimip3a); clone it here locally
 adapter/sandbox/lme-workflow/
+
+sandbox/

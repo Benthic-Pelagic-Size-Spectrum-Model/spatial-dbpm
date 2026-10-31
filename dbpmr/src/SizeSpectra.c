@@ -3,6 +3,7 @@
 #include <math.h>
 #include <time.h>
 #include <R.h>
+#include <Rinternals.h>
 
 //------------------------//
 // Structure Declarations //
@@ -441,13 +442,117 @@ void free_mem(RUN *, GRID *, COMMUNITY *, MATRIX *, MATRIX *, MATRIX *, MATRIX *
 void *safe_malloc(size_t, int, char *);           //Wrappered function for memory alloaction
 FILE *safe_fopen(char *, char *, int, char *);    //Wrappered function for file opening
 
+/*Protype of the internal size-spectrum function (no interface with R)*/
+static void SizeSpectrum_internals(int *, double *, double *, double *, double *, double *, char **, int *);
 
-//--------------------------------------//
-// This is the main program called by R //
-//--------------------------------------//
+// This is the new R interface. SizeSpectrum() is now a wrapper function that
+// takes the objects from R (.Call()). SizeSpectrum() checks the SEXP objects from
+// R are the correct SXPtypes, sets C pointers to the R data, and then runs the
+// internal function SizeSpectrum_internals() which performs the calculations and
+// writes outputs. SizeSpectrum() returns NULL to R.
+// TODO: return to R will be changed to be optional so that users can toggle
+// file output, memory output or both. 
+SEXP SizeSpectrum(
+        SEXP run_params_r, 
+        SEXP grid_params_r, 
+        SEXP plankton_params_r, 
+        SEXP pelagic_params_r, 
+        SEXP benthic_params_r, 
+        SEXP detritus_params_r, 
+        SEXP names_params_r, 
+        SEXP flags_params_r
+) {
+        // Ensure that all of the SEXP objects are of the correct type after
+        // passing in from R.
+        if (!isInteger(run_params_r) || !isInteger(flags_params_r)) {
+                error("run_params_r and flags_params_r R objects must be integer vectors");
+        }
+        if (
+                !isReal(grid_params_r) || !isReal(plankton_params_r) ||
+                !isReal(pelagic_params_r) || !isReal(benthic_params_r) ||
+                !isReal(detritus_params_r)
+        ) {error("grid, plankton, pelagic, benthic and detritus params must be numeric vectors");}
+        if (!isString(names_params_r)) {
+                error("names_params_r R object must be character");
+        }
 
+        // Checking the length of the parameter vectors that were passed from R.
+        // The values here are taken from hardcoded indices throughout the code.
+        if (LENGTH(run_params_r) != 5) {
+                error("run_params_r must have 5 elements");
+        }
+        if (LENGTH(grid_params_r) != 18) {
+                error("grid_params_r must have 18 elements");
+        }
+        if (LENGTH(plankton_params_r) != 6) {
+                error("plankton_params_r must have 6 elements");
+        }
 
-void SizeSpectrum(int *run_params, double *grid_params, double *pla_params, double *pel_params, double *ben_params, double * det_params, char **names_params, int *flags_params)
+        int npel = INTEGER(run_params_r)[0];
+        if (LENGTH(pelagic_params_r) != 32 * npel) {
+                error("pelagic_params_r must have 32 * n_pel_species elements");
+        }
+        
+        // It is possible to include no benthic species, in which case benthic_params_r
+        // and detritus_params_r do not need to be checked for length.
+        int nben = INTEGER(run_params_r)[1];
+        if (nben > 0) {
+                if (LENGTH(benthic_params_r) != 15 * nben) {
+                        error("benthic_params_r must have 15 * n_ben_species elements");
+                }
+                if (LENGTH(detritus_params_r) != 1) {
+                        error("detritus_params_r must have 1 element");
+                }
+                if (LENGTH(names_params_r) != (npel + nben + 1) + 2) {
+                        error("names_params_r not correct length");
+                }
+        } else if (LENGTH(names_params_r) != npel + 2) {
+                error("names_params_r not correct length");
+        }
+        
+        int nflags = 2 + 4 * (npel + nben) + (nben > 0 ? 2 : 0);
+        // nflags is 2 for plankton, 4 for each pelagic / benthic species and 2
+        // for detritus if there is at least 1 benthic species
+        if (LENGTH(flags_params_r) != nflags) {
+                error("flags_params_r not correct length");
+        }
+
+        // Assign pointers for the SEXP data to correct names for function use
+        int *run_params = INTEGER(run_params_r);
+        int *flags_params = INTEGER(flags_params_r);
+        double *grid_params = REAL(grid_params_r);
+        double *pla_params = REAL(plankton_params_r);
+        double *pel_params = REAL(pelagic_params_r);
+        double *ben_params = REAL(benthic_params_r);
+        double *det_params = REAL(detritus_params_r);
+
+        char **names_params = (char **) R_alloc(
+                LENGTH(names_params_r), 
+                sizeof(char *)
+        );
+        int i;
+        for (i = 0; i < LENGTH(names_params_r); i++) {
+                names_params[i] = (char *) CHAR(STRING_ELT(names_params_r, i));
+        }
+        
+        SizeSpectrum_internals(
+                run_params,
+                grid_params,
+                pla_params,
+                pel_params,
+                ben_params,
+                det_params,
+                names_params,
+                flags_params
+        );
+        return(R_NilValue);
+}
+
+//-----------------------------------------------------------------------------//
+// This is the internal function that does the work of the program called by R //
+//-----------------------------------------------------------------------------//
+
+static void SizeSpectrum_internals(int *run_params, double *grid_params, double *pla_params, double *pel_params, double *ben_params, double * det_params, char **names_params, int *flags_params)
 // run_params is an array of run parameters
 // grid_params is an array of grid discretisation values
 // pla_params is plankton params
@@ -524,7 +629,6 @@ void SizeSpectrum(int *run_params, double *grid_params, double *pla_params, doub
     free_mem(&run, &grid, &community, pelmatrix, benmatrix, &xmatrix, &ymatrix, temp_pel_params, temp_ben_params);
 
 }
-
 
 //-----------------//
 // Setup Functions //
