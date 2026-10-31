@@ -482,7 +482,7 @@ Read.In<-function(run,species,filename){
   
   if(!missing(filename)){
   
-    if(!file.exists(paste(run,"/",species,"/",filename,sep=""))) stop(paste("File: ",filename," does not exist"))
+    if(!file.exists(paste(run,"/",species,"/",filename, ".txt",sep=""))) stop(paste("File: ",filename," does not exist"))
     ans=new("singlefile.results")
     
     #Run params
@@ -527,13 +527,13 @@ Read.In<-function(run,species,filename){
     ans@yrange<-grid_seq(ans@grid@ymin,ans@grid@ymax,ans@grid@youtstep)
     
     #Filetype
-    ans@filetype<-as.character(read.csv(paste(run,"/",species,"/",filename,sep=""),nrows=1,header=FALSE,stringsAsFactors=FALSE))
+    ans@filetype<-as.character(read.csv(paste(run,"/",species,"/",filename,".txt", sep=""),nrows=1,header=FALSE,stringsAsFactors=FALSE))
     
     #Speciestype
-    ans@speciestype<-as.character(read.csv(paste(run,"/",species,"/",filename,sep=""),skip=1,nrows=1,header=FALSE,stringsAsFactors=FALSE))
+    ans@speciestype<-as.character(read.csv(paste(run,"/",species,"/",filename, ".txt", sep=""),skip=1,nrows=1,header=FALSE,stringsAsFactors=FALSE))
     
     #Data
-    ans@data<-read.csv(paste(run,"/",species,"/",filename,sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
+    ans@data<-read.csv(paste(run,"/",species,"/",filename, ".txt", sep=""),skip=4,nrows=no_data,header=TRUE,stringsAsFactors=FALSE)
   }
    
   return(ans)
