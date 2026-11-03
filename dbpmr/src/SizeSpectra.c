@@ -83,7 +83,6 @@ typedef struct grid_info
     int mnum;          // number of steps
     double moutstep;   // output to print every m
     double *m_values;  // actual log(m) values
-    int nout_m; // number of output m steps
 
     double t1, tmax; // time discretisation
     double tstep;
@@ -91,21 +90,18 @@ typedef struct grid_info
     double toutmin, toutmax;
     double toutstep;
     double *t_values;
-    int nout_t; // number of output timesteps
 
     double xmin, xmax; // x-space discretisation (if required)
     double xstep;
     int xnum;
     double xoutstep;
     double *x_values;
-    int nout_x; // number of output x steps
 
     double ymin, ymax; // y-space discretisation (if required)
     double ystep;
     int ynum;
     double youtstep;
     double *y_values;
-    int nout_y; // number of output y steps
 
 } GRID;
 
@@ -379,13 +375,12 @@ typedef struct vectors
 } MATRIX;
 
 typedef struct output_info {
-    int on; // Records whether outputs are going to be stored and returned in memory
+    int nout_m, nout_t, nout_x, nout_y; // Numbers of output based on model and output steps
     int *m_sel, *x_sel, *y_sel; // Holders of all indices for output indices (not every index on grid, just output ones)
-    int next_time;
+    int next_time; // The next timestep index (is iterated to)
 
-    double *t_out;
-    double *pla_u;
-
+    double *t_out; // Time values that are completed through the run
+    double *pla_u; // Holder of plankton biomass values (size of nout_m, nout_t, nout_x, nout_y)
 } OUTPUT;
 
 //-----------------------//
@@ -399,6 +394,7 @@ void setup_plankton(RUN *, GRID *, PLANKTON *, double *, char *, int, int);     
 void setup_pelagic(RUN *, GRID *, PELAGIC *, double *, char *, int, int, int, int); // sets up pelagic values
 void setup_benthic(RUN *, GRID *, BENTHIC *, double *, char *, int, int, int, int); // sets up benthic values
 void setup_detritus(RUN *, GRID *, DETRITUS *, double *, char *, int, int);         // sets up detritus values
+void setup_output(RUN *, GRID *, OUTPUT *, SEXP); // sets up the output containers for the run
 
 double phi(double, double, double, double); // Calculates feeding kernel for each pelagic species
 
@@ -407,7 +403,7 @@ double **setup_benthic_params(int, double *); // Converts 1D vector of benthic p
 void setup_matrix(int, MATRIX *);
 
 /*Timestepping and Output Function*/
-void calculate_results(RUN *, GRID *, COMMUNITY *, MATRIX *, MATRIX *, MATRIX *, MATRIX *, OUTPUT *);
+void calculate_results(RUN *, GRID *, COMMUNITY *, OUTPUT *, MATRIX *, MATRIX *, MATRIX *, MATRIX *);
 
 void print_run(RUN *, FILE *);
 void print_grid(GRID *, FILE *);
@@ -434,6 +430,10 @@ void print_detailed_header(GRID *, FILE *);
 void print_detailed_plankton(GRID *, PLANKTON *, int);
 void print_detailed_pelagic(RUN *, GRID *, PELAGIC *, int);
 void print_detailed_benthic(GRID *, BENTHIC *, int);
+
+static int is_output_timestep(GRID *, int);
+static int output_interval(double, double);
+static void record_output(GRID *, COMMUNITY *, OUTPUT *, int);
 
 /*differencing Scheme Solver Functions*/
 void mass_solver(RUN *, GRID *, COMMUNITY *, MATRIX *, MATRIX *, double ***, double ****, double ****,
@@ -610,7 +610,7 @@ static SEXP SizeSpectrum_internals(int *run_params, double *grid_params, double 
     RUN run;
     GRID grid;
     COMMUNITY community;
-    OUTPUT out;
+    OUTPUT out = {0};
     MATRIX *pelmatrix;
     MATRIX *benmatrix = NULL;
     MATRIX xmatrix, ymatrix;
@@ -624,7 +624,7 @@ static SEXP SizeSpectrum_internals(int *run_params, double *grid_params, double 
     setup_grid(&grid, grid_params);
 
     SEXP result = R_NilValue;
-    if (run.return_memory) result = PROTECT(allocVector(VECSXP, 2)); 
+    if (run.return_memory) result = PROTECT(allocVector(VECSXP, 5));
 
     /*Setup community*/
     community.plankton = (PLANKTON *)safe_malloc(sizeof(PLANKTON), __LINE__, __FILE__);
@@ -689,8 +689,10 @@ static SEXP SizeSpectrum_internals(int *run_params, double *grid_params, double 
     setup_matrix(grid.xnum, &xmatrix);
     setup_matrix(grid.ynum, &ymatrix);
 
+    setup_output(&run, &grid, &out, result);
+
     /*Perform all finite differencing*/
-    calculate_results(&run, &grid, &community, pelmatrix, benmatrix, &xmatrix, &ymatrix);
+    calculate_results(&run, &grid, &community, &out, pelmatrix, benmatrix, &xmatrix, &ymatrix);
 
     /*Free all allocated memory*/
     free_mem(&run, &grid, &community, pelmatrix, benmatrix, &xmatrix, &ymatrix, temp_pel_params, temp_ben_params);
@@ -1750,11 +1752,131 @@ void setup_matrix(int dim, MATRIX *matrix)
     matrix->u = (double *)safe_malloc(dim * sizeof(double), __LINE__, __FILE__);
 }
 
+//--------------------------------//
+// Functions for handling outputs //
+//--------------------------------//
+
+void setup_output(RUN *run, GRID *grid, OUTPUT *out, SEXP result)
+{
+    int ts_idx, sc_idx, x_idx, y_idx, i;
+    out->next_time = 0;
+    out->nout_m = out->nout_t = out->nout_x = out->nout_y = 0;
+    if (!run->return_memory) {
+        out->m_sel = out->x_sel = out->y_sel = NULL;
+        out->t_out = out->pla_u = NULL;
+        
+        return;
+    }
+
+    // Output intervals in terms of step sizes (e.g. How many msteps are between each m output step).
+    int m_int = output_interval(grid->moutstep, grid->mstep);
+    int x_int = output_interval(grid->xoutstep, grid->xstep);
+    int y_int = output_interval(grid->youtstep, grid->ystep);
+
+    // Count the number of output steps and add the values to *_sel values
+    // (This has to be part of the loop as this is how output steps are already
+    // set up in the calculations). Loops iterate, increasing the index by the interval
+    // so only interval-indices are added
+    for (ts_idx=0; ts_idx<grid->tnum; ts_idx++) {if (is_output_timestep(grid, ts_idx)) out->nout_t++;}
+    for (sc_idx=0; sc_idx<grid->mnum-1; sc_idx += m_int) {out->nout_m++;};
+    out->nout_m++;
+    for (x_idx=0; x_idx<grid->xnum; x_idx += x_int) {out->nout_x++;}
+    for (y_idx=0; y_idx<grid->ynum; y_idx += y_int) {out->nout_y++;}
+
+    // Get all of the indices for output steps (these are internal to C - only the dimension values will be returned to R)
+    out->m_sel = (int *)R_alloc(out->nout_m, sizeof(int));
+    out->x_sel = (int *)R_alloc(out->nout_x, sizeof(int));
+    out->y_sel = (int *)R_alloc(out->nout_y, sizeof(int));
+
+    for (i=0, sc_idx=0; sc_idx<grid->mnum-1; sc_idx += m_int) {out->m_sel[i++] = sc_idx;}
+    out->m_sel[i] = grid->mnum - 1;
+    for (i=0, x_idx=0; x_idx<grid->xnum; x_idx += x_int) {out->x_sel[i++] = x_idx;}
+    for (i=0, y_idx=0; y_idx<grid->ynum; y_idx += y_int) {out->y_sel[i++] = y_idx;}
+
+    // Allocate all of the dimension outputs in R
+    SEXP t = PROTECT(allocVector(REALSXP, out->nout_t));
+    SET_VECTOR_ELT(result, 0, t);
+    out->t_out = REAL(t);
+    
+    SEXP m = PROTECT(allocVector(REALSXP, out->nout_m));
+    SEXP x = PROTECT(allocVector(REALSXP, out->nout_x));
+    SEXP y = PROTECT(allocVector(REALSXP, out->nout_y));
+
+    for (sc_idx=0; sc_idx<out->nout_m; sc_idx++) REAL(m)[sc_idx] = grid->m_values[out->m_sel[sc_idx]];
+    for (x_idx=0; x_idx<out->nout_x; x_idx++) REAL(x)[x_idx] = grid->x_values[out->x_sel[x_idx]];
+    for (y_idx=0; y_idx<out->nout_y; y_idx++) REAL(y)[y_idx] = grid->y_values[out->y_sel[y_idx]];
+    SET_VECTOR_ELT(result, 1, m);
+    SET_VECTOR_ELT(result, 2, x);
+    SET_VECTOR_ELT(result, 3, y);
+
+    // Allocate the plankton result array in R
+    SEXP pla = PROTECT(allocVector(REALSXP, (R_xlen_t)out->nout_m * out->nout_x * out->nout_y * out->nout_t));
+    SEXP dim = PROTECT(allocVector(INTSXP, 4));
+    INTEGER(dim)[0] = out->nout_m; INTEGER(dim)[1] = out->nout_x;
+    INTEGER(dim)[2] = out->nout_y; INTEGER(dim)[3] = out->nout_t;
+    setAttrib(pla, R_DimSymbol, dim);
+    SET_VECTOR_ELT(result, 4, pla);
+    out->pla_u = REAL(pla);
+
+    // Allocate the output name fields in R so that each of the 5 outputs have names
+    SEXP nms = PROTECT(allocVector(STRSXP, 5));
+    const char *n[5] = {"time", "m", "x", "y", "plankton"};
+    for (i=0; i < 5; i++) SET_STRING_ELT(nms, i, mkChar(n[i]));
+    setAttrib(result, R_NamesSymbol, nms);
+
+    UNPROTECT(7);
+}
+
+// Calculate whether the current timestep is an output step
+static int is_output_timestep(GRID *grid, int ts_idx)
+{
+    if (ts_idx == 0) return grid->toutmin == 0;
+    return (
+        grid->t_values[ts_idx] >= grid->toutmin && // Check that the current timestep is greater than toutmin
+        grid->t_values[ts_idx] <= grid->toutmax && // Check that the current step is lower than toutmax
+        ts_idx % ((int)rint(grid->toutstep / grid->tstep)) == 0 // Check that the current step is an output step
+    );
+}
+
+// Calculate the interval of model steps within an outstep. e.g. if timestep outstep
+// is 1 and the model timestep is 1/48 then the interval is 48. This function ensures
+// that outstep is a multiple of step and at least 1 model step.
+static int output_interval(double outstep, double step)
+{
+     int interval = (int)rint(outstep / step);
+    if (interval < 1)
+        error("an output step must be at least one model step");
+    return (interval);
+}
+
+static void record_output(GRID *grid, COMMUNITY *c, OUTPUT *out, int ts_idx)
+{
+    int sc_idx, x_idx, y_idx;
+    if (out->next_time >= out->nout_t) error("more output steps than allocated");
+
+    out->t_out[out->next_time] = grid->t_values[ts_idx];
+
+    for (y_idx=0; y_idx<out->nout_y; y_idx++) {
+        for (x_idx=0; x_idx<out->nout_x; x_idx++) {
+            for (sc_idx=0; sc_idx<out->nout_m; sc_idx++) {
+                out->pla_u[
+                    sc_idx + (R_xlen_t)out->nout_m * (
+                        x_idx + out->nout_x * (
+                            y_idx + (R_xlen_t)out->nout_y * out->next_time
+                        )
+                    )
+                ] = c->plankton->u_values[out->m_sel[sc_idx]][out->x_sel[x_idx]][out->y_sel[y_idx]];
+            }
+        }
+    }
+    out->next_time;
+}
+
 //-----------------------------------//
 // Output Function. Not to be edited //
 //-----------------------------------//
 
-void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, MATRIX *benmatrix,
+void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, OUTPUT *out, MATRIX *pelmatrix, MATRIX *benmatrix,
                        MATRIX *xmatrix, MATRIX *ymatrix)
 /* Sets up output txt files and implements time stepping process*/
 {
@@ -1981,6 +2103,9 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
     {
         print_timestep_plankton(grid, community->plankton, 0);
         print_plankton_summary(grid, community->plankton, 0);
+        if (run->return_memory) {
+            record_output(grid, community, out, 0);
+        }
     }
 
     /*Pelagic*/
@@ -2047,7 +2172,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
         }
         else
         {
-            if (ts_idx % ((int)rint(grid->toutstep / grid->tstep)) == 0)
+            if (is_output_timestep(grid, ts_idx))
             {
                 time1 = time2;
                 time2 = (double)clock() / CLOCKS_PER_SEC;
@@ -2181,11 +2306,8 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
         }
 
         /*Print current timestep values to files*/
-        if (grid->t_values[ts_idx] >= grid->toutmin && grid->t_values[ts_idx] <= grid->toutmax)
+        if (is_output_timestep(grid, ts_idx))
         {
-            if (ts_idx % ((int)rint(grid->toutstep / grid->tstep)) == 0)
-            {
-
                 print_timestep_plankton(grid, community->plankton, ts_idx);
                 print_plankton_summary(grid, community->plankton, ts_idx);
                 for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
@@ -2202,9 +2324,11 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
                     }
                     print_detritus_summary(grid, community->detritus, ts_idx);
                 }
+
+            if (run->return_memory) {
+                record_output(grid, community, out, ts_idx);
             }
         }
-    }
 
     /*Print final detailed timestep*/
     print_detailed_plankton(grid, community->plankton, n_t - 1);
