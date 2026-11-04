@@ -13,6 +13,7 @@
 #'   `run.in@no_benthic == 0`.
 #' @param detritus.in A [detritus.params] object. Optional when
 #'   `run.in@no_benthic == 0`.
+#' @param write.files Bool that controls whether output files are written.
 #' @param memory.returns Bool that controls whether outputs are returned in memory.
 #'   Default = TRUE. For large runs, this can be memory intensive. If this is set
 #'   to FALSE, then the filenames of outputs will be returned instead of outputs.
@@ -31,6 +32,7 @@
         pelagic.in,
         benthic.in,
         detritus.in,
+        write.files = FALSE,
         memory.return = TRUE
     ) {
         #run.in is an object of class of run.params (2 strings and 6 integers relating to the entire run process)
@@ -46,6 +48,10 @@
         #benthic.params (2 strings, 15 floats and 1 integer)
 
         #detritus.in is an object of class detritus.params (2 strings and 1 float)
+
+        if (!write.files & !memory.return) {
+            error("Either `write.files` or `memory.return` must be true to enable model outputs.")
+        }
 
         tiny <- 1e-7
 
@@ -593,7 +599,7 @@
         # Setup output params (just flags for how outputs should be produced)
         # Currently output_flags is just a memory-return flag, but later can
         # include file writing
-        output.params <- as.integer(memory.return)
+        output.params <- as.integer(c(write.files, memory.return))
 
         #-------------#
         # Call C code #
@@ -661,9 +667,16 @@
         time = results$time
     )
     dimnames(results$pelagic_u) <- pelagic_dimensions
-    dimnames(results$pelagic_mu_pred) <- pelagic_dimensions
     dimnames(results$pelagic_mu_fish) <- pelagic_dimensions
     dimnames(results$pelagic_g) <- pelagic_dimensions
+    dimnames(results$pelagic_mu_pred) <- list(
+        m = results$m,
+        x = results$x,
+        y = results$y,
+        prey = results$pelagic_species,
+        pred = results$pelagic_species,
+        time = results$time
+    )
 
     benthic_dimensions <- list(
         m = results$m,
