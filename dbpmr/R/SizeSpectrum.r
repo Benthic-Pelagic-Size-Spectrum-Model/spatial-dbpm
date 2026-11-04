@@ -665,5 +665,26 @@
     dimnames(results$pelagic_mu_fish) <- pelagic_dimensions
     dimnames(results$pelagic_g) <- pelagic_dimensions
 
+    benthic_dimensions <- list(
+        m = results$m,
+        x = results$x,
+        y = results$y,
+        species = results$benthic_species,
+        time = results$time
+    )
+    dimnames(results$benthic_u) <- benthic_dimensions
+    dimnames(results$benthic_mu_pred) <- benthic_dimensions
+    dimnames(results$benthic_mu_fish) <- benthic_dimensions
+    dimnames(results$benthic_g) <- benthic_dimensions
+
+    detritus_dimensions <- list(
+        x = results$x,
+        y = results$y,
+        time = results$time
+    )
+    dimnames(results$detritus_w) <- detritus_dimensions
+    dimnames(results$detritus_g) <- detritus_dimensions
+    dimnames(results$detritus_mu) <- detritus_dimensions
+    
     return(results)
 }
