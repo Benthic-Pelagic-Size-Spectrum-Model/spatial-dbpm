@@ -18,6 +18,7 @@ typedef struct run_info
     int spatial_dim;
     int coupled_flag; // flag for coupled info; 0-uncoupled, 1-coupled
     int diff_method;  // flag for integration method; 0-fast (poss. unstable), 1-slow (more stable)
+    int write_files;
     int return_memory;
 
     char fname_summ[40];
@@ -542,9 +543,9 @@ SEXP SizeSpectrum(SEXP run_params_r, SEXP grid_params_r, SEXP plankton_params_r,
     {
         error("plankton_params_r must have 6 elements");
     }
-    if (LENGTH(output_params_r) != 1)
+    if (LENGTH(output_params_r) != 2)
     {
-        error("output_params_r must have 1 element");
+        error("output_params_r must have 2 elements");
     }
 
     int npel = INTEGER(run_params_r)[0];
@@ -729,7 +730,8 @@ void setup_run(RUN *run, int *run_params, char *filename, int *output_params)
     run->spatial_dim = run_params[2];
     run->coupled_flag = run_params[3];
     run->diff_method = run_params[4];
-    run->return_memory = output_params[0];
+    run->write_files = output_params[0];
+    run->return_memory = output_params[1];
 
     /*Create summary output filenames*/
     snprintf(run->fname_summ, sizeof(run->fname_summ), "%s/%s.txt", run->filename, "parameters");
@@ -743,6 +745,7 @@ void setup_run(RUN *run, int *run_params, char *filename, int *output_params)
 
     /*Close ouput files*/
     fclose(run->fptr_summ);
+
 }
 
 void setup_grid(GRID *grid, double *grid_input)
@@ -871,30 +874,32 @@ void setup_plankton(RUN *run, GRID *grid, PLANKTON *plankton, double *pla_params
     plankton->initial_flag = initial_flag;
     plankton->ts_flag = ts_flag;
 
-    /*Create plankton output filenames*/
-    snprintf(plankton->fname_r, sizeof(plankton->fname_r), "%s/%s/%s.txt", run->filename, plankton->filename,
-             "results");
-    snprintf(plankton->fname_summ, sizeof(plankton->fname_summ), "%s/%s/%s.txt", run->filename, plankton->filename,
-             "summary");
+    if (run->write_files) {
+        /*Create plankton output filenames*/
+        snprintf(plankton->fname_r, sizeof(plankton->fname_r), "%s/%s/%s.txt", run->filename, plankton->filename,
+                "results");
+        snprintf(plankton->fname_summ, sizeof(plankton->fname_summ), "%s/%s/%s.txt", run->filename, plankton->filename,
+                "summary");
 
-    /*Open output files*/
-    plankton->fptr_r = safe_fopen(plankton->fname_r, "w", __LINE__, __FILE__);
-    plankton->fptr_summ = safe_fopen(plankton->fname_summ, "w", __LINE__, __FILE__);
+        /*Open output files*/
+        plankton->fptr_r = safe_fopen(plankton->fname_r, "w", __LINE__, __FILE__);
+        plankton->fptr_summ = safe_fopen(plankton->fname_summ, "w", __LINE__, __FILE__);
 
-    /*Initialise output files*/
-    fprintf(plankton->fptr_r, "filetype:      %s\n", "results");
-    fprintf(plankton->fptr_r, "speciestype:   %s\n", "plankton");
-    fprintf(plankton->fptr_r, "\n");
-    print_mass_header(grid, plankton->fptr_r);
+        /*Initialise output files*/
+        fprintf(plankton->fptr_r, "filetype:      %s\n", "results");
+        fprintf(plankton->fptr_r, "speciestype:   %s\n", "plankton");
+        fprintf(plankton->fptr_r, "\n");
+        print_mass_header(grid, plankton->fptr_r);
 
-    fprintf(plankton->fptr_summ, "filetype:      %s\n", "summary");
-    fprintf(plankton->fptr_summ, "speciestype:   %s\n", "plankton");
-    fprintf(plankton->fptr_summ, "\n");
-    print_plankton_header(plankton->fptr_summ);
+        fprintf(plankton->fptr_summ, "filetype:      %s\n", "summary");
+        fprintf(plankton->fptr_summ, "speciestype:   %s\n", "plankton");
+        fprintf(plankton->fptr_summ, "\n");
+        print_plankton_header(plankton->fptr_summ);
 
-    /*Close ouput files*/
-    fclose(plankton->fptr_r);
-    fclose(plankton->fptr_summ);
+        /*Close ouput files*/
+        fclose(plankton->fptr_r);
+        fclose(plankton->fptr_summ);
+    }
 
     /*Setup And Initialise Plankton Abundance Arrays*/
     int sc_idx, x_idx, y_idx;
@@ -1069,78 +1074,80 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
     int pel_species_idx, n_pel_species;
     n_pel_species = run->no_pelagic;
 
-    /*Create species output filenames*/
-    snprintf(pelagic->fname_r, sizeof(pelagic->fname_r), "%s/%s/%s.txt", run->filename, pelagic->filename, "results");
-    snprintf(pelagic->fname_g, sizeof(pelagic->fname_g), "%s/%s/%s.txt", run->filename, pelagic->filename, "growth");
-    snprintf(pelagic->fname_m, sizeof(pelagic->fname_m), "%s/%s/%s.txt", run->filename, pelagic->filename, "mortality");
-    pelagic->fname_pred = (char **)safe_malloc(n_pel_species * sizeof(char *), __LINE__, __FILE__);
-    for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
-    {
-        pelagic->fname_pred[pel_species_idx] = (char *)safe_malloc(40 * sizeof(char), __LINE__, __FILE__);
-        snprintf(pelagic->fname_pred[pel_species_idx], 40, "%s/%s/%s%d.txt", run->filename, pelagic->filename,
-                 "predation", pel_species_idx);
+    if (run->write_files) {
+        /*Create species output filenames*/
+        snprintf(pelagic->fname_r, sizeof(pelagic->fname_r), "%s/%s/%s.txt", run->filename, pelagic->filename, "results");
+        snprintf(pelagic->fname_g, sizeof(pelagic->fname_g), "%s/%s/%s.txt", run->filename, pelagic->filename, "growth");
+        snprintf(pelagic->fname_m, sizeof(pelagic->fname_m), "%s/%s/%s.txt", run->filename, pelagic->filename, "mortality");
+        pelagic->fname_pred = (char **)safe_malloc(n_pel_species * sizeof(char *), __LINE__, __FILE__);
+        for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
+        {
+            pelagic->fname_pred[pel_species_idx] = (char *)safe_malloc(40 * sizeof(char), __LINE__, __FILE__);
+            snprintf(pelagic->fname_pred[pel_species_idx], 40, "%s/%s/%s%d.txt", run->filename, pelagic->filename,
+                    "predation", pel_species_idx);
+        }
+        snprintf(pelagic->fname_fish, sizeof(pelagic->fname_fish), "%s/%s/%s.txt", run->filename, pelagic->filename,
+                "fishing");
+        snprintf(pelagic->fname_summ, sizeof(pelagic->fname_summ), "%s/%s/%s.txt", run->filename, pelagic->filename,
+                "summary");
+
+        /*Open output files*/
+        pelagic->fptr_r = safe_fopen(pelagic->fname_r, "w", __LINE__, __FILE__);
+        pelagic->fptr_g = safe_fopen(pelagic->fname_g, "w", __LINE__, __FILE__);
+        pelagic->fptr_m = safe_fopen(pelagic->fname_m, "w", __LINE__, __FILE__);
+        pelagic->fptr_pred = (FILE **)safe_malloc(n_pel_species * sizeof(FILE *), __LINE__, __FILE__);
+        for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
+        {
+            pelagic->fptr_pred[pel_species_idx] = safe_fopen(pelagic->fname_pred[pel_species_idx], "w", __LINE__, __FILE__);
+        }
+        pelagic->fptr_fish = safe_fopen(pelagic->fname_fish, "w", __LINE__, __FILE__);
+        pelagic->fptr_summ = safe_fopen(pelagic->fname_summ, "w", __LINE__, __FILE__);
+
+        /*Initialise output files*/
+        fprintf(pelagic->fptr_r, "filetype:      %s\n", "results");
+        fprintf(pelagic->fptr_r, "speciestype:   %s\n", "pelagic");
+        fprintf(pelagic->fptr_r, "\n");
+        print_mass_header(grid, pelagic->fptr_r);
+
+        fprintf(pelagic->fptr_g, "filetype:      %s\n", "growth");
+        fprintf(pelagic->fptr_g, "speciestype:   %s\n", "pelagic");
+        fprintf(pelagic->fptr_g, "\n");
+        print_mass_header(grid, pelagic->fptr_g);
+
+        fprintf(pelagic->fptr_m, "filetype:      %s\n", "mortality");
+        fprintf(pelagic->fptr_m, "speciestype:   %s\n", "pelagic");
+        fprintf(pelagic->fptr_m, "\n");
+        print_mass_header(grid, pelagic->fptr_m);
+
+        for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
+        {
+            fprintf(pelagic->fptr_pred[pel_species_idx], "filetype:      %s\n", "predation");
+            fprintf(pelagic->fptr_pred[pel_species_idx], "speciestype:   %s\n", "pelagic");
+            fprintf(pelagic->fptr_pred[pel_species_idx], "\n");
+            print_mass_header(grid, pelagic->fptr_pred[pel_species_idx]);
+        }
+
+        fprintf(pelagic->fptr_fish, "filetype:      %s\n", "fishing");
+        fprintf(pelagic->fptr_fish, "speciestype:   %s\n", "pelagic");
+        fprintf(pelagic->fptr_fish, "\n");
+        print_mass_header(grid, pelagic->fptr_fish);
+
+        fprintf(pelagic->fptr_summ, "filetype:      %s\n", "summary");
+        fprintf(pelagic->fptr_summ, "speciestype:   %s\n", "pelagic");
+        fprintf(pelagic->fptr_summ, "\n");
+        print_pelagic_header(pelagic->fptr_summ);
+
+        /*Close output files*/
+        fclose(pelagic->fptr_r);
+        fclose(pelagic->fptr_g);
+        fclose(pelagic->fptr_m);
+        for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
+        {
+            fclose(pelagic->fptr_pred[pel_species_idx]);
+        }
+        fclose(pelagic->fptr_fish);
+        fclose(pelagic->fptr_summ);
     }
-    snprintf(pelagic->fname_fish, sizeof(pelagic->fname_fish), "%s/%s/%s.txt", run->filename, pelagic->filename,
-             "fishing");
-    snprintf(pelagic->fname_summ, sizeof(pelagic->fname_summ), "%s/%s/%s.txt", run->filename, pelagic->filename,
-             "summary");
-
-    /*Open output files*/
-    pelagic->fptr_r = safe_fopen(pelagic->fname_r, "w", __LINE__, __FILE__);
-    pelagic->fptr_g = safe_fopen(pelagic->fname_g, "w", __LINE__, __FILE__);
-    pelagic->fptr_m = safe_fopen(pelagic->fname_m, "w", __LINE__, __FILE__);
-    pelagic->fptr_pred = (FILE **)safe_malloc(n_pel_species * sizeof(FILE *), __LINE__, __FILE__);
-    for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
-    {
-        pelagic->fptr_pred[pel_species_idx] = safe_fopen(pelagic->fname_pred[pel_species_idx], "w", __LINE__, __FILE__);
-    }
-    pelagic->fptr_fish = safe_fopen(pelagic->fname_fish, "w", __LINE__, __FILE__);
-    pelagic->fptr_summ = safe_fopen(pelagic->fname_summ, "w", __LINE__, __FILE__);
-
-    /*Initialise output files*/
-    fprintf(pelagic->fptr_r, "filetype:      %s\n", "results");
-    fprintf(pelagic->fptr_r, "speciestype:   %s\n", "pelagic");
-    fprintf(pelagic->fptr_r, "\n");
-    print_mass_header(grid, pelagic->fptr_r);
-
-    fprintf(pelagic->fptr_g, "filetype:      %s\n", "growth");
-    fprintf(pelagic->fptr_g, "speciestype:   %s\n", "pelagic");
-    fprintf(pelagic->fptr_g, "\n");
-    print_mass_header(grid, pelagic->fptr_g);
-
-    fprintf(pelagic->fptr_m, "filetype:      %s\n", "mortality");
-    fprintf(pelagic->fptr_m, "speciestype:   %s\n", "pelagic");
-    fprintf(pelagic->fptr_m, "\n");
-    print_mass_header(grid, pelagic->fptr_m);
-
-    for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
-    {
-        fprintf(pelagic->fptr_pred[pel_species_idx], "filetype:      %s\n", "predation");
-        fprintf(pelagic->fptr_pred[pel_species_idx], "speciestype:   %s\n", "pelagic");
-        fprintf(pelagic->fptr_pred[pel_species_idx], "\n");
-        print_mass_header(grid, pelagic->fptr_pred[pel_species_idx]);
-    }
-
-    fprintf(pelagic->fptr_fish, "filetype:      %s\n", "fishing");
-    fprintf(pelagic->fptr_fish, "speciestype:   %s\n", "pelagic");
-    fprintf(pelagic->fptr_fish, "\n");
-    print_mass_header(grid, pelagic->fptr_fish);
-
-    fprintf(pelagic->fptr_summ, "filetype:      %s\n", "summary");
-    fprintf(pelagic->fptr_summ, "speciestype:   %s\n", "pelagic");
-    fprintf(pelagic->fptr_summ, "\n");
-    print_pelagic_header(pelagic->fptr_summ);
-
-    /*Close output files*/
-    fclose(pelagic->fptr_r);
-    fclose(pelagic->fptr_g);
-    fclose(pelagic->fptr_m);
-    for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
-    {
-        fclose(pelagic->fptr_pred[pel_species_idx]);
-    }
-    fclose(pelagic->fptr_fish);
-    fclose(pelagic->fptr_summ);
 
     /*Setup Species Abundance Arrays*/
     int sc_idx, x_idx, y_idx;
@@ -1434,63 +1441,65 @@ void setup_benthic(RUN *run, GRID *grid, BENTHIC *benthic, double *ben_params, c
     benthic->ts_flag = ts_flag;
     benthic->fishing_flag = fishing_flag;
 
-    /*Create species output filenames*/
-    snprintf(benthic->fname_r, sizeof(benthic->fname_r), "%s/%s/%s.txt", run->filename, benthic->filename, "results");
-    snprintf(benthic->fname_g, sizeof(benthic->fname_g), "%s/%s/%s.txt", run->filename, benthic->filename, "growth");
-    snprintf(benthic->fname_m, sizeof(benthic->fname_m), "%s/%s/%s.txt", run->filename, benthic->filename, "mortality");
-    snprintf(benthic->fname_pred, sizeof(benthic->fname_pred), "%s/%s/%s.txt", run->filename, benthic->filename,
-             "predation");
-    snprintf(benthic->fname_fish, sizeof(benthic->fname_fish), "%s/%s/%s.txt", run->filename, benthic->filename,
-             "fishing");
-    snprintf(benthic->fname_summ, sizeof(benthic->fname_summ), "%s/%s/%s.txt", run->filename, benthic->filename,
-             "summary");
+    if (run->write_files) {
+        /*Create species output filenames*/
+        snprintf(benthic->fname_r, sizeof(benthic->fname_r), "%s/%s/%s.txt", run->filename, benthic->filename, "results");
+        snprintf(benthic->fname_g, sizeof(benthic->fname_g), "%s/%s/%s.txt", run->filename, benthic->filename, "growth");
+        snprintf(benthic->fname_m, sizeof(benthic->fname_m), "%s/%s/%s.txt", run->filename, benthic->filename, "mortality");
+        snprintf(benthic->fname_pred, sizeof(benthic->fname_pred), "%s/%s/%s.txt", run->filename, benthic->filename,
+                "predation");
+        snprintf(benthic->fname_fish, sizeof(benthic->fname_fish), "%s/%s/%s.txt", run->filename, benthic->filename,
+                "fishing");
+        snprintf(benthic->fname_summ, sizeof(benthic->fname_summ), "%s/%s/%s.txt", run->filename, benthic->filename,
+                "summary");
 
-    /*Open output files*/
-    benthic->fptr_r = safe_fopen(benthic->fname_r, "w", __LINE__, __FILE__);
-    benthic->fptr_g = safe_fopen(benthic->fname_g, "w", __LINE__, __FILE__);
-    benthic->fptr_m = safe_fopen(benthic->fname_m, "w", __LINE__, __FILE__);
-    benthic->fptr_pred = safe_fopen(benthic->fname_pred, "w", __LINE__, __FILE__);
-    benthic->fptr_fish = safe_fopen(benthic->fname_fish, "w", __LINE__, __FILE__);
-    benthic->fptr_summ = safe_fopen(benthic->fname_summ, "w", __LINE__, __FILE__);
+        /*Open output files*/
+        benthic->fptr_r = safe_fopen(benthic->fname_r, "w", __LINE__, __FILE__);
+        benthic->fptr_g = safe_fopen(benthic->fname_g, "w", __LINE__, __FILE__);
+        benthic->fptr_m = safe_fopen(benthic->fname_m, "w", __LINE__, __FILE__);
+        benthic->fptr_pred = safe_fopen(benthic->fname_pred, "w", __LINE__, __FILE__);
+        benthic->fptr_fish = safe_fopen(benthic->fname_fish, "w", __LINE__, __FILE__);
+        benthic->fptr_summ = safe_fopen(benthic->fname_summ, "w", __LINE__, __FILE__);
 
-    /*Initialise output files*/
-    fprintf(benthic->fptr_r, "filetype:      %s\n", "results");
-    fprintf(benthic->fptr_r, "speciestype:   %s\n", "benthic");
-    fprintf(benthic->fptr_r, "\n");
-    print_mass_header(grid, benthic->fptr_r);
+        /*Initialise output files*/
+        fprintf(benthic->fptr_r, "filetype:      %s\n", "results");
+        fprintf(benthic->fptr_r, "speciestype:   %s\n", "benthic");
+        fprintf(benthic->fptr_r, "\n");
+        print_mass_header(grid, benthic->fptr_r);
 
-    fprintf(benthic->fptr_g, "filetype:      %s\n", "growth");
-    fprintf(benthic->fptr_g, "speciestype:   %s\n", "benthic");
-    fprintf(benthic->fptr_g, "\n");
-    print_mass_header(grid, benthic->fptr_g);
+        fprintf(benthic->fptr_g, "filetype:      %s\n", "growth");
+        fprintf(benthic->fptr_g, "speciestype:   %s\n", "benthic");
+        fprintf(benthic->fptr_g, "\n");
+        print_mass_header(grid, benthic->fptr_g);
 
-    fprintf(benthic->fptr_m, "filetype:      %s\n", "mortality");
-    fprintf(benthic->fptr_m, "speciestype:   %s\n", "benthic");
-    fprintf(benthic->fptr_m, "\n");
-    print_mass_header(grid, benthic->fptr_m);
+        fprintf(benthic->fptr_m, "filetype:      %s\n", "mortality");
+        fprintf(benthic->fptr_m, "speciestype:   %s\n", "benthic");
+        fprintf(benthic->fptr_m, "\n");
+        print_mass_header(grid, benthic->fptr_m);
 
-    fprintf(benthic->fptr_pred, "filetype:      %s\n", "predation");
-    fprintf(benthic->fptr_pred, "speciestype:   %s\n", "benthic");
-    fprintf(benthic->fptr_pred, "\n");
-    print_mass_header(grid, benthic->fptr_pred);
+        fprintf(benthic->fptr_pred, "filetype:      %s\n", "predation");
+        fprintf(benthic->fptr_pred, "speciestype:   %s\n", "benthic");
+        fprintf(benthic->fptr_pred, "\n");
+        print_mass_header(grid, benthic->fptr_pred);
 
-    fprintf(benthic->fptr_fish, "filetype:      %s\n", "fishing");
-    fprintf(benthic->fptr_fish, "speciestype:   %s\n", "benthic");
-    fprintf(benthic->fptr_fish, "\n");
-    print_mass_header(grid, benthic->fptr_fish);
+        fprintf(benthic->fptr_fish, "filetype:      %s\n", "fishing");
+        fprintf(benthic->fptr_fish, "speciestype:   %s\n", "benthic");
+        fprintf(benthic->fptr_fish, "\n");
+        print_mass_header(grid, benthic->fptr_fish);
 
-    fprintf(benthic->fptr_summ, "filetype:      %s\n", "summary");
-    fprintf(benthic->fptr_summ, "speciestype:   %s\n", "benthic");
-    fprintf(benthic->fptr_summ, "\n");
-    print_benthic_header(benthic->fptr_summ);
+        fprintf(benthic->fptr_summ, "filetype:      %s\n", "summary");
+        fprintf(benthic->fptr_summ, "speciestype:   %s\n", "benthic");
+        fprintf(benthic->fptr_summ, "\n");
+        print_benthic_header(benthic->fptr_summ);
 
-    /*Close output files*/
-    fclose(benthic->fptr_r);
-    fclose(benthic->fptr_g);
-    fclose(benthic->fptr_m);
-    fclose(benthic->fptr_pred);
-    fclose(benthic->fptr_fish);
-    fclose(benthic->fptr_summ);
+        /*Close output files*/
+        fclose(benthic->fptr_r);
+        fclose(benthic->fptr_g);
+        fclose(benthic->fptr_m);
+        fclose(benthic->fptr_pred);
+        fclose(benthic->fptr_fish);
+        fclose(benthic->fptr_summ);
+    }
 
     /*Setup Species Abundance Arrays*/
     int sc_idx, x_idx, y_idx;
@@ -1668,20 +1677,22 @@ void setup_detritus(RUN *run, GRID *grid, DETRITUS *detritus, double *det_params
     detritus->initial_flag = initial_flag;
     detritus->ts_flag = ts_flag;
 
-    /*Create detritus output filenames*/
-    snprintf(detritus->fname_summ, sizeof(detritus->fname_summ), "%s/%s/%s.txt", run->filename, detritus->filename,
-             "summary");
+    if (run->write_files) {
+        /*Create detritus output filenames*/
+        snprintf(detritus->fname_summ, sizeof(detritus->fname_summ), "%s/%s/%s.txt", run->filename, detritus->filename,
+                "summary");
 
-    /*Open output files*/
-    detritus->fptr_summ = safe_fopen(detritus->fname_summ, "w", __LINE__, __FILE__);
+        /*Open output files*/
+        detritus->fptr_summ = safe_fopen(detritus->fname_summ, "w", __LINE__, __FILE__);
 
-    fprintf(detritus->fptr_summ, "filetype:      %s\n", "summary");
-    fprintf(detritus->fptr_summ, "speciestype:   %s\n", "detritus");
-    fprintf(detritus->fptr_summ, "\n");
-    print_detritus_header(detritus->fptr_summ);
+        fprintf(detritus->fptr_summ, "filetype:      %s\n", "summary");
+        fprintf(detritus->fptr_summ, "speciestype:   %s\n", "detritus");
+        fprintf(detritus->fptr_summ, "\n");
+        print_detritus_header(detritus->fptr_summ);
 
-    /*Close output files*/
-    fclose(detritus->fptr_summ);
+        /*Close output files*/
+        fclose(detritus->fptr_summ);
+    }
 
     /*Setup And Initialise detritus Abundance Arrays*/
     int x_idx, y_idx;
@@ -1855,8 +1866,13 @@ void setup_output(RUN *run, GRID *grid, OUTPUT *out, SEXP result)
     out->pel_u = REAL(pel_u);
 
     // Allocate the pelagic mortality (predation) array in R (pel_mu_pred)
-    SEXP pel_mu_pred = PROTECT(allocVector(REALSXP, (R_xlen_t)out->nout_m * out->nout_x * out->nout_y * run->no_pelagic * out->nout_t));
-    setAttrib(pel_mu_pred, R_DimSymbol, pel_dim);
+    // Predation mortality requires specific dimensions for prey and predator species combinations
+    SEXP pel_pred_dim = PROTECT(allocVector(INTSXP, 6));
+    INTEGER(pel_pred_dim)[0] = out->nout_m; INTEGER(pel_pred_dim)[1] = out->nout_x; INTEGER(pel_pred_dim)[2] = out->nout_y;
+    INTEGER(pel_pred_dim)[3] = run->no_pelagic; INTEGER(pel_pred_dim)[4] = run->no_pelagic; INTEGER(pel_pred_dim)[5] = out->nout_t;
+
+    SEXP pel_mu_pred = PROTECT(allocVector(REALSXP, (R_xlen_t)out->nout_m * out->nout_x * out->nout_y * run->no_pelagic * run->no_pelagic * out->nout_t));
+    setAttrib(pel_mu_pred, R_DimSymbol, pel_pred_dim);
     SET_VECTOR_ELT(result, 8, pel_mu_pred);
     out->pel_mu_pred = REAL(pel_mu_pred);
 
@@ -1952,7 +1968,7 @@ void setup_output(RUN *run, GRID *grid, OUTPUT *out, SEXP result)
     for (i=0; i < 18; i++) SET_STRING_ELT(nms, i, mkChar(n[i]));
     setAttrib(result, R_NamesSymbol, nms);
 
-    UNPROTECT(23);
+    UNPROTECT(24);
 }
 
 // Calculate whether the current timestep is an output step
@@ -1980,7 +1996,7 @@ static int output_interval(double outstep, double step)
 static void record_output(RUN *run, GRID *grid, COMMUNITY *c, OUTPUT *out, int ts_idx)
 {
     int sc_idx, x_idx, y_idx;
-    int pel_species_idx, ben_species_idx;
+    int pred_idx, pel_species_idx, ben_species_idx;
     if (out->next_time >= out->nout_t) error("more output steps than allocated");
 
     out->t_out[out->next_time] = grid->t_values[ts_idx];
@@ -2008,41 +2024,36 @@ static void record_output(RUN *run, GRID *grid, COMMUNITY *c, OUTPUT *out, int t
                     out->pel_u[
                         sc_idx + (R_xlen_t)out->nout_m * (
                             x_idx + out->nout_x * (
-                                y_idx + (R_xlen_t)out->nout_y * out->next_time
-                            ) * (
-                                pel_species_idx + run->no_pelagic
-                            )
-                        )
+                                y_idx + (R_xlen_t)out->nout_y * (
+                                pel_species_idx + run->no_pelagic * out->next_time
+                            )))
                     ] = c->pelagic[pel_species_idx].u_values[out->m_sel[sc_idx]][out->x_sel[x_idx]][out->y_sel[y_idx]];
 
-                    out->pel_mu_pred[
-                        sc_idx + (R_xlen_t)out->nout_m * (
-                            x_idx + out->nout_x * (
-                                y_idx + (R_xlen_t)out->nout_y * out->next_time
-                            ) * (
-                                pel_species_idx + run->no_pelagic
-                            )
-                        )
-                    ] = c->pelagic->mu_pred_values[pel_species_idx][out->m_sel[sc_idx]][out->x_sel[x_idx]][out->y_sel[y_idx]];
+                    for (pred_idx=0; pred_idx<run->no_pelagic; pred_idx++) {
+                        out->pel_mu_pred[
+                            sc_idx + (R_xlen_t)out->nout_m * (
+                                x_idx + out->nout_x * (
+                                    y_idx + (R_xlen_t)out->nout_y * (
+                                    pel_species_idx + (R_xlen_t)run->no_pelagic * (
+                                        pred_idx + (R_xlen_t)run->no_pelagic * out->next_time
+                                    ))))
+                        ] = c->pelagic[pel_species_idx].mu_pred_values[pred_idx][out->m_sel[sc_idx]][out->x_sel[x_idx]][out->y_sel[y_idx]];
+                    }
 
                     out->pel_mu_fish[
                         sc_idx + (R_xlen_t)out->nout_m * (
                             x_idx + out->nout_x * (
-                                y_idx + (R_xlen_t)out->nout_y * out->next_time
-                            ) * (
-                                pel_species_idx + run->no_pelagic
-                            )
-                        )
+                                y_idx + (R_xlen_t)out->nout_y * (
+                                pel_species_idx + run->no_pelagic * out->next_time
+                            )))
                     ] = c->pelagic[pel_species_idx].mu_fish_values[out->m_sel[sc_idx]][out->x_sel[x_idx]][out->y_sel[y_idx]];
 
                     out->pel_g[
                         sc_idx + (R_xlen_t)out->nout_m * (
                             x_idx + out->nout_x * (
-                                y_idx + (R_xlen_t)out->nout_y * out->next_time
-                            ) * (
-                                pel_species_idx + run->no_pelagic
-                            )
-                        )
+                                y_idx + (R_xlen_t)out->nout_y * (
+                                pel_species_idx + run->no_pelagic * out->next_time
+                            )))
                     ] = c->pelagic[pel_species_idx].g_values[out->m_sel[sc_idx]][out->x_sel[x_idx]][out->y_sel[y_idx]];
                 }
             }
@@ -2057,41 +2068,33 @@ static void record_output(RUN *run, GRID *grid, COMMUNITY *c, OUTPUT *out, int t
                     out->ben_u[
                         sc_idx + (R_xlen_t)out->nout_m * (
                             x_idx + out->nout_x * (
-                                y_idx + (R_xlen_t)out->nout_y * out->next_time
-                            ) * (
-                                ben_species_idx + run->no_benthic
-                            )
-                        )
+                                y_idx + (R_xlen_t)out->nout_y * (
+                                ben_species_idx + run->no_benthic * out->next_time
+                            )))
                     ] = c->benthic[ben_species_idx].u_values[out->m_sel[sc_idx]][out->x_sel[x_idx]][out->y_sel[y_idx]];
 
                     out->ben_mu_pred[
                         sc_idx + (R_xlen_t)out->nout_m * (
                             x_idx + out->nout_x * (
-                                y_idx + (R_xlen_t)out->nout_y * out->next_time
-                            ) * (
-                                ben_species_idx + run->no_benthic
-                            )
-                        )
+                                y_idx + (R_xlen_t)out->nout_y * (
+                                ben_species_idx + run->no_benthic * out->next_time
+                            )))
                     ] = c->benthic[ben_species_idx].mu_pred_values[out->m_sel[sc_idx]][out->x_sel[x_idx]][out->y_sel[y_idx]];
 
                     out->ben_mu_fish[
                         sc_idx + (R_xlen_t)out->nout_m * (
                             x_idx + out->nout_x * (
-                                y_idx + (R_xlen_t)out->nout_y * out->next_time
-                            ) * (
-                                ben_species_idx + run->no_benthic
-                            )
-                        )
+                                y_idx + (R_xlen_t)out->nout_y * (
+                                ben_species_idx + run->no_benthic * out->next_time
+                            )))
                     ] = c->benthic[ben_species_idx].mu_fish_values[out->m_sel[sc_idx]][out->x_sel[x_idx]][out->y_sel[y_idx]];
 
                     out->ben_g[
                         sc_idx + (R_xlen_t)out->nout_m * (
                             x_idx + out->nout_x * (
-                                y_idx + (R_xlen_t)out->nout_y * out->next_time
-                            ) * (
-                                ben_species_idx + run->no_benthic
-                            )
-                        )
+                                y_idx + (R_xlen_t)out->nout_y * (
+                                ben_species_idx + run->no_benthic * out->next_time
+                            )))
                     ] = c->benthic[ben_species_idx].g_values[out->m_sel[sc_idx]][out->x_sel[x_idx]][out->y_sel[y_idx]];
                 }
             }
@@ -2359,40 +2362,32 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, OUTPUT *out, 
 
     /*Print run info and starting output values*/
     /*plankton*/
-    if (grid->toutmin == 0)
-    {
-        print_timestep_plankton(grid, community->plankton, 0);
-        print_plankton_summary(grid, community->plankton, 0);
-        if (run->return_memory) {
-            record_output(run, grid, community, out, 0);
-        }
-    }
-
-    /*Pelagic*/
-    for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
-    {
+    if (grid->toutmin == 0 && run->return_memory) {record_output(run, grid, community, out, 0);}
+    
+    if (run->write_files) {
         if (grid->toutmin == 0)
         {
-            print_timestep_pelagic(run, grid, &(community->pelagic[pel_species_idx]), 0);
-            print_pelagic_summary(grid, &(community->pelagic[pel_species_idx]), 0);
-        }
-    }
+                print_timestep_plankton(grid, community->plankton, 0);
+                print_plankton_summary(grid, community->plankton, 0);
 
-    if (run->no_benthic != 0)
-    {
-        /*Benthic*/
-        for (ben_species_idx = 0; ben_species_idx < n_ben_species; ben_species_idx++)
-        {
-            if (grid->toutmin == 0)
+            /*Pelagic*/
+            for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
             {
-                print_timestep_benthic(grid, &(community->benthic[ben_species_idx]), 0);
-                print_benthic_summary(grid, &(community->benthic[ben_species_idx]), 0);
+                    print_timestep_pelagic(run, grid, &(community->pelagic[pel_species_idx]), 0);
+                    print_pelagic_summary(grid, &(community->pelagic[pel_species_idx]), 0);
             }
-        }
-        /*Detritus*/
-        if (grid->toutmin == 0)
-        {
-            print_detritus_summary(grid, community->detritus, 0);
+
+            if (run->no_benthic != 0)
+            {
+                /*Benthic*/
+                for (ben_species_idx = 0; ben_species_idx < n_ben_species; ben_species_idx++)
+                {
+                        print_timestep_benthic(grid, &(community->benthic[ben_species_idx]), 0);
+                        print_benthic_summary(grid, &(community->benthic[ben_species_idx]), 0);
+                }
+                /*Detritus*/
+                    print_detritus_summary(grid, community->detritus, 0);
+            }
         }
     }
 
@@ -2568,6 +2563,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, OUTPUT *out, 
         /*Print current timestep values to files*/
         if (is_output_timestep(grid, ts_idx))
         {
+            if (run->write_files) {
                 print_timestep_plankton(grid, community->plankton, ts_idx);
                 print_plankton_summary(grid, community->plankton, ts_idx);
                 for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
@@ -2584,23 +2580,26 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, OUTPUT *out, 
                     }
                     print_detritus_summary(grid, community->detritus, ts_idx);
                 }
+            }
 
             if (run->return_memory) {
                 record_output(run, grid, community, out, ts_idx);
             }
         }
     }
-    /*Print final detailed timestep*/
-    print_detailed_plankton(grid, community->plankton, n_t - 1);
-    for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
-    {
-        print_detailed_pelagic(run, grid, &(community->pelagic[pel_species_idx]), n_t - 1);
-    }
-    if (run->no_benthic != 0)
-    {
-        for (ben_species_idx = 0; ben_species_idx < n_ben_species; ben_species_idx++)
+    if (run->write_files) {
+        /*Print final detailed timestep*/
+        print_detailed_plankton(grid, community->plankton, n_t - 1);
+        for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
         {
-            print_detailed_benthic(grid, &(community->benthic[ben_species_idx]), n_t - 1);
+            print_detailed_pelagic(run, grid, &(community->pelagic[pel_species_idx]), n_t - 1);
+        }
+        if (run->no_benthic != 0)
+        {
+            for (ben_species_idx = 0; ben_species_idx < n_ben_species; ben_species_idx++)
+            {
+                print_detailed_benthic(grid, &(community->benthic[ben_species_idx]), n_t - 1);
+            }
         }
     }
 
@@ -5397,8 +5396,10 @@ void free_mem(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, MAT
         free(community->pelagic[pel_species_idx].refuge_values);
         free(temp_pel_params[pel_species_idx]);
 
-        free(community->pelagic[pel_species_idx].fname_pred);
-        free(community->pelagic[pel_species_idx].fptr_pred);
+        if (run->write_files) {
+                free(community->pelagic[pel_species_idx].fname_pred);
+            free(community->pelagic[pel_species_idx].fptr_pred);
+        }
     }
     free(temp_pel_params);
 
