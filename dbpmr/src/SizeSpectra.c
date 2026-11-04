@@ -1869,7 +1869,7 @@ static void record_output(GRID *grid, COMMUNITY *c, OUTPUT *out, int ts_idx)
             }
         }
     }
-    out->next_time;
+    out->next_time++;
 }
 
 //-----------------------------------//
@@ -2329,7 +2329,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, OUTPUT *out, 
                 record_output(grid, community, out, ts_idx);
             }
         }
-
+    }
     /*Print final detailed timestep*/
     print_detailed_plankton(grid, community->plankton, n_t - 1);
     for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)

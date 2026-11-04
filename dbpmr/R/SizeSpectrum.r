@@ -13,8 +13,6 @@
 #'   `run.in@no_benthic == 0`.
 #' @param detritus.in A [detritus.params] object. Optional when
 #'   `run.in@no_benthic == 0`.
-#' @param write.files Bool that controls whether output files are written.
-#'   Default = TRUE.
 #' @param memory.returns Bool that controls whether outputs are returned in memory.
 #'   Default = TRUE. For large runs, this can be memory intensive.
 #'
@@ -30,7 +28,6 @@
         pelagic.in,
         benthic.in,
         detritus.in,
-        write.files = TRUE,
         memory.return = TRUE
     ) {
         #run.in is an object of class of run.params (2 strings and 6 integers relating to the entire run process)
@@ -46,13 +43,6 @@
         #benthic.params (2 strings, 15 floats and 1 integer)
 
         #detritus.in is an object of class detritus.params (2 strings and 1 float)
-
-        if (!write.files) & (!memory.return) {
-            stop(
-                "Either write.files or memory.return must be TRUE to receive
-                model outputs"
-            )
-        }
 
         tiny <- 1e-7
 
@@ -597,15 +587,17 @@
             }
         }
 
-        # Setup output params (just flags for how outputs should be written)
-        output.params <- as.integer(write.files, memory.return)
+        # Setup output params (just flags for how outputs should be produced)
+        # Currently output_flags is just a memory-return flag, but later can
+        # include file writing
+        output.params <- as.integer(memory.return)
 
         #-------------#
         # Call C code #
         #-------------#
 
         x <- .Call(
-            C_SizeSpectrum,
+            dbpmr:::C_SizeSpectrum,
             as.integer(run.params),
             as.double(grid.params),
             as.double(pla.params),
