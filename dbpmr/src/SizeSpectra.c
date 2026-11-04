@@ -384,9 +384,9 @@ typedef struct output_info {
     double *pla_u; // Holder of plankton density output values (size of nout_m, nout_x, nout_y, nout_t)
     
     double *pel_u; // Holder of pelagic density output values (size of nout_m, nout_x, nout_y, n_pel_species, nout_t)
-    // double *pel_mu_pred; // Holder of pelagic mortality (from predation) values (size of nout_m, nout_x, nout_y, n_pel_species, nout_t)
-    // double *pel_mu_fish; // Holder of pelagic mortality (from fishing) values (size of nout_m, nout_x, nout_y, n_pel_species, nout_t)
-    // double *pel_g; // Holder of pelagic growth rate values (size of nout_m, nout_x, nout_y, n_pel_species, nout_t)
+    double *pel_mu_pred; // Holder of pelagic mortality (from predation) values (size of nout_m, nout_x, nout_y, n_pel_species, nout_t)
+    double *pel_mu_fish; // Holder of pelagic mortality (from fishing) values (size of nout_m, nout_x, nout_y, n_pel_species, nout_t)
+    double *pel_g; // Holder of pelagic growth rate values (size of nout_m, nout_x, nout_y, n_pel_species, nout_t)
     
     // double *ben_u; // Holder of pelagic density output values (size of nout_m, nout_x, nout_y, n_ben_species, nout_t)
     // double *ben_mu_pred; // Holder of benthic mortality (from predation) values (size of nout_m, nout_x, nout_y, n_ben_species, nout_t)
@@ -638,7 +638,7 @@ static SEXP SizeSpectrum_internals(int *run_params, double *grid_params, double 
     setup_grid(&grid, grid_params);
 
     SEXP result = R_NilValue;
-    if (run.return_memory) result = PROTECT(allocVector(VECSXP, 8));
+    if (run.return_memory) result = PROTECT(allocVector(VECSXP, 11));
 
     /*Setup community*/
     community.plankton = (PLANKTON *)safe_malloc(sizeof(PLANKTON), __LINE__, __FILE__);
@@ -1840,23 +1840,55 @@ void setup_output(RUN *run, GRID *grid, OUTPUT *out, SEXP result)
     SET_VECTOR_ELT(result, 6, pla);
     out->pla_u = REAL(pla);
 
-    // Allocate the pelagic mass density array in R (pel_u)
-    SEXP pel_u = PROTECT(allocVector(REALSXP, (R_xlen_t)out->nout_m * out->nout_x * out->nout_y * run->no_pelagic * out->nout_t));
+    // Allocate pelagic species array dimensions (once for the group)
     SEXP pel_dim = PROTECT(allocVector(INTSXP, 5));
     INTEGER(pel_dim)[0] = out->nout_m; INTEGER(pel_dim)[1] = out->nout_x;
     INTEGER(pel_dim)[2] = out->nout_y; INTEGER(pel_dim)[3] = run->no_pelagic; INTEGER(pel_dim)[4] = out->nout_t;
+
+    // Allocate the pelagic mass density array in R (pel_u)
+    SEXP pel_u = PROTECT(allocVector(REALSXP, (R_xlen_t)out->nout_m * out->nout_x * out->nout_y * run->no_pelagic * out->nout_t));
     setAttrib(pel_u, R_DimSymbol, pel_dim);
     SET_VECTOR_ELT(result, 7, pel_u);
     out->pel_u = REAL(pel_u);
 
+    // Allocate the pelagic mortality (predation) array in R (pel_mu_pred)
+    SEXP pel_mu_pred = PROTECT(allocVector(REALSXP, (R_xlen_t)out->nout_m * out->nout_x * out->nout_y * run->no_pelagic * out->nout_t));
+    setAttrib(pel_mu_pred, R_DimSymbol, pel_dim);
+    SET_VECTOR_ELT(result, 8, pel_mu_pred);
+    out->pel_mu_pred = REAL(pel_mu_pred);
+
+    // Allocate the pelagic mortality (fishing) array in R (pel_mu_fish)
+    SEXP pel_mu_fish = PROTECT(allocVector(REALSXP, (R_xlen_t)out->nout_m * out->nout_x * out->nout_y * run->no_pelagic * out->nout_t));
+    setAttrib(pel_mu_fish, R_DimSymbol, pel_dim);
+    SET_VECTOR_ELT(result, 9, pel_mu_fish);
+    out->pel_mu_fish = REAL(pel_mu_fish);
+
+    // Allocate the pelagic growth rate array in R (pel_g)
+    SEXP pel_g = PROTECT(allocVector(REALSXP, (R_xlen_t)out->nout_m * out->nout_x * out->nout_y * run->no_pelagic * out->nout_t));
+    setAttrib(pel_g, R_DimSymbol, pel_dim);
+    SET_VECTOR_ELT(result, 10, pel_g);
+    out->pel_g = REAL(pel_g);
+
     // Allocate the output name fields in R so that each of the outputs have names
     // This chunk uses C indexing (i.e. above^ + 1).
-    SEXP nms = PROTECT(allocVector(STRSXP, 8));
-    const char *n[8] = {"time", "m", "x", "y", "pelagic_species", "benthic_species", "plankton_u", "pelagic_u"};
-    for (i=0; i < 8; i++) SET_STRING_ELT(nms, i, mkChar(n[i]));
+    SEXP nms = PROTECT(allocVector(STRSXP, 11));
+    const char *n[11] = {
+        "time", 
+        "m", 
+        "x", 
+        "y", 
+        "pelagic_species", 
+        "benthic_species", 
+        "plankton_u", 
+        "pelagic_u", 
+        "pelagic_mu_pred",
+        "pelagic_mu_fish",
+        "pelagic_g"
+    };
+    for (i=0; i < 11; i++) SET_STRING_ELT(nms, i, mkChar(n[i]));
     setAttrib(result, R_NamesSymbol, nms);
 
-    UNPROTECT(11);
+    UNPROTECT(14);
 }
 
 // Calculate whether the current timestep is an output step
@@ -1904,23 +1936,53 @@ static void record_output(RUN *run, GRID *grid, COMMUNITY *c, OUTPUT *out, int t
     }
 
     
-        for (y_idx=0; y_idx<out->nout_y; y_idx++) {
-            for (x_idx=0; x_idx<out->nout_x; x_idx++) {
-                for (sc_idx=0; sc_idx<out->nout_m; sc_idx++) {
-                    for (pel_species_idx=0; pel_species_idx<run->no_pelagic; pel_species_idx++) {
-                        out->pel_u[
-                            sc_idx + (R_xlen_t)out->nout_m * (
-                                x_idx + out->nout_x * (
-                                    y_idx + (R_xlen_t)out->nout_y * out->next_time
-                                ) * (
-                                    pel_species_idx + run->no_pelagic
-                                )
+    for (y_idx=0; y_idx<out->nout_y; y_idx++) {
+        for (x_idx=0; x_idx<out->nout_x; x_idx++) {
+            for (sc_idx=0; sc_idx<out->nout_m; sc_idx++) {
+                for (pel_species_idx=0; pel_species_idx<run->no_pelagic; pel_species_idx++) {
+                    out->pel_u[
+                        sc_idx + (R_xlen_t)out->nout_m * (
+                            x_idx + out->nout_x * (
+                                y_idx + (R_xlen_t)out->nout_y * out->next_time
+                            ) * (
+                                pel_species_idx + run->no_pelagic
                             )
-                        ] = c->pelagic[pel_species_idx].u_values[out->m_sel[sc_idx]][out->x_sel[x_idx]][out->y_sel[y_idx]];
-                    }
+                        )
+                    ] = c->pelagic[pel_species_idx].u_values[out->m_sel[sc_idx]][out->x_sel[x_idx]][out->y_sel[y_idx]];
+
+                    out->pel_mu_pred[
+                        sc_idx + (R_xlen_t)out->nout_m * (
+                            x_idx + out->nout_x * (
+                                y_idx + (R_xlen_t)out->nout_y * out->next_time
+                            ) * (
+                                pel_species_idx + run->no_pelagic
+                            )
+                        )
+                    ] = c->pelagic->mu_pred_values[pel_species_idx][out->m_sel[sc_idx]][out->x_sel[x_idx]][out->y_sel[y_idx]];
+
+                    out->pel_mu_fish[
+                        sc_idx + (R_xlen_t)out->nout_m * (
+                            x_idx + out->nout_x * (
+                                y_idx + (R_xlen_t)out->nout_y * out->next_time
+                            ) * (
+                                pel_species_idx + run->no_pelagic
+                            )
+                        )
+                    ] = c->pelagic[pel_species_idx].mu_fish_values[out->m_sel[sc_idx]][out->x_sel[x_idx]][out->y_sel[y_idx]];
+
+                    out->pel_g[
+                        sc_idx + (R_xlen_t)out->nout_m * (
+                            x_idx + out->nout_x * (
+                                y_idx + (R_xlen_t)out->nout_y * out->next_time
+                            ) * (
+                                pel_species_idx + run->no_pelagic
+                            )
+                        )
+                    ] = c->pelagic[pel_species_idx].g_values[out->m_sel[sc_idx]][out->x_sel[x_idx]][out->y_sel[y_idx]];
                 }
-            }   
+            }
         }   
+    }   
 
     out->next_time++;
 }

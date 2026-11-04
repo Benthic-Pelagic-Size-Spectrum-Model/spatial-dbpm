@@ -652,13 +652,18 @@
         y = results$y, 
         time = results$time
     )
-    dimnames(results$pelagic_u) <- list(
+
+    pelagic_dimensions <- list(
         m = results$m,
         x = results$x,
         y = results$y,
         species = results$pelagic_species,
         time = results$time
     )
+    dimnames(results$pelagic_u) <- pelagic_dimensions
+    dimnames(results$pelagic_mu_pred) <- pelagic_dimensions
+    dimnames(results$pelagic_mu_fish) <- pelagic_dimensions
+    dimnames(results$pelagic_g) <- pelagic_dimensions
 
     return(results)
 }
