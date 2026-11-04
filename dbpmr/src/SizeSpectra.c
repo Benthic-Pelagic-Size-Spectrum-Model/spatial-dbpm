@@ -380,7 +380,21 @@ typedef struct output_info {
     int next_time; // The next timestep index (is iterated to)
 
     double *t_out; // Time values that are completed through the run
-    double *pla_u; // Holder of plankton biomass values (size of nout_m, nout_t, nout_x, nout_y)
+    
+    double *pla_u; // Holder of plankton density output values (size of nout_m, nout_x, nout_y, nout_t)
+    
+    double *pel_u; // Holder of pelagic density output values (size of nout_m, nout_x, nout_y, n_pel_species, nout_t)
+    // double *pel_mu_pred; // Holder of pelagic mortality (from predation) values (size of nout_m, nout_x, nout_y, n_pel_species, nout_t)
+    // double *pel_mu_fish; // Holder of pelagic mortality (from fishing) values (size of nout_m, nout_x, nout_y, n_pel_species, nout_t)
+    // double *pel_g; // Holder of pelagic growth rate values (size of nout_m, nout_x, nout_y, n_pel_species, nout_t)
+    
+    // double *ben_u; // Holder of pelagic density output values (size of nout_m, nout_x, nout_y, n_ben_species, nout_t)
+    // double *ben_mu_pred; // Holder of benthic mortality (from predation) values (size of nout_m, nout_x, nout_y, n_ben_species, nout_t)
+    // double *ben_mu_fish; // Holder of benthic mortality (from fishing) values (size of nout_m, nout_x, nout_y, n_ben_species, nout_t)
+    // double *ben_g; // Holder of pelagic growth rate values (size of nout_m, nout_x, nout_y, n_ben_species, nout_t)
+
+    // double *det_w; // Holder of detritus mass density output values (size of nout_x, nout_y, nout_t)
+    
 } OUTPUT;
 
 //-----------------------//
@@ -433,7 +447,7 @@ void print_detailed_benthic(GRID *, BENTHIC *, int);
 
 static int is_output_timestep(GRID *, int);
 static int output_interval(double, double);
-static void record_output(GRID *, COMMUNITY *, OUTPUT *, int);
+static void record_output(RUN *, GRID *, COMMUNITY *, OUTPUT *, int);
 
 /*differencing Scheme Solver Functions*/
 void mass_solver(RUN *, GRID *, COMMUNITY *, MATRIX *, MATRIX *, double ***, double ****, double ****,
@@ -624,7 +638,7 @@ static SEXP SizeSpectrum_internals(int *run_params, double *grid_params, double 
     setup_grid(&grid, grid_params);
 
     SEXP result = R_NilValue;
-    if (run.return_memory) result = PROTECT(allocVector(VECSXP, 5));
+    if (run.return_memory) result = PROTECT(allocVector(VECSXP, 8));
 
     /*Setup community*/
     community.plankton = (PLANKTON *)safe_malloc(sizeof(PLANKTON), __LINE__, __FILE__);
@@ -1758,7 +1772,7 @@ void setup_matrix(int dim, MATRIX *matrix)
 
 void setup_output(RUN *run, GRID *grid, OUTPUT *out, SEXP result)
 {
-    int ts_idx, sc_idx, x_idx, y_idx, i;
+    int ts_idx, sc_idx, x_idx, y_idx, i, pel_species_idx, ben_species_idx;
     out->next_time = 0;
     out->nout_m = out->nout_t = out->nout_x = out->nout_y = 0;
     if (!run->return_memory) {
@@ -1809,22 +1823,40 @@ void setup_output(RUN *run, GRID *grid, OUTPUT *out, SEXP result)
     SET_VECTOR_ELT(result, 2, x);
     SET_VECTOR_ELT(result, 3, y);
 
-    // Allocate the plankton result array in R
+    // Allocate holders for pelagic and benthic species dimensions
+    SEXP pel_sp = PROTECT(allocVector(REALSXP, run->no_pelagic));
+    for (pel_species_idx=0; pel_species_idx<run->no_pelagic; pel_species_idx++) REAL(pel_sp)[pel_species_idx] = pel_species_idx+1;
+    SET_VECTOR_ELT(result, 4, pel_sp);
+    SEXP ben_sp = PROTECT(allocVector(REALSXP, run->no_benthic));
+    for (ben_species_idx=0; ben_species_idx<run->no_benthic; ben_species_idx++) REAL(ben_sp)[ben_species_idx] = ben_species_idx+1;
+    SET_VECTOR_ELT(result, 5, ben_sp);
+
+    // Allocate the plankton mass density array in R (pla_u)
     SEXP pla = PROTECT(allocVector(REALSXP, (R_xlen_t)out->nout_m * out->nout_x * out->nout_y * out->nout_t));
-    SEXP dim = PROTECT(allocVector(INTSXP, 4));
-    INTEGER(dim)[0] = out->nout_m; INTEGER(dim)[1] = out->nout_x;
-    INTEGER(dim)[2] = out->nout_y; INTEGER(dim)[3] = out->nout_t;
-    setAttrib(pla, R_DimSymbol, dim);
-    SET_VECTOR_ELT(result, 4, pla);
+    SEXP pla_dim = PROTECT(allocVector(INTSXP, 4));
+    INTEGER(pla_dim)[0] = out->nout_m; INTEGER(pla_dim)[1] = out->nout_x;
+    INTEGER(pla_dim)[2] = out->nout_y; INTEGER(pla_dim)[3] = out->nout_t;
+    setAttrib(pla, R_DimSymbol, pla_dim);
+    SET_VECTOR_ELT(result, 6, pla);
     out->pla_u = REAL(pla);
 
-    // Allocate the output name fields in R so that each of the 5 outputs have names
-    SEXP nms = PROTECT(allocVector(STRSXP, 5));
-    const char *n[5] = {"time", "m", "x", "y", "plankton"};
-    for (i=0; i < 5; i++) SET_STRING_ELT(nms, i, mkChar(n[i]));
+    // Allocate the pelagic mass density array in R (pel_u)
+    SEXP pel_u = PROTECT(allocVector(REALSXP, (R_xlen_t)out->nout_m * out->nout_x * out->nout_y * run->no_pelagic * out->nout_t));
+    SEXP pel_dim = PROTECT(allocVector(INTSXP, 5));
+    INTEGER(pel_dim)[0] = out->nout_m; INTEGER(pel_dim)[1] = out->nout_x;
+    INTEGER(pel_dim)[2] = out->nout_y; INTEGER(pel_dim)[3] = run->no_pelagic; INTEGER(pel_dim)[4] = out->nout_t;
+    setAttrib(pel_u, R_DimSymbol, pel_dim);
+    SET_VECTOR_ELT(result, 7, pel_u);
+    out->pel_u = REAL(pel_u);
+
+    // Allocate the output name fields in R so that each of the outputs have names
+    // This chunk uses C indexing (i.e. above^ + 1).
+    SEXP nms = PROTECT(allocVector(STRSXP, 8));
+    const char *n[8] = {"time", "m", "x", "y", "pelagic_species", "benthic_species", "plankton_u", "pelagic_u"};
+    for (i=0; i < 8; i++) SET_STRING_ELT(nms, i, mkChar(n[i]));
     setAttrib(result, R_NamesSymbol, nms);
 
-    UNPROTECT(7);
+    UNPROTECT(11);
 }
 
 // Calculate whether the current timestep is an output step
@@ -1849,9 +1881,10 @@ static int output_interval(double outstep, double step)
     return (interval);
 }
 
-static void record_output(GRID *grid, COMMUNITY *c, OUTPUT *out, int ts_idx)
+static void record_output(RUN *run, GRID *grid, COMMUNITY *c, OUTPUT *out, int ts_idx)
 {
     int sc_idx, x_idx, y_idx;
+    int pel_species_idx;
     if (out->next_time >= out->nout_t) error("more output steps than allocated");
 
     out->t_out[out->next_time] = grid->t_values[ts_idx];
@@ -1869,6 +1902,26 @@ static void record_output(GRID *grid, COMMUNITY *c, OUTPUT *out, int ts_idx)
             }
         }
     }
+
+    
+        for (y_idx=0; y_idx<out->nout_y; y_idx++) {
+            for (x_idx=0; x_idx<out->nout_x; x_idx++) {
+                for (sc_idx=0; sc_idx<out->nout_m; sc_idx++) {
+                    for (pel_species_idx=0; pel_species_idx<run->no_pelagic; pel_species_idx++) {
+                        out->pel_u[
+                            sc_idx + (R_xlen_t)out->nout_m * (
+                                x_idx + out->nout_x * (
+                                    y_idx + (R_xlen_t)out->nout_y * out->next_time
+                                ) * (
+                                    pel_species_idx + run->no_pelagic
+                                )
+                            )
+                        ] = c->pelagic[pel_species_idx].u_values[out->m_sel[sc_idx]][out->x_sel[x_idx]][out->y_sel[y_idx]];
+                    }
+                }
+            }   
+        }   
+
     out->next_time++;
 }
 
@@ -2104,7 +2157,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, OUTPUT *out, 
         print_timestep_plankton(grid, community->plankton, 0);
         print_plankton_summary(grid, community->plankton, 0);
         if (run->return_memory) {
-            record_output(grid, community, out, 0);
+            record_output(run, grid, community, out, 0);
         }
     }
 
@@ -2326,7 +2379,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, OUTPUT *out, 
                 }
 
             if (run->return_memory) {
-                record_output(grid, community, out, ts_idx);
+                record_output(run, grid, community, out, ts_idx);
             }
         }
     }

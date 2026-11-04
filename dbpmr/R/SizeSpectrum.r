@@ -14,10 +14,13 @@
 #' @param detritus.in A [detritus.params] object. Optional when
 #'   `run.in@no_benthic == 0`.
 #' @param memory.returns Bool that controls whether outputs are returned in memory.
-#'   Default = TRUE. For large runs, this can be memory intensive.
+#'   Default = TRUE. For large runs, this can be memory intensive. If this is set
+#'   to FALSE, then the filenames of outputs will be returned instead of outputs.
 #'
-#' @return A character vector of the paths and species filenames produced by the
-#'   run, suitable for passing to [Read.In()].
+#' @return Depends on `memory.returns` if this argument is TRUE, then this function
+#'   will return all run results to memory (the same outputs that are written to results.txt)
+#'   files. If this argument is false then a character fector will be returned containing
+#'   the filenames of outputs.
 #' @seealso [Read.In()], [Setup.Run()]
 #' @export
 `SizeSpectrum` <-
@@ -596,7 +599,7 @@
         # Call C code #
         #-------------#
 
-        x <- .Call(
+        results <- .Call(
             dbpmr:::C_SizeSpectrum,
             as.integer(run.params),
             as.double(grid.params),
@@ -611,9 +614,10 @@
 
         #-----------------------------------------------------------------#
         # Return filenames of files that have been produced by the C code #
+        # ! Only performed if memory.return is FALSE                      #
         #-----------------------------------------------------------------#
-
-        if (run.in@no_benthic != 0) {
+    if (!memory.return) {
+                if (run.in@no_benthic != 0) {
             filenames <- vector(
                 mode = 'character',
                 length = (run.in@no_pelagic + run.in@no_benthic + 3)
@@ -641,3 +645,20 @@
 
         return(filenames)
     }
+
+    dimnames(results$plankton_u) <- list(
+        m = results$m, 
+        x = results$x,
+        y = results$y, 
+        time = results$time
+    )
+    dimnames(results$pelagic_u) <- list(
+        m = results$m,
+        x = results$x,
+        y = results$y,
+        species = results$pelagic_species,
+        time = results$time
+    )
+
+    return(results)
+}
