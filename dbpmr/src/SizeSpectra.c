@@ -388,12 +388,14 @@ typedef struct output_info {
     double *pel_mu_fish; // Holder of pelagic mortality (from fishing) values (size of nout_m, nout_x, nout_y, n_pel_species, nout_t)
     double *pel_g; // Holder of pelagic growth rate values (size of nout_m, nout_x, nout_y, n_pel_species, nout_t)
     
-    // double *ben_u; // Holder of pelagic density output values (size of nout_m, nout_x, nout_y, n_ben_species, nout_t)
-    // double *ben_mu_pred; // Holder of benthic mortality (from predation) values (size of nout_m, nout_x, nout_y, n_ben_species, nout_t)
-    // double *ben_mu_fish; // Holder of benthic mortality (from fishing) values (size of nout_m, nout_x, nout_y, n_ben_species, nout_t)
-    // double *ben_g; // Holder of pelagic growth rate values (size of nout_m, nout_x, nout_y, n_ben_species, nout_t)
+    double *ben_u; // Holder of pelagic density output values (size of nout_m, nout_x, nout_y, n_ben_species, nout_t)
+    double *ben_mu_pred; // Holder of benthic mortality (from predation) values (size of nout_m, nout_x, nout_y, n_ben_species, nout_t)
+    double *ben_mu_fish; // Holder of benthic mortality (from fishing) values (size of nout_m, nout_x, nout_y, n_ben_species, nout_t)
+    double *ben_g; // Holder of pelagic growth rate values (size of nout_m, nout_x, nout_y, n_ben_species, nout_t)
 
-    // double *det_w; // Holder of detritus mass density output values (size of nout_x, nout_y, nout_t)
+    double *det_w; // Holder of detritus mass density output values (size of nout_x, nout_y, nout_t)
+    double *det_g; // Holder of detritus gain values (detritus - in) (size of nout_x, nout_y, nout_t)
+    double *det_mu; // Holder of detritus loss values (detritus - out) (size of nout_x, nout_y, nout_t)
     
 } OUTPUT;
 
@@ -638,7 +640,7 @@ static SEXP SizeSpectrum_internals(int *run_params, double *grid_params, double 
     setup_grid(&grid, grid_params);
 
     SEXP result = R_NilValue;
-    if (run.return_memory) result = PROTECT(allocVector(VECSXP, 11));
+    if (run.return_memory) result = PROTECT(allocVector(VECSXP, 18));
 
     /*Setup community*/
     community.plankton = (PLANKTON *)safe_malloc(sizeof(PLANKTON), __LINE__, __FILE__);
@@ -1840,6 +1842,7 @@ void setup_output(RUN *run, GRID *grid, OUTPUT *out, SEXP result)
     SET_VECTOR_ELT(result, 6, pla);
     out->pla_u = REAL(pla);
 
+    // Pelagic species //
     // Allocate pelagic species array dimensions (once for the group)
     SEXP pel_dim = PROTECT(allocVector(INTSXP, 5));
     INTEGER(pel_dim)[0] = out->nout_m; INTEGER(pel_dim)[1] = out->nout_x;
@@ -1869,10 +1872,64 @@ void setup_output(RUN *run, GRID *grid, OUTPUT *out, SEXP result)
     SET_VECTOR_ELT(result, 10, pel_g);
     out->pel_g = REAL(pel_g);
 
+    // Benthic species //
+    // Allocate benthic species array dimensions (once for the group)
+    SEXP ben_dim = PROTECT(allocVector(INTSXP, 5));
+    INTEGER(ben_dim)[0] = out->nout_m; INTEGER(ben_dim)[1] = out->nout_x;
+    INTEGER(ben_dim)[2] = out->nout_y; INTEGER(ben_dim)[3] = run->no_benthic; INTEGER(ben_dim)[4] = out->nout_t;
+
+    // Allocate the benthic mass density array in R (ben_u)
+    SEXP ben_u = PROTECT(allocVector(REALSXP, (R_xlen_t)out->nout_m * out->nout_x * out->nout_y * run->no_benthic * out->nout_t));
+    setAttrib(ben_u, R_DimSymbol, ben_dim);
+    SET_VECTOR_ELT(result, 11, ben_u);
+    out->ben_u = REAL(ben_u);
+
+    // Allocate the benthic mortality (predation) array in R (ben_mu_pred)
+    SEXP ben_mu_pred = PROTECT(allocVector(REALSXP, (R_xlen_t)out->nout_m * out->nout_x * out->nout_y * run->no_benthic * out->nout_t));
+    setAttrib(ben_mu_pred, R_DimSymbol, ben_dim);
+    SET_VECTOR_ELT(result, 12, ben_mu_pred);
+    out->ben_mu_pred = REAL(ben_mu_pred);
+
+    // Allocate the benthic mortality (fishing) array in R (ben_mu_fish)
+    SEXP ben_mu_fish = PROTECT(allocVector(REALSXP, (R_xlen_t)out->nout_m * out->nout_x * out->nout_y * run->no_benthic * out->nout_t));
+    setAttrib(ben_mu_fish, R_DimSymbol, ben_dim);
+    SET_VECTOR_ELT(result, 13, ben_mu_fish);
+    out->ben_mu_fish = REAL(ben_mu_fish);
+
+    // Allocate the benthic growth rate array in R (ben_g)
+    SEXP ben_g = PROTECT(allocVector(REALSXP, (R_xlen_t)out->nout_m * out->nout_x * out->nout_y * run->no_benthic * out->nout_t));
+    setAttrib(ben_g, R_DimSymbol, ben_dim);
+    SET_VECTOR_ELT(result, 14, ben_g);
+    out->ben_g = REAL(ben_g);
+
+    // Detritus allocations
+    // Allocate detritus dimensions (pooled, so no size structure)
+    SEXP det_dim = PROTECT(allocVector(INTSXP, 3));
+    INTEGER(det_dim)[0] = out->nout_x; INTEGER(det_dim)[1] = out->nout_y;
+    INTEGER(det_dim)[2] = out->nout_t;
+
+    // Allocate the detritus mass density array in R (det_w)
+    SEXP det_w = PROTECT(allocVector(REALSXP, (R_xlen_t) out->nout_x * out->nout_y * out->nout_t));
+    setAttrib(det_w, R_DimSymbol, det_dim);
+    SET_VECTOR_ELT(result, 15, det_w);
+    out->det_w = REAL(det_w);
+
+    // Allocate the detritus growth array in R (det_g)
+    SEXP det_g = PROTECT(allocVector(REALSXP, (R_xlen_t) out->nout_x * out->nout_y * out->nout_t));
+    setAttrib(det_g, R_DimSymbol, det_dim);
+    SET_VECTOR_ELT(result, 16, det_g);
+    out->det_g = REAL(det_g);
+
+    // Allocate the detritus out array in R (det_mu)
+    SEXP det_mu = PROTECT(allocVector(REALSXP, (R_xlen_t) out->nout_x * out->nout_y * out->nout_t));
+    setAttrib(det_mu, R_DimSymbol, det_dim);
+    SET_VECTOR_ELT(result, 17, det_mu);
+    out->det_mu = REAL(det_mu);
+
     // Allocate the output name fields in R so that each of the outputs have names
     // This chunk uses C indexing (i.e. above^ + 1).
-    SEXP nms = PROTECT(allocVector(STRSXP, 11));
-    const char *n[11] = {
+    SEXP nms = PROTECT(allocVector(STRSXP, 18));
+    const char *n[18] = {
         "time", 
         "m", 
         "x", 
@@ -1883,12 +1940,19 @@ void setup_output(RUN *run, GRID *grid, OUTPUT *out, SEXP result)
         "pelagic_u", 
         "pelagic_mu_pred",
         "pelagic_mu_fish",
-        "pelagic_g"
+        "pelagic_g",
+        "benthic_u",
+        "benthic_mu_pred",
+        "benthic_mu_fish",
+        "benthic_g",
+        "detritus_w",
+        "detritus_g",
+        "detritus_mu"
     };
-    for (i=0; i < 11; i++) SET_STRING_ELT(nms, i, mkChar(n[i]));
+    for (i=0; i < 18; i++) SET_STRING_ELT(nms, i, mkChar(n[i]));
     setAttrib(result, R_NamesSymbol, nms);
 
-    UNPROTECT(14);
+    UNPROTECT(23);
 }
 
 // Calculate whether the current timestep is an output step
@@ -1916,11 +1980,12 @@ static int output_interval(double outstep, double step)
 static void record_output(RUN *run, GRID *grid, COMMUNITY *c, OUTPUT *out, int ts_idx)
 {
     int sc_idx, x_idx, y_idx;
-    int pel_species_idx;
+    int pel_species_idx, ben_species_idx;
     if (out->next_time >= out->nout_t) error("more output steps than allocated");
 
     out->t_out[out->next_time] = grid->t_values[ts_idx];
 
+    // Record output for plankton
     for (y_idx=0; y_idx<out->nout_y; y_idx++) {
         for (x_idx=0; x_idx<out->nout_x; x_idx++) {
             for (sc_idx=0; sc_idx<out->nout_m; sc_idx++) {
@@ -1935,7 +2000,7 @@ static void record_output(RUN *run, GRID *grid, COMMUNITY *c, OUTPUT *out, int t
         }
     }
 
-    
+    // Record outputs for pelagic species
     for (y_idx=0; y_idx<out->nout_y; y_idx++) {
         for (x_idx=0; x_idx<out->nout_x; x_idx++) {
             for (sc_idx=0; sc_idx<out->nout_m; sc_idx++) {
@@ -1983,6 +2048,86 @@ static void record_output(RUN *run, GRID *grid, COMMUNITY *c, OUTPUT *out, int t
             }
         }   
     }   
+
+    // Record outputs for benthic species
+    for (y_idx=0; y_idx<out->nout_y; y_idx++) {
+        for (x_idx=0; x_idx<out->nout_x; x_idx++) {
+            for (sc_idx=0; sc_idx<out->nout_m; sc_idx++) {
+                for (ben_species_idx=0; ben_species_idx<run->no_benthic; ben_species_idx++) {
+                    out->ben_u[
+                        sc_idx + (R_xlen_t)out->nout_m * (
+                            x_idx + out->nout_x * (
+                                y_idx + (R_xlen_t)out->nout_y * out->next_time
+                            ) * (
+                                ben_species_idx + run->no_benthic
+                            )
+                        )
+                    ] = c->benthic[ben_species_idx].u_values[out->m_sel[sc_idx]][out->x_sel[x_idx]][out->y_sel[y_idx]];
+
+                    out->ben_mu_pred[
+                        sc_idx + (R_xlen_t)out->nout_m * (
+                            x_idx + out->nout_x * (
+                                y_idx + (R_xlen_t)out->nout_y * out->next_time
+                            ) * (
+                                ben_species_idx + run->no_benthic
+                            )
+                        )
+                    ] = c->benthic[ben_species_idx].mu_pred_values[out->m_sel[sc_idx]][out->x_sel[x_idx]][out->y_sel[y_idx]];
+
+                    out->ben_mu_fish[
+                        sc_idx + (R_xlen_t)out->nout_m * (
+                            x_idx + out->nout_x * (
+                                y_idx + (R_xlen_t)out->nout_y * out->next_time
+                            ) * (
+                                ben_species_idx + run->no_benthic
+                            )
+                        )
+                    ] = c->benthic[ben_species_idx].mu_fish_values[out->m_sel[sc_idx]][out->x_sel[x_idx]][out->y_sel[y_idx]];
+
+                    out->ben_g[
+                        sc_idx + (R_xlen_t)out->nout_m * (
+                            x_idx + out->nout_x * (
+                                y_idx + (R_xlen_t)out->nout_y * out->next_time
+                            ) * (
+                                ben_species_idx + run->no_benthic
+                            )
+                        )
+                    ] = c->benthic[ben_species_idx].g_values[out->m_sel[sc_idx]][out->x_sel[x_idx]][out->y_sel[y_idx]];
+                }
+            }
+        }   
+    }   
+
+    // Record outputs for detritus component
+    for (y_idx=0; y_idx<out->nout_y; y_idx++) {
+        for (x_idx=0; x_idx<out->nout_x; x_idx++) {
+            
+                out->det_w[
+                    
+                        x_idx + out->nout_x * (
+                            y_idx + (R_xlen_t)out->nout_y * out->next_time
+                        )
+                    
+                ] = c->detritus->w_values[out->x_sel[x_idx]][out->y_sel[y_idx]];
+
+                out->det_g[
+                    
+                        x_idx + out->nout_x * (
+                            y_idx + (R_xlen_t)out->nout_y * out->next_time
+                        )
+                    
+                ] = c->detritus->g_values[out->x_sel[x_idx]][out->y_sel[y_idx]];
+
+                out->det_mu[
+                    
+                        x_idx + out->nout_x * (
+                            y_idx + (R_xlen_t)out->nout_y * out->next_time
+                        )
+                    
+                ] = c->detritus->mu_values[out->x_sel[x_idx]][out->y_sel[y_idx]];
+            
+        }
+    }
 
     out->next_time++;
 }
