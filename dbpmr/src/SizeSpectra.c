@@ -84,6 +84,7 @@ typedef struct grid_info
     int mnum;          // number of steps
     double moutstep;   // output to print every m
     double *m_values;  // actual log(m) values
+    double *exp_m_values; // actual m values exponents
 
     double t1, tmax; // time discretisation
     double tstep;
@@ -792,6 +793,7 @@ void setup_grid(GRID *grid, double *grid_input)
     n_y = grid->ynum;
 
     grid->m_values = (double *)safe_malloc(n_m * sizeof(double), __LINE__, __FILE__);
+    grid->exp_m_values = (double *)safe_malloc(n_m * sizeof(double), __LINE__, __FILE__);
     grid->t_values = (double *)safe_malloc(n_t * sizeof(double), __LINE__, __FILE__);
     grid->x_values = (double *)safe_malloc(n_x * sizeof(double), __LINE__, __FILE__);
     grid->y_values = (double *)safe_malloc(n_y * sizeof(double), __LINE__, __FILE__);
@@ -800,6 +802,7 @@ void setup_grid(GRID *grid, double *grid_input)
     for (sc_idx = 0; sc_idx < n_m; sc_idx++)
     {
         grid->m_values[sc_idx] = grid->mmin + (sc_idx * grid->mstep);
+        grid->exp_m_values[sc_idx] = exp(grid->m_values[sc_idx]);
     }
     /*Setup values for t*/
     for (ts_idx = 0; ts_idx < n_t; ts_idx++)
@@ -3332,7 +3335,7 @@ void print_plankton_summary(GRID *grid, PLANKTON *plankton, int time)
             temp = 0;
             for (sc_idx = plankton->iplamin; sc_idx < (plankton->iplamax + 1); sc_idx++)
             {
-                temp += plankton->u_values[sc_idx][x_idx][y_idx] * exp(grid->m_values[sc_idx]) * grid->mstep;
+                temp += plankton->u_values[sc_idx][x_idx][y_idx] * grid->exp_m_values[sc_idx] * grid->mstep;
             }
             fprintf(plankton->fptr_summ, "%.16f", temp);
             fprintf(plankton->fptr_summ, "\n");
@@ -3366,7 +3369,7 @@ void print_pelagic_summary(GRID *grid, PELAGIC *pelagic, int time)
             temp = 0;
             for (sc_idx = pelagic->ipelmin; sc_idx < (pelagic->ipelmax + 1); sc_idx++)
             {
-                temp += pelagic->u_values[sc_idx][x_idx][y_idx] * exp(grid->m_values[sc_idx]) * grid->mstep;
+                temp += pelagic->u_values[sc_idx][x_idx][y_idx] * grid->exp_m_values[sc_idx] * grid->mstep;
             }
             fprintf(pelagic->fptr_summ, ",%.16f", temp);
 
@@ -3413,7 +3416,7 @@ void print_benthic_summary(GRID *grid, BENTHIC *benthic, int time)
             temp = 0;
             for (sc_idx = benthic->ibenmin; sc_idx < (benthic->ibenmax + 1); sc_idx++)
             {
-                temp += benthic->u_values[sc_idx][x_idx][y_idx] * exp(grid->m_values[sc_idx]) * grid->mstep;
+                temp += benthic->u_values[sc_idx][x_idx][y_idx] * grid->exp_m_values[sc_idx] * grid->mstep;
             }
             fprintf(benthic->fptr_summ, ",%.16f", temp);
 
@@ -4461,12 +4464,12 @@ void calculate_g_and_mu(RUN *run, GRID *grid, COMMUNITY *community)
                            community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx] * grid->mstep;
                     fish += community->pelagic[pel_species_idx].mu_fish_values[sc_idx][x_idx][y_idx] *
                             community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx] *
-                            exp(grid->m_values[sc_idx]) * grid->mstep;
+                            grid->exp_m_values[sc_idx] * grid->mstep;
                     for (pel_sub_idx = 0; pel_sub_idx < n_pel_species; pel_sub_idx++)
                     {
                         pred += community->pelagic[pel_species_idx].mu_pred_values[pel_sub_idx][sc_idx][x_idx][y_idx] *
                                 community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx] *
-                                exp(grid->m_values[sc_idx]) * grid->mstep;
+                                grid->exp_m_values[sc_idx] * grid->mstep;
                     }
                 }
                 community->pelagic[pel_species_idx].pla_total[x_idx][y_idx] = pla;
@@ -4523,10 +4526,10 @@ void calculate_g_and_mu(RUN *run, GRID *grid, COMMUNITY *community)
                                community->benthic[ben_species_idx].u_values[sc_idx][x_idx][y_idx] * grid->mstep;
                         fish += community->benthic[ben_species_idx].mu_fish_values[sc_idx][x_idx][y_idx] *
                                 community->benthic[ben_species_idx].u_values[sc_idx][x_idx][y_idx] *
-                                exp(grid->m_values[sc_idx]) * grid->mstep;
+                                grid->exp_m_values[sc_idx] * grid->mstep;
                         pred += community->benthic[ben_species_idx].mu_pred_values[sc_idx][x_idx][y_idx] *
                                 community->benthic[ben_species_idx].u_values[sc_idx][x_idx][y_idx] *
-                                exp(grid->m_values[sc_idx]) * grid->mstep;
+                                grid->exp_m_values[sc_idx] * grid->mstep;
                     }
                     community->benthic[ben_species_idx].det_total[x_idx][y_idx] = det;
                     community->benthic[ben_species_idx].fish_total[x_idx][y_idx] = fish;
@@ -4555,7 +4558,7 @@ double pla_biomass(int species, int size, int xspace, int yspace, GRID *grid, CO
     /* Allows feeding from Plankton Size Spectra*/
     for (sc_idx = community->plankton->iplamin; sc_idx < size; sc_idx++)
     {
-        ans += exp(grid->m_values[sc_idx]) * community->pelagic[species].phi_values[size - sc_idx] *
+        ans += grid->exp_m_values[sc_idx] * community->pelagic[species].phi_values[size - sc_idx] *
                community->plankton->u_values[sc_idx][xspace][yspace] * grid->mstep;
     }
     ans *= community->pelagic[species].pref_pla * community->pelagic[species].A *
@@ -4578,7 +4581,7 @@ double pel_biomass(int species, int size, int xspace, int yspace, RUN *run, GRID
             {
                 /*reef refuge: prey of size i are available for intake only with probability a(i) (=1 when off)*/
                 ans += community->pelagic[pel_species_idx].a_refuge[sc_idx][xspace][yspace] *
-                       exp(grid->m_values[sc_idx]) * community->pelagic[species].phi_values[size - sc_idx] *
+                       grid->exp_m_values[sc_idx] * community->pelagic[species].phi_values[size - sc_idx] *
                        community->pelagic[pel_species_idx].u_values[sc_idx][xspace][yspace] * grid->mstep;
             }
         }
@@ -4589,7 +4592,7 @@ double pel_biomass(int species, int size, int xspace, int yspace, RUN *run, GRID
     {
         for (sc_idx = community->pelagic[species].ipelmin; sc_idx < size; sc_idx++)
         {
-            ans += community->pelagic[species].a_refuge[sc_idx][xspace][yspace] * exp(grid->m_values[sc_idx]) *
+            ans += community->pelagic[species].a_refuge[sc_idx][xspace][yspace] * grid->exp_m_values[sc_idx] *
                    community->pelagic[species].phi_values[size - sc_idx] *
                    community->pelagic[species].u_values[sc_idx][xspace][yspace] * grid->mstep;
         }
@@ -4615,7 +4618,7 @@ double ben_biomass(int species, int size, int xspace, int yspace, RUN *run, GRID
             {
                 for (sc_idx = community->benthic[ben_species_idx].ibenmin; sc_idx < size; sc_idx++)
                 {
-                    ans += exp(grid->m_values[sc_idx]) * community->pelagic[species].phi_values[size - sc_idx] *
+                    ans += grid->exp_m_values[sc_idx] * community->pelagic[species].phi_values[size - sc_idx] *
                            community->benthic[ben_species_idx].u_values[sc_idx][xspace][yspace] * grid->mstep;
                 }
             }
@@ -4709,14 +4712,14 @@ double g_det(int xspace, int yspace, RUN *run, GRID *grid, COMMUNITY *community)
                     community->pelagic[pel_species_idx].mu_0_base *
                         exp(community->pelagic[pel_species_idx].beta * grid->m_values[sc_idx]) *
                         community->pelagic[pel_species_idx].u_values[sc_idx][xspace][yspace] *
-                        exp(grid->m_values[sc_idx]) * grid->mstep +
+                        grid->exp_m_values[sc_idx] * grid->mstep +
                     community->pelagic[pel_species_idx].mu_s *
-                        ((log10(exp(grid->m_values[sc_idx])) - log10(exp(community->pelagic[pel_species_idx].pelmin))) /
+                        ((log10(grid->exp_m_values[sc_idx]) - log10(exp(community->pelagic[pel_species_idx].pelmin))) /
                          ((log10(exp(community->pelagic[pel_species_idx].pelmax)) +
                            community->pelagic[pel_species_idx].epsilon) -
-                          log10(exp(grid->m_values[sc_idx])))) *
+                          log10(grid->exp_m_values[sc_idx]))) *
                         community->pelagic[pel_species_idx].u_values[sc_idx][xspace][yspace] *
-                        exp(grid->m_values[sc_idx]) * grid->mstep;
+                        grid->exp_m_values[sc_idx] * grid->mstep;
                 if (size_dep)
                 {
                     double faeces = (community->pelagic[pel_species_idx].Ex_pla *
@@ -4747,15 +4750,15 @@ double g_det(int xspace, int yspace, RUN *run, GRID *grid, COMMUNITY *community)
                     ans_bed += community->benthic[ben_species_idx].mu_0_base *
                                exp(community->benthic[ben_species_idx].beta * grid->m_values[sc_idx]) *
                                community->benthic[ben_species_idx].u_values[sc_idx][xspace][yspace] *
-                               exp(grid->m_values[sc_idx]) * grid->mstep;
+                               grid->exp_m_values[sc_idx] * grid->mstep;
                     ans_bed +=
                         community->benthic[ben_species_idx].mu_s *
-                        ((log10(exp(grid->m_values[sc_idx])) - log10(exp(community->benthic[ben_species_idx].benmin))) /
+                        ((log10(grid->exp_m_values[sc_idx]) - log10(exp(community->benthic[ben_species_idx].benmin))) /
                          ((log10(exp(community->benthic[ben_species_idx].benmax)) +
                            community->benthic[ben_species_idx].epsilon) -
-                          log10(exp(grid->m_values[sc_idx])))) *
+                          log10(grid->exp_m_values[sc_idx]))) *
                         community->benthic[ben_species_idx].u_values[sc_idx][xspace][yspace] *
-                        exp(grid->m_values[sc_idx]) * grid->mstep;
+                        grid->exp_m_values[sc_idx] * grid->mstep;
                 }
             }
         }
@@ -4764,7 +4767,7 @@ double g_det(int xspace, int yspace, RUN *run, GRID *grid, COMMUNITY *community)
     {
         /*Rate of det biomass in from dead (sinking) plankton - surface origin*/
         double pdead = community->plankton->mu_0 * exp(community->plankton->beta * grid->m_values[sc_idx]) *
-                       community->plankton->u_values[sc_idx][xspace][yspace] * exp(grid->m_values[sc_idx]) *
+                       community->plankton->u_values[sc_idx][xspace][yspace] * grid->exp_m_values[sc_idx] *
                        grid->mstep;
         if (size_dep)
             ans_surf += exp(-e_attn * exp(-e_gamma * fmax(grid->m_values[sc_idx], e_magg))) * pdead;
@@ -4868,9 +4871,9 @@ double mu_pel(int species, int size, int xspace, int yspace, RUN *run, GRID *gri
     ans += ((run->forcing_percell && run->temp_on_mort ? run->pel_tempeff_c[xspace][yspace] : 1.0) *
             community->pelagic[species].mu_0 * exp(community->pelagic[species].beta * grid->m_values[size]));
     ans += (community->pelagic[species].mu_s *
-            ((log10(exp(grid->m_values[size])) - log10(exp(community->pelagic[species].pelmin))) /
+            ((log10(grid->exp_m_values[size]) - log10(exp(community->pelagic[species].pelmin))) /
              ((log10(exp(community->pelagic[species].pelmax)) + community->pelagic[species].epsilon) -
-              log10(exp(grid->m_values[size])))));
+              log10(grid->exp_m_values[size]))));
 
     return ans;
 }
@@ -4910,9 +4913,9 @@ double mu_ben(int species, int size, int xspace, int yspace, RUN *run, GRID *gri
     ans += ((run->forcing_percell && run->temp_on_mort ? run->ben_tempeff_c[xspace][yspace] : 1.0) *
             community->benthic[species].mu_0 * exp(community->benthic[species].beta * grid->m_values[size]));
     ans += (community->benthic[species].mu_s *
-            ((log10(exp(grid->m_values[size])) - log10(exp(community->benthic[species].benmin))) /
+            ((log10(grid->exp_m_values[size]) - log10(exp(community->benthic[species].benmin))) /
              ((log10(exp(community->benthic[species].benmax)) + community->benthic[species].epsilon) -
-              log10(exp(grid->m_values[size])))));
+              log10(grid->exp_m_values[size]))));
 
     return ans;
 }
@@ -5023,7 +5026,7 @@ void calculate_fishing(RUN *run, GRID *grid, COMMUNITY *community)
                          sc_idx < (community->pelagic[pel_species_idx].ipelmax + 1); sc_idx++)
                         if (community->pelagic[pel_species_idx].mu_fish_values[sc_idx][x_idx][y_idx] > 0.0)
                             Bpel += community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx] *
-                                    exp(grid->m_values[sc_idx]) * grid->mstep;
+                                    grid->exp_m_values[sc_idx] * grid->mstep;
                 }
                 for (ben_species_idx = 0; ben_species_idx < n_ben_species; ben_species_idx++)
                 {
@@ -5033,7 +5036,7 @@ void calculate_fishing(RUN *run, GRID *grid, COMMUNITY *community)
                          sc_idx < (community->benthic[ben_species_idx].ibenmax + 1); sc_idx++)
                         if (community->benthic[ben_species_idx].mu_fish_values[sc_idx][x_idx][y_idx] > 0.0)
                             Bben += community->benthic[ben_species_idx].u_values[sc_idx][x_idx][y_idx] *
-                                    exp(grid->m_values[sc_idx]) * grid->mstep;
+                                    grid->exp_m_values[sc_idx] * grid->mstep;
                 }
                 double Ap = Bpel * dcorr, Ab = Bben * bhd, tot = Ap + Ab;
                 double sp = (tot > 0.0) ? Ap / tot : 0.5;
@@ -5160,7 +5163,7 @@ void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
                          sc_idx < (community->pelagic[pel_species_idx].ipelmax + 1); sc_idx++)
                     {
                         pel += community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx] *
-                               exp(grid->m_values[sc_idx]) * grid->mstep;
+                               grid->exp_m_values[sc_idx] * grid->mstep;
                     }
                     community->pelagic[pel_species_idx].reproduction[x_idx][y_idx] = pel * 492 * grid->tstep;
                 }
@@ -5233,7 +5236,7 @@ void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
                              sc_idx < (community->benthic[ben_species_idx].ibenmax + 1); sc_idx++)
                         {
                             ben += community->benthic[ben_species_idx].u_values[sc_idx][x_idx][y_idx] *
-                                   exp(grid->m_values[sc_idx]) * grid->mstep;
+                                   grid->exp_m_values[sc_idx] * grid->mstep;
                         }
                         community->benthic[ben_species_idx].reproduction[x_idx][y_idx] = ben * 492 * grid->tstep;
                     }
