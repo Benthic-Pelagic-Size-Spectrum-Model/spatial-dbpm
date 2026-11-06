@@ -105,7 +105,7 @@ typedef struct grid_info
     double youtstep;
     double *y_values;
 
-    double **land_mask // A value for each cell indicating whether it is
+    double **land_mask; // A value for each cell indicating whether it is
 
 } GRID;
 
@@ -415,6 +415,7 @@ typedef struct output_info
 /*Setup Functions*/
 void setup_run(RUN *, int *, char *, int *);
 void setup_grid(GRID *, double *, int *);
+static int is_land(GRID *, int, int);
 void setup_plankton(RUN *, GRID *, PLANKTON *, double *, char *, int, int);         // sets up plankton values
 void setup_pelagic(RUN *, GRID *, PELAGIC *, double *, char *, int, int, int, int); // sets up pelagic values
 void setup_benthic(RUN *, GRID *, BENTHIC *, double *, char *, int, int, int, int); // sets up benthic values
@@ -426,6 +427,7 @@ double phi(double, double, double, double); // Calculates feeding kernel for eac
 double **setup_pelagic_params(int, double *); // Converts 1D vector of pelagic params to 2D array of pelagic params
 double **setup_benthic_params(int, double *); // Converts 1D vector of benthic params to 2D array of benthic params
 void setup_matrix(int, MATRIX *);
+void set_land_to_zero(RUN *, GRID *, COMMUNITY *);
 
 /*Timestepping and Output Function*/
 void calculate_results(RUN *, GRID *, COMMUNITY *, OUTPUT *, MATRIX *, MATRIX *, MATRIX *, MATRIX *);
@@ -500,6 +502,14 @@ double Dfun(double, double, GRID *, PELAGIC *);
 double Diffun(double, double, GRID *, PELAGIC *);
 double x_start(double, double);
 double y_start(double, double);
+static int horizontal_face_valid(GRID *, int, int); // Identifies faces that are open for fluxes (both water cells)
+static int vertical_face_valid(GRID *, int, int); // " "
+
+// Helper function that checks if two neighbouring (vertical) cells are both water
+// and would therefore accept movement fluxes across their boundary
+static int vertical_face_valid(GRID *grid, int x_idx, int y_idx) {
+    return (!is_land(grid, x_idx, y_idx) && !is_land(grid, x_idx, y_idx + 1))
+}
 
 /*Memory Management Functions*/
 void free_mem(RUN *, GRID *, COMMUNITY *, MATRIX *, MATRIX *, MATRIX *, MATRIX *, double **,
@@ -554,7 +564,7 @@ SEXP SizeSpectrum(SEXP run_params_r, SEXP grid_params_r, SEXP plankton_params_r,
     R_xlen_t n_mask = XLENGTH(land_mask_r);
     for (R_xlen_t i=0; i<n_mask; i++) {
         if (mask[i] != 0 && mask[i] != 1) {
-            error("land_mask must only contain values of 0 or 1.")
+            error("land_mask must only contain values of 0 or 1.");
         }
     }
 
@@ -729,6 +739,9 @@ static SEXP SizeSpectrum_internals(int *run_params, double *grid_params, double 
 
     setup_output(&run, &grid, &out, result);
 
+    // Set land cells to zero incase they have incoming values from input files
+    set_land_to_zero(&run, &grid, &community);
+
     /*Perform all finite differencing*/
     calculate_results(&run, &grid, &community, &out, pelmatrix, benmatrix, &xmatrix, &ymatrix);
 
@@ -843,19 +856,30 @@ void setup_grid(GRID *grid, double *grid_input, int *land_mask)
     // Land mask setup -
 
     // Check the length of the mask
-    if (length(land_mask) != grid->xnum * grid->ynum) {
-        error("land_mask must have a length of n_x * n_y.")
+    if (sizeof(land_mask) != grid->xnum * grid->ynum) {
+        error("land_mask must have a length of n_x * n_y.");
     }
 
     // Setup cell land mask vector from R inputs (the order of cell indices matches
     // the current order in C loops - Y changes fastest so cell indices are e.g.
-    // [1,1], [1,2], [2,1], [2,2])
+    // [1,1], [1,2], [2,1], [2,2]). 
+    // This index value is calculated two ways:
+    // In R this index would be calculated `(x_idx - 1) * n_y + y_idx` but in C
+    // it is calculated `x_idx * n_y + y_idx`
+    grid->land_mask = (int *)safe_malloc(n_x * sizeof(int), __LINE__, __FILE__);
+
     for (x_idx=0; x_idx < n_x; x_idx++) {
+        grid->land_mask[x_idx] = (int *)safe_malloc(n_y * sizeof(int), __LINE__, __FILE__);
         for (y_idx=0; y_idx < n_y; y_idx++) {
             grid->land_mask[x_idx][y_idx] = land_mask[x_idx * n_y + y_idx];
         }
     }
 }
+
+static int is_land(GRID *grid, int x_idx, int y_idx) {
+    return (grid->land_mask[x_idx][y_idx] == 0);
+}
+#define SKIP_IF_LAND(grid, x_idx, y_idx) {if (is_land(grid, x_idx, y_idx)) continue;}
 
 double **setup_pelagic_params(int no_pelagic, double *pel_params)
 {
@@ -1829,6 +1853,47 @@ void setup_matrix(int dim, MATRIX *matrix)
     matrix->u = (double *)safe_malloc(dim * sizeof(double), __LINE__, __FILE__);
 }
 
+// Set land cells to zero after setup. If land cells are non-zero after reading
+// in input values etc. this could create confusion. So, after setting up the community,
+// we set land cell values to 0 for clarity.
+void set_land_to_zero(RUN *run, GRID *grid, COMMUNITY *comm)
+{
+    int sc_idx, x_idx, y_idx, pel_species_idx, ben_species_idx;
+    int n_m = grid->mnum, n_x = grid->xnum, n_y = grid->ynum;
+    int n_pel_species = run->no_pelagic, n_ben_species = run->no_benthic;
+
+    for (x_idx = 0; x_idx < n_x; x_idx++)
+    {
+        for (y_idx = 0; y_idx < n_y; y_idx++)
+        {
+            if (!is_land(grid, x_idx, y_idx)) {continue;} // Only zero land cells
+
+            for (sc_idx = 0; sc_idx < n_m; sc_idx++)
+            {
+                community->plankton->u_values[sc_idx][x_idx][y_idx] = 0;
+
+                for (pel_species_idx = 0; pel_species_idx < run->no_pelagic; pel_species_idx++)
+                {
+                    community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx] = 0;
+                }
+
+                if (run->no_benthic != 0)
+                {
+                    for (ben_species_idx = 0; ben_species_idx < run->no_benthic; ben_species_idx++)
+                    {
+                        community->benthic[ben_species_idx].u_values[sc_idx][x_idx][y_idx] = 0;
+                    }
+                }
+            }
+
+            if (run->no_benthic != 0)
+            {
+                community->detritus->w_values[x_idx][y_idx] = 0;
+            }
+        }
+    }
+}
+
 //--------------------------------//
 // Functions for handling outputs //
 //--------------------------------//
@@ -2063,9 +2128,10 @@ void setup_output(RUN *run, GRID *grid, OUTPUT *out, SEXP result)
                          "detritus_w",
                          "detritus_g",
                          "detritus_mu"};
-    for (i = 0; i < 18; i++)
-        SET_STRING_ELT(nms, i, mkChar(n[i]));
+    for (i = 0; i < 18; i++) {SET_STRING_ELT(nms, i, mkChar(n[i]));}
     setAttrib(result, R_NamesSymbol, nms);
+
+    for (i = 6; i < 18; i++) {fill_na(VECTOR_ELT(result, i));}
 
     UNPROTECT(24);
 }
@@ -2106,6 +2172,8 @@ static void record_output(RUN *run, GRID *grid, COMMUNITY *c, OUTPUT *out, int t
     {
         for (x_idx = 0; x_idx < out->nout_x; x_idx++)
         {
+            SKIP_IF_LAND(grid, x_idx, y_idx);
+
             for (sc_idx = 0; sc_idx < out->nout_m; sc_idx++)
             {
                 out->pla_u[sc_idx + (R_xlen_t)out->nout_m *
@@ -2120,6 +2188,8 @@ static void record_output(RUN *run, GRID *grid, COMMUNITY *c, OUTPUT *out, int t
     {
         for (x_idx = 0; x_idx < out->nout_x; x_idx++)
         {
+            SKIP_IF_LAND(grid, x_idx, y_idx);
+
             for (sc_idx = 0; sc_idx < out->nout_m; sc_idx++)
             {
                 for (pel_species_idx = 0; pel_species_idx < run->no_pelagic; pel_species_idx++)
@@ -2167,6 +2237,8 @@ static void record_output(RUN *run, GRID *grid, COMMUNITY *c, OUTPUT *out, int t
     {
         for (x_idx = 0; x_idx < out->nout_x; x_idx++)
         {
+            SKIP_IF_LAND(grid, x_idx, y_idx);
+
             for (sc_idx = 0; sc_idx < out->nout_m; sc_idx++)
             {
                 for (ben_species_idx = 0; ben_species_idx < run->no_benthic; ben_species_idx++)
@@ -2208,6 +2280,7 @@ static void record_output(RUN *run, GRID *grid, COMMUNITY *c, OUTPUT *out, int t
     {
         for (x_idx = 0; x_idx < out->nout_x; x_idx++)
         {
+            SKIP_IF_LAND(grid, x_idx, y_idx);
 
             out->det_w[
 
@@ -3782,6 +3855,8 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
             {
                 for (y_idx = 0; y_idx < n_y; y_idx++)
                 {
+                    SKIP_IF_LAND(grid, x_idx, y_idx);
+
                     for (sc_idx = 0; sc_idx < pelmatrix[pel_species_idx].size; sc_idx++)
                     {
                         pelmatrix[pel_species_idx].a[sc_idx] =
@@ -3856,6 +3931,8 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                 {
                     for (y_idx = 0; y_idx < n_y; y_idx++)
                     {
+                        SKIP_IF_LAND(grid, x_idx, y_idx); 
+
                         for (sc_idx = 0; sc_idx < benmatrix[ben_species_idx].size; sc_idx++)
                         {
                             benmatrix[ben_species_idx].a[sc_idx] =
@@ -3927,6 +4004,8 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
             {
                 for (y_idx = 0; y_idx < n_y; y_idx++)
                 {
+                    SKIP_IF_LAND(grid, x_idx, y_idx);
+
                     /* Analytical (exponential) integrator for the detritus pool.
                        Over a step the fish/plankton state is fixed, so detritus obeys a
                        LINEAR ODE  dW/dt = I - kappa*W , with input I = g_values (constant)
@@ -4034,6 +4113,8 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                 {
                     for (y_idx = 0; y_idx < n_y; y_idx++)
                     {
+                        SKIP_IF_LAND(grid, x_idx, y_idx);
+
                         for (sc_idx = 0; sc_idx < pelmatrix[pel_species_idx].size; sc_idx++)
                         {
                             pelmatrix[pel_species_idx].a[sc_idx] =
@@ -4076,6 +4157,8 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                     {
                         for (y_idx = 0; y_idx < n_y; y_idx++)
                         {
+                            SKIP_IF_LAND(grid, x_idx, y_idx);
+
                             for (sc_idx = 0; sc_idx < benmatrix[ben_species_idx].size; sc_idx++)
                             {
                                 benmatrix[ben_species_idx].a[sc_idx] =
@@ -4114,6 +4197,8 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                 {
                     for (y_idx = 0; y_idx < n_y; y_idx++)
                     {
+                        SKIP_IF_LAND(grid, x_idx, y_idx);
+
                         community->detritus->w_values[x_idx][y_idx] =
                             temp_detritus[x_idx][y_idx] +
                             (dt / 2) * ((community->detritus->g_values[x_idx][y_idx] + temp_det_g[x_idx][y_idx]) -
@@ -4131,6 +4216,8 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
     {
         for (y_idx = 0; y_idx < n_y; y_idx++)
         {
+            SKIP_IF_LAND(grid, x_idx, y_idx);
+
             for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
             {
                 /*If values aren't given by timeseries*/
@@ -4219,6 +4306,7 @@ void xmove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *xmat, doub
                                          __FILE__); /* flux[x_idx] = flux across the face between cells k and k+1 */
     double *vface = (double *)safe_malloc(n_x * sizeof(double), __LINE__,
                                           __FILE__); /* advective velocity at face k (depends on g,mu only) */
+    int *face_open = (int *)safe_malloc(n_x * sizeof(int), __LINE__, __FILE__); // Holds whether faces are open for movement (no land cells)
 
     for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
     {
@@ -4233,6 +4321,10 @@ void xmove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *xmat, doub
                          D == 0.0); /* no advection -> identity; also avoids 0*NaN if a crashed cell left NaN in g/mu */
             for (y_idx = 0; y_idx < n_y; y_idx++)
             {
+                for (x_idx=0; x_idx<n_x - 1; x_idx++) {
+                    face_open[x_idx] = horizontal_face_valid(grid, x_idx, y_idx);
+                }
+                
                 /* --- 1. advection: conservative upwind flux form; zero flux at both walls.
                    CFL SUB-STEPPING: the explicit upwind update is stable only for Courant number
                    |v|*dt/dx <= 1; a large prey/pred coefficient would otherwise flush a cell in one
@@ -4243,7 +4335,7 @@ void xmove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *xmat, doub
                 double vmax = 0.0;
                 for (x_idx = 0; x_idx < n_x - 1; x_idx++)
                 {
-                    vface[x_idx] = noadv
+                    vface[x_idx] = noadv || !face_open[x_idx]
                                        ? 0.0
                                        : (C * (community->pelagic[pel_species_idx].g_values[sc_idx][x_idx + 1][y_idx] -
                                                community->pelagic[pel_species_idx].g_values[sc_idx][x_idx][y_idx]) -
@@ -4495,6 +4587,8 @@ void calculate_g_and_mu(RUN *run, GRID *grid, COMMUNITY *community)
             {
                 for (y_idx = 0; y_idx < n_y; y_idx++)
                 {
+                    SKIP_IF_LAND(grid, x_idx, y_idx);
+
                     double comp = community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx];
                     double a = (rf > 0 && comp > 0) ? 1.0 - rf / comp : 1.0;
                     if (a < minA)
@@ -4519,6 +4613,8 @@ void calculate_g_and_mu(RUN *run, GRID *grid, COMMUNITY *community)
             {
                 for (y_idx = 0; y_idx < n_y; y_idx++)
                 {
+                    SKIP_IF_LAND(grid, x_idx, y_idx);
+
                     /* per-cell pelagic temperature multiplier on FEEDING + PREDATION (1 when off). */
                     double tmP = run->forcing_percell ? run->pel_tempeff_c[x_idx][y_idx] : 1.0;
                     for (pel_sub_idx = 0; pel_sub_idx < n_pel_species; pel_sub_idx++)
@@ -4549,6 +4645,8 @@ void calculate_g_and_mu(RUN *run, GRID *grid, COMMUNITY *community)
         {
             for (y_idx = 0; y_idx < n_y; y_idx++)
             {
+                SKIP_IF_LAND(grid, x_idx, y_idx);
+
                 pla = 0;
                 pel = 0;
                 ben = 0;
@@ -4594,6 +4692,8 @@ void calculate_g_and_mu(RUN *run, GRID *grid, COMMUNITY *community)
                 {
                     for (y_idx = 0; y_idx < n_y; y_idx++)
                     {
+                        SKIP_IF_LAND(grid, x_idx, y_idx);
+
                         /* predation ON benthos is BY pelagic predators (pel temp); benthic feeding uses benthic temp */
                         double tmPb = run->forcing_percell ? run->pel_tempeff_c[x_idx][y_idx] : 1.0;
                         double tmB = run->forcing_percell ? run->ben_tempeff_c[x_idx][y_idx] : 1.0;
@@ -4617,6 +4717,8 @@ void calculate_g_and_mu(RUN *run, GRID *grid, COMMUNITY *community)
             {
                 for (y_idx = 0; y_idx < n_y; y_idx++)
                 {
+                    SKIP_IF_LAND(grid, x_idx, y_idx);
+
                     det = 0;
                     fish = 0;
                     pred = 0;
@@ -4643,6 +4745,8 @@ void calculate_g_and_mu(RUN *run, GRID *grid, COMMUNITY *community)
         {
             for (y_idx = 0; y_idx < n_y; y_idx++)
             {
+                SKIP_IF_LAND(grid, x_idx, y_idx);
+                
                 community->detritus->g_values[x_idx][y_idx] = g_det(x_idx, y_idx, run, grid, community);
                 community->detritus->mu_values[x_idx][y_idx] = mu_det(x_idx, y_idx, run, grid, community);
             }
@@ -5052,6 +5156,8 @@ void calculate_fishing(RUN *run, GRID *grid, COMMUNITY *community)
 
                     result = (char *)strtok(input, sep); // this is the 1st value
                     sc_idx = 0;
+                    SKIP_IF_LAND(grid, x_idx, y_idx);
+
                     while (result != NULL)
                     {
                         community->pelagic[pel_species_idx].mu_fish_values[sc_idx][x_idx][y_idx] = atof(result);
@@ -5088,6 +5194,8 @@ void calculate_fishing(RUN *run, GRID *grid, COMMUNITY *community)
 
                         result = (char *)strtok(input, sep); // this is the 1st value
                         sc_idx = 0;
+                        SKIP_IF_LAND(grid, x_idx, y_idx);
+
                         while (result != NULL)
                         {
                             community->benthic[ben_species_idx].mu_fish_values[sc_idx][x_idx][y_idx] = atof(result);
@@ -5115,6 +5223,8 @@ void calculate_fishing(RUN *run, GRID *grid, COMMUNITY *community)
         {
             for (y_idx = 0; y_idx < n_y; y_idx++)
             {
+                SKIP_IF_LAND(grid, x_idx, y_idx);
+
                 /* pelagic column thickness (depth channel; 1 if absent) - per-cell under FORCING_PERCELL */
                 double dcorr = run->forcing_percell ? run->depth_c[x_idx][y_idx] : run->depth;
                 double Bpel = 0.0, Bben = 0.0;
@@ -5206,6 +5316,8 @@ void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
             {
                 for (y_idx = 0; y_idx < n_y; y_idx++)
                 {
+                    SKIP_IF_LAND(grid, x_idx, y_idx);
+
                     pla = 0;
                     pel = 0;
                     ben = 0;
@@ -5258,6 +5370,8 @@ void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
             {
                 for (y_idx = 0; y_idx < n_y; y_idx++)
                 {
+                    SKIP_IF_LAND(grid, x_idx, y_idx);
+
                     pel = 0;
                     for (sc_idx = community->pelagic[pel_species_idx].ipelmat;
                          sc_idx < (community->pelagic[pel_species_idx].ipelmax + 1); sc_idx++)
@@ -5311,6 +5425,8 @@ void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
                 {
                     for (y_idx = 0; y_idx < n_y; y_idx++)
                     {
+                        SKIP_IF_LAND(grid, x_idx, y_idx);
+
                         det = 0;
                         for (sc_idx = community->benthic[ben_species_idx].ibenmat;
                              sc_idx < (community->benthic[ben_species_idx].ibenmax + 1); sc_idx++)
@@ -5331,6 +5447,8 @@ void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
                 {
                     for (y_idx = 0; y_idx < n_y; y_idx++)
                     {
+                        SKIP_IF_LAND(grid, x_idx, y_idx);
+
                         ben = 0;
                         for (sc_idx = community->benthic[ben_species_idx].ibenmat;
                              sc_idx < (community->benthic[ben_species_idx].ibenmax + 1); sc_idx++)
@@ -5429,6 +5547,18 @@ double y_start(double y, double t)
     return ans;
 }
 
+// Helper function that checks if two neighbouring (horizontal) cells are both water
+// and would therefore accept movement fluxes across their boundary
+static int horizontal_face_valid(GRID *grid, int x_idx, int y_idx) {
+    return (!is_land(grid, x_idx, y_idx) && !is_land(grid, x_idx + 1, y_idx))
+}
+
+// Helper function that checks if two neighbouring (vertical) cells are both water
+// and would therefore accept movement fluxes across their boundary
+static int vertical_face_valid(GRID *grid, int x_idx, int y_idx) {
+    return (!is_land(grid, x_idx, y_idx) && !is_land(grid, x_idx, y_idx + 1))
+}
+
 //---------------------------------------------------------//
 // These are memory allocation functions. Not to be edited //
 //---------------------------------------------------------//
@@ -5450,6 +5580,11 @@ void free_mem(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, MAT
     free(grid->t_values);
     free(grid->x_values);
     free(grid->y_values);
+
+    for (x_idx=0; x_idx<n_x; x_idx++) {
+        free(grid->land_mask[x_idx]);
+    }
+    free(grid->land_mask);
 
     /*Free pelagic values*/
     for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
