@@ -5416,6 +5416,7 @@ void free_mem(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, MAT
 
     /*Free grid values*/
     free(grid->m_values);
+    free(grid->exp_m_values);
     free(grid->t_values);
     free(grid->x_values);
     free(grid->y_values);
