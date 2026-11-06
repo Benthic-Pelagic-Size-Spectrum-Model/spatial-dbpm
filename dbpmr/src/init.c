@@ -13,11 +13,12 @@ extern SEXP SizeSpectrum(
         SEXP detritus_params_r, 
         SEXP names_params_r, 
         SEXP flags_params_r,
-        SEXP output_params_r
+        SEXP output_params_r,
+        SEXP land_mask_r
 );
 
 static const R_CallMethodDef CallEntries[] = {
-    {"SizeSpectrum", (DL_FUNC) &SizeSpectrum, 9},
+    {"SizeSpectrum", (DL_FUNC) &SizeSpectrum, 10},
     {NULL, NULL, 0}
 };
 

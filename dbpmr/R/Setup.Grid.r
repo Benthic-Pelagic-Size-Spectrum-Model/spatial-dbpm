@@ -17,10 +17,6 @@
 #'   x-space grid.
 #' @param ymin,ymax,ystep,youtstep Minimum, maximum, step and output step of the
 #'   y-space grid.
-#' @param land_mask A vector of Bool values that express whether a cell is land (0)
-#'   so no computation will be performed for that cell, or water (1).
-#'   Default =1 (assumes a 0D grid with 1 cell), so a real value must be provided
-#'   for spatial runs.
 #'
 #' @return A [grid.params] object.
 #' @seealso [Setup.Run()]
@@ -72,11 +68,6 @@ Setup.Grid<-function(run, mmin=-12*log(10),mmax=6*log(10),mstep=0.1*log(10),mout
     grid.params@ystep<-1
     grid.params@youtstep<-1
   } 
-
-  mask_check <- all(land_mask %in% c(0, 1))
-  if (!mask_check) {error("land_mask must only contain values of 0 (land) or 1 (water).")}
-  
-  grid.params@land_mask <- land_mask
   
   return(grid.params)
 }

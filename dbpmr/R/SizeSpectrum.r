@@ -17,6 +17,10 @@
 #' @param memory.returns Bool that controls whether outputs are returned in memory.
 #'   Default = TRUE. For large runs, this can be memory intensive. If this is set
 #'   to FALSE, then the filenames of outputs will be returned instead of outputs.
+#' @param land_mask A vector of Bool values that express whether a cell is land (0)
+#'   so no computation will be performed for that cell, or water (1).
+#'   Default =1 (assumes a 0D grid with 1 cell), so a real value must be provided
+#'   for spatial runs.
 #'
 #' @return Depends on `memory.returns` if this argument is TRUE, then this function
 #'   will return all run results to memory (the same outputs that are written to results.txt)
@@ -33,7 +37,8 @@
         benthic.in,
         detritus.in,
         write.files = FALSE,
-        memory.return = TRUE
+        memory.return = TRUE,
+        land_mask = 1
     ) {
         #run.in is an object of class of run.params (2 strings and 6 integers relating to the entire run process)
 
@@ -165,8 +170,7 @@
             grid.in@ymin,
             grid.in@ymax,
             grid.in@ystep,
-            grid.in@youtstep,
-            grid.in@land_mask
+            grid.in@youtstep
         )
 
         #Plankton Parameters (Float vector)
@@ -602,6 +606,10 @@
         # include file writing
         output.params <- as.integer(c(write.files, memory.return))
 
+        mask_check <- all(land_mask %in% c(0, 1))
+        if (!mask_check) {error("land_mask must only contain values of 0 and 1.")}
+        land_mask <- as.integer(land_mask)
+
         #-------------#
         # Call C code #
         #-------------#
@@ -616,7 +624,8 @@
             as.double(det.params),
             as.character(names.params),
             as.integer(flags.params),
-            output.params
+            output.params,
+            land_mask
         )
 
         #-----------------------------------------------------------------#

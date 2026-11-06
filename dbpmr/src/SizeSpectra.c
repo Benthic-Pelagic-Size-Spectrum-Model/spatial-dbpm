@@ -414,7 +414,7 @@ typedef struct output_info
 
 /*Setup Functions*/
 void setup_run(RUN *, int *, char *, int *);
-void setup_grid(GRID *, double *);
+void setup_grid(GRID *, double *, int *);
 void setup_plankton(RUN *, GRID *, PLANKTON *, double *, char *, int, int);         // sets up plankton values
 void setup_pelagic(RUN *, GRID *, PELAGIC *, double *, char *, int, int, int, int); // sets up pelagic values
 void setup_benthic(RUN *, GRID *, BENTHIC *, double *, char *, int, int, int, int); // sets up benthic values
@@ -508,7 +508,7 @@ void *safe_malloc(size_t, int, char *);        // Wrappered function for memory 
 FILE *safe_fopen(char *, char *, int, char *); // Wrappered function for file opening
 
 /*Protype of the internal size-spectrum function (no interface with R)*/
-static SEXP SizeSpectrum_internals(int *, double *, double *, double *, double *, double *, char **, int *, int *);
+static SEXP SizeSpectrum_internals(int *, double *, double *, double *, double *, double *, char **, int *, int *, int *);
 
 // This is the new R interface. SizeSpectrum() is now a wrapper function that
 // takes the objects from R (.Call()). SizeSpectrum() checks the SEXP objects from
@@ -519,13 +519,15 @@ static SEXP SizeSpectrum_internals(int *, double *, double *, double *, double *
 // file output, memory output or both.
 SEXP SizeSpectrum(SEXP run_params_r, SEXP grid_params_r, SEXP plankton_params_r, SEXP pelagic_params_r,
                   SEXP benthic_params_r, SEXP detritus_params_r, SEXP names_params_r, SEXP flags_params_r,
-                  SEXP output_params_r)
+                  SEXP output_params_r, SEXP land_mask_r)
 {
     // Ensure that all of the SEXP objects are of the correct type after
     // passing in from R.
-    if (!isInteger(run_params_r) || !isInteger(flags_params_r) || !isInteger(output_params_r))
+    if (!isInteger(run_params_r) || !isInteger(flags_params_r) || !isInteger(output_params_r) ||
+        !isInteger(land_mask_r)
+    )
     {
-        error("run, flags and output *_params_r R objects must be integer vectors");
+        error("run, flags, output *_params and land_mask R objects must be integer vectors");
     }
     if (!isReal(grid_params_r) || !isReal(plankton_params_r) || !isReal(pelagic_params_r) ||
         !isReal(benthic_params_r) || !isReal(detritus_params_r))
@@ -543,12 +545,13 @@ SEXP SizeSpectrum(SEXP run_params_r, SEXP grid_params_r, SEXP plankton_params_r,
     {
         error("run_params_r must have 5 elements");
     }
-    if (LENGTH(grid_params_r) != 19)
+    if (LENGTH(grid_params_r) != 18)
     {
-        error("grid_params_r must have 19 elements");
+        error("grid_params_r must have 18 elements");
     }
-    int *mask = INTEGER(grid_params_r)[18];
-    R_xlen_t n_mask = XLENGTH(grid_params_r)[18];
+    
+    int *mask = INTEGER(land_mask_r);
+    R_xlen_t n_mask = XLENGTH(land_mask_r);
     for (R_xlen_t i=0; i<n_mask; i++) {
         if (mask[i] != 0 && mask[i] != 1) {
             error("land_mask must only contain values of 0 or 1.")
@@ -605,6 +608,7 @@ SEXP SizeSpectrum(SEXP run_params_r, SEXP grid_params_r, SEXP plankton_params_r,
     int *run_params = INTEGER(run_params_r);
     int *flags_params = INTEGER(flags_params_r);
     int *output_params = INTEGER(output_params_r);
+    int *land_mask = INTEGER(land_mask_r);
     double *grid_params = REAL(grid_params_r);
     double *pla_params = REAL(plankton_params_r);
     double *pel_params = REAL(pelagic_params_r);
@@ -619,7 +623,7 @@ SEXP SizeSpectrum(SEXP run_params_r, SEXP grid_params_r, SEXP plankton_params_r,
     }
 
     SEXP result = SizeSpectrum_internals(run_params, grid_params, pla_params, pel_params, ben_params, det_params,
-                                         names_params, flags_params, output_params);
+                                         names_params, flags_params, output_params, land_mask);
     return (result);
 }
 
@@ -629,7 +633,7 @@ SEXP SizeSpectrum(SEXP run_params_r, SEXP grid_params_r, SEXP plankton_params_r,
 
 static SEXP SizeSpectrum_internals(int *run_params, double *grid_params, double *pla_params, double *pel_params,
                                    double *ben_params, double *det_params, char **names_params, int *flags_params,
-                                   int *output_params)
+                                   int *output_params, int *land_mask)
 // run_params is an array of run parameters
 // grid_params is an array of grid discretisation values
 // pla_params is plankton params
@@ -654,7 +658,7 @@ static SEXP SizeSpectrum_internals(int *run_params, double *grid_params, double 
     setup_run(&run, run_params, names_params[0], output_params);
 
     /*Setup grid*/
-    setup_grid(&grid, grid_params);
+    setup_grid(&grid, grid_params, land_mask);
 
     SEXP result = R_NilValue;
     if (run.return_memory)
@@ -765,7 +769,7 @@ void setup_run(RUN *run, int *run_params, char *filename, int *output_params)
     fclose(run->fptr_summ);
 }
 
-void setup_grid(GRID *grid, double *grid_input)
+void setup_grid(GRID *grid, double *grid_input, int *land_mask)
 {
     /*Declare Mass Discretisation*/
     grid->mmin = grid_input[0];
@@ -836,12 +840,19 @@ void setup_grid(GRID *grid, double *grid_input)
         grid->y_values[y_idx] = grid->ymin + (y_idx * grid->ystep);
     }
 
+    // Land mask setup -
+
+    // Check the length of the mask
+    if (length(land_mask) != grid->xnum * grid->ynum) {
+        error("land_mask must have a length of n_x * n_y.")
+    }
+
     // Setup cell land mask vector from R inputs (the order of cell indices matches
     // the current order in C loops - Y changes fastest so cell indices are e.g.
     // [1,1], [1,2], [2,1], [2,2])
     for (x_idx=0; x_idx < n_x; x_idx++) {
         for (y_idx=0; y_idx < n_y; y_idx++) {
-            grid->land_mask[x_idx][y_idx] = grid_input[18][x_idx * n_y + y_idx]
+            grid->land_mask[x_idx][y_idx] = land_mask[x_idx * n_y + y_idx];
         }
     }
 }
