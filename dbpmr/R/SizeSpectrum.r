@@ -165,7 +165,8 @@
             grid.in@ymin,
             grid.in@ymax,
             grid.in@ystep,
-            grid.in@youtstep
+            grid.in@youtstep,
+            grid.in@land_mask
         )
 
         #Plankton Parameters (Float vector)

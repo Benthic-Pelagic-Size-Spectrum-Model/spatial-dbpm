@@ -105,6 +105,8 @@ typedef struct grid_info
     double youtstep;
     double *y_values;
 
+    double **land_mask // A value for each cell indicating whether it is
+
 } GRID;
 
 /*Contains all info regarding the plankton dynamics*/
@@ -541,10 +543,18 @@ SEXP SizeSpectrum(SEXP run_params_r, SEXP grid_params_r, SEXP plankton_params_r,
     {
         error("run_params_r must have 5 elements");
     }
-    if (LENGTH(grid_params_r) != 18)
+    if (LENGTH(grid_params_r) != 19)
     {
-        error("grid_params_r must have 18 elements");
+        error("grid_params_r must have 19 elements");
     }
+    int *mask = INTEGER(grid_params_r)[18];
+    R_xlen_t n_mask = XLENGTH(grid_params_r)[18];
+    for (R_xlen_t i=0; i<n_mask; i++) {
+        if (mask[i] != 0 && mask[i] != 1) {
+            error("land_mask must only contain values of 0 or 1.")
+        }
+    }
+
     if (LENGTH(plankton_params_r) != 6)
     {
         error("plankton_params_r must have 6 elements");
@@ -824,6 +834,15 @@ void setup_grid(GRID *grid, double *grid_input)
     for (y_idx = 0; y_idx < n_y; y_idx++)
     {
         grid->y_values[y_idx] = grid->ymin + (y_idx * grid->ystep);
+    }
+
+    // Setup cell land mask vector from R inputs (the order of cell indices matches
+    // the current order in C loops - Y changes fastest so cell indices are e.g.
+    // [1,1], [1,2], [2,1], [2,2])
+    for (x_idx=0; x_idx < n_x; x_idx++) {
+        for (y_idx=0; y_idx < n_y; y_idx++) {
+            grid->land_mask[x_idx][y_idx] = grid_input[18][x_idx * n_y + y_idx]
+        }
     }
 }
 
