@@ -20,7 +20,11 @@
 #' @param land_mask A vector of Bool values that express whether a cell is land (0)
 #'   so no computation will be performed for that cell, or water (1).
 #'   Default =1 (assumes a 0D grid with 1 cell), so a real value must be provided
-#'   for spatial runs.
+#'   for spatial runs. // Setup cell land mask vector from R inputs (the order of
+#'   cell indices matches the current order in C loops - Y changes fastest so
+#'   cell indices are e.g [1,1], [1,2], [2,1], [2,2]).  This index value is calculated
+#'   two ways: In R this index would be calculated `(x_idx - 1) * n_y + y_idx`,
+#'   but in C it is calculated `x_idx * n_y + y_idx`.
 #'
 #' @return Depends on `memory.returns` if this argument is TRUE, then this function
 #'   will return all run results to memory (the same outputs that are written to results.txt)

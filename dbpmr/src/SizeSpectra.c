@@ -105,7 +105,7 @@ typedef struct grid_info
     double youtstep;
     double *y_values;
 
-    double **land_mask; // A value for each cell indicating whether it is
+    int **land_mask; // A value for each cell indicating whether it is
 
 } GRID;
 
@@ -414,7 +414,7 @@ typedef struct output_info
 
 /*Setup Functions*/
 void setup_run(RUN *, int *, char *, int *);
-void setup_grid(GRID *, double *, int *);
+void setup_grid(GRID *, double *, int *, R_xlen_t);
 static int is_land(GRID *, int, int);
 void setup_plankton(RUN *, GRID *, PLANKTON *, double *, char *, int, int);         // sets up plankton values
 void setup_pelagic(RUN *, GRID *, PELAGIC *, double *, char *, int, int, int, int); // sets up pelagic values
@@ -505,12 +505,6 @@ double y_start(double, double);
 static int horizontal_face_valid(GRID *, int, int); // Identifies faces that are open for fluxes (both water cells)
 static int vertical_face_valid(GRID *, int, int); // " "
 
-// Helper function that checks if two neighbouring (vertical) cells are both water
-// and would therefore accept movement fluxes across their boundary
-static int vertical_face_valid(GRID *grid, int x_idx, int y_idx) {
-    return (!is_land(grid, x_idx, y_idx) && !is_land(grid, x_idx, y_idx + 1))
-}
-
 /*Memory Management Functions*/
 void free_mem(RUN *, GRID *, COMMUNITY *, MATRIX *, MATRIX *, MATRIX *, MATRIX *, double **,
               double **);                      // Frees all allocated memory
@@ -518,7 +512,7 @@ void *safe_malloc(size_t, int, char *);        // Wrappered function for memory 
 FILE *safe_fopen(char *, char *, int, char *); // Wrappered function for file opening
 
 /*Protype of the internal size-spectrum function (no interface with R)*/
-static SEXP SizeSpectrum_internals(int *, double *, double *, double *, double *, double *, char **, int *, int *, int *);
+static SEXP SizeSpectrum_internals(int *, double *, double *, double *, double *, double *, char **, int *, int *, int *, R_xlen_t);
 
 // This is the new R interface. SizeSpectrum() is now a wrapper function that
 // takes the objects from R (.Call()). SizeSpectrum() checks the SEXP objects from
@@ -560,10 +554,10 @@ SEXP SizeSpectrum(SEXP run_params_r, SEXP grid_params_r, SEXP plankton_params_r,
         error("grid_params_r must have 18 elements");
     }
     
-    int *mask = INTEGER(land_mask_r);
+    int *land_mask = INTEGER(land_mask_r);
     R_xlen_t n_mask = XLENGTH(land_mask_r);
     for (R_xlen_t i=0; i<n_mask; i++) {
-        if (mask[i] != 0 && mask[i] != 1) {
+        if (land_mask[i] != 0 && land_mask[i] != 1) {
             error("land_mask must only contain values of 0 or 1.");
         }
     }
@@ -618,7 +612,6 @@ SEXP SizeSpectrum(SEXP run_params_r, SEXP grid_params_r, SEXP plankton_params_r,
     int *run_params = INTEGER(run_params_r);
     int *flags_params = INTEGER(flags_params_r);
     int *output_params = INTEGER(output_params_r);
-    int *land_mask = INTEGER(land_mask_r);
     double *grid_params = REAL(grid_params_r);
     double *pla_params = REAL(plankton_params_r);
     double *pel_params = REAL(pelagic_params_r);
@@ -633,7 +626,7 @@ SEXP SizeSpectrum(SEXP run_params_r, SEXP grid_params_r, SEXP plankton_params_r,
     }
 
     SEXP result = SizeSpectrum_internals(run_params, grid_params, pla_params, pel_params, ben_params, det_params,
-                                         names_params, flags_params, output_params, land_mask);
+                                         names_params, flags_params, output_params, land_mask, n_mask);
     return (result);
 }
 
@@ -643,7 +636,7 @@ SEXP SizeSpectrum(SEXP run_params_r, SEXP grid_params_r, SEXP plankton_params_r,
 
 static SEXP SizeSpectrum_internals(int *run_params, double *grid_params, double *pla_params, double *pel_params,
                                    double *ben_params, double *det_params, char **names_params, int *flags_params,
-                                   int *output_params, int *land_mask)
+                                   int *output_params, int *land_mask, R_xlen_t mask_length)
 // run_params is an array of run parameters
 // grid_params is an array of grid discretisation values
 // pla_params is plankton params
@@ -668,7 +661,7 @@ static SEXP SizeSpectrum_internals(int *run_params, double *grid_params, double 
     setup_run(&run, run_params, names_params[0], output_params);
 
     /*Setup grid*/
-    setup_grid(&grid, grid_params, land_mask);
+    setup_grid(&grid, grid_params, land_mask, mask_length);
 
     SEXP result = R_NilValue;
     if (run.return_memory)
@@ -782,7 +775,7 @@ void setup_run(RUN *run, int *run_params, char *filename, int *output_params)
     fclose(run->fptr_summ);
 }
 
-void setup_grid(GRID *grid, double *grid_input, int *land_mask)
+void setup_grid(GRID *grid, double *grid_input, int *land_mask, R_xlen_t mask_length)
 {
     /*Declare Mass Discretisation*/
     grid->mmin = grid_input[0];
@@ -856,7 +849,7 @@ void setup_grid(GRID *grid, double *grid_input, int *land_mask)
     // Land mask setup -
 
     // Check the length of the mask
-    if (sizeof(land_mask) != grid->xnum * grid->ynum) {
+    if (mask_length != grid->xnum * grid->ynum) {
         error("land_mask must have a length of n_x * n_y.");
     }
 
@@ -866,7 +859,7 @@ void setup_grid(GRID *grid, double *grid_input, int *land_mask)
     // This index value is calculated two ways:
     // In R this index would be calculated `(x_idx - 1) * n_y + y_idx` but in C
     // it is calculated `x_idx * n_y + y_idx`
-    grid->land_mask = (int *)safe_malloc(n_x * sizeof(int), __LINE__, __FILE__);
+    grid->land_mask = (int **)safe_malloc(n_x * sizeof(int *), __LINE__, __FILE__);
 
     for (x_idx=0; x_idx < n_x; x_idx++) {
         grid->land_mask[x_idx] = (int *)safe_malloc(n_y * sizeof(int), __LINE__, __FILE__);
@@ -1853,6 +1846,13 @@ void setup_matrix(int dim, MATRIX *matrix)
     matrix->u = (double *)safe_malloc(dim * sizeof(double), __LINE__, __FILE__);
 }
 
+static void fill_na(SEXP x) // Helper function to fill R outputs with NA values (this covers land cells)
+{
+    double *p = REAL(x);
+    R_xlen_t n = XLENGTH(x);
+    for (R_xlen_t i = 0; i < n; i++) {p[i] = NA_REAL;}
+}
+
 // Set land cells to zero after setup. If land cells are non-zero after reading
 // in input values etc. this could create confusion. So, after setting up the community,
 // we set land cell values to 0 for clarity.
@@ -1870,25 +1870,25 @@ void set_land_to_zero(RUN *run, GRID *grid, COMMUNITY *comm)
 
             for (sc_idx = 0; sc_idx < n_m; sc_idx++)
             {
-                community->plankton->u_values[sc_idx][x_idx][y_idx] = 0;
+                comm->plankton->u_values[sc_idx][x_idx][y_idx] = 0;
 
-                for (pel_species_idx = 0; pel_species_idx < run->no_pelagic; pel_species_idx++)
+                for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
                 {
-                    community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx] = 0;
+                    comm->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx] = 0;
                 }
 
-                if (run->no_benthic != 0)
+                if (n_ben_species != 0)
                 {
-                    for (ben_species_idx = 0; ben_species_idx < run->no_benthic; ben_species_idx++)
+                    for (ben_species_idx = 0; ben_species_idx < n_ben_species; ben_species_idx++)
                     {
-                        community->benthic[ben_species_idx].u_values[sc_idx][x_idx][y_idx] = 0;
+                        comm->benthic[ben_species_idx].u_values[sc_idx][x_idx][y_idx] = 0;
                     }
                 }
             }
 
-            if (run->no_benthic != 0)
+            if (n_ben_species != 0)
             {
-                community->detritus->w_values[x_idx][y_idx] = 0;
+                comm->detritus->w_values[x_idx][y_idx] = 0;
             }
         }
     }
@@ -2172,7 +2172,7 @@ static void record_output(RUN *run, GRID *grid, COMMUNITY *c, OUTPUT *out, int t
     {
         for (x_idx = 0; x_idx < out->nout_x; x_idx++)
         {
-            SKIP_IF_LAND(grid, x_idx, y_idx);
+            SKIP_IF_LAND(grid, out->x_sel[x_idx], out->y_sel[y_idx]);
 
             for (sc_idx = 0; sc_idx < out->nout_m; sc_idx++)
             {
@@ -2188,7 +2188,7 @@ static void record_output(RUN *run, GRID *grid, COMMUNITY *c, OUTPUT *out, int t
     {
         for (x_idx = 0; x_idx < out->nout_x; x_idx++)
         {
-            SKIP_IF_LAND(grid, x_idx, y_idx);
+            SKIP_IF_LAND(grid, out->x_sel[x_idx], out->y_sel[y_idx]);
 
             for (sc_idx = 0; sc_idx < out->nout_m; sc_idx++)
             {
@@ -2237,7 +2237,7 @@ static void record_output(RUN *run, GRID *grid, COMMUNITY *c, OUTPUT *out, int t
     {
         for (x_idx = 0; x_idx < out->nout_x; x_idx++)
         {
-            SKIP_IF_LAND(grid, x_idx, y_idx);
+            SKIP_IF_LAND(grid, out->x_sel[x_idx], out->y_sel[y_idx]);
 
             for (sc_idx = 0; sc_idx < out->nout_m; sc_idx++)
             {
@@ -2275,30 +2275,32 @@ static void record_output(RUN *run, GRID *grid, COMMUNITY *c, OUTPUT *out, int t
         }
     }
 
-    // Record outputs for detritus component
-    for (y_idx = 0; y_idx < out->nout_y; y_idx++)
-    {
-        for (x_idx = 0; x_idx < out->nout_x; x_idx++)
+    if (run->no_benthic != 0) {
+        // Record outputs for detritus component
+        for (y_idx = 0; y_idx < out->nout_y; y_idx++)
         {
-            SKIP_IF_LAND(grid, x_idx, y_idx);
+            for (x_idx = 0; x_idx < out->nout_x; x_idx++)
+            {
+                SKIP_IF_LAND(grid, out->x_sel[x_idx], out->y_sel[y_idx]);
 
-            out->det_w[
+                out->det_w[
 
-                x_idx + out->nout_x * (y_idx + (R_xlen_t)out->nout_y * out->next_time)
+                    x_idx + out->nout_x * (y_idx + (R_xlen_t)out->nout_y * out->next_time)
 
-            ] = c->detritus->w_values[out->x_sel[x_idx]][out->y_sel[y_idx]];
+                ] = c->detritus->w_values[out->x_sel[x_idx]][out->y_sel[y_idx]];
 
-            out->det_g[
+                out->det_g[
 
-                x_idx + out->nout_x * (y_idx + (R_xlen_t)out->nout_y * out->next_time)
+                    x_idx + out->nout_x * (y_idx + (R_xlen_t)out->nout_y * out->next_time)
 
-            ] = c->detritus->g_values[out->x_sel[x_idx]][out->y_sel[y_idx]];
+                ] = c->detritus->g_values[out->x_sel[x_idx]][out->y_sel[y_idx]];
 
-            out->det_mu[
+                out->det_mu[
 
-                x_idx + out->nout_x * (y_idx + (R_xlen_t)out->nout_y * out->next_time)
+                    x_idx + out->nout_x * (y_idx + (R_xlen_t)out->nout_y * out->next_time)
 
-            ] = c->detritus->mu_values[out->x_sel[x_idx]][out->y_sel[y_idx]];
+                ] = c->detritus->mu_values[out->x_sel[x_idx]][out->y_sel[y_idx]];
+            }
         }
     }
 
@@ -4405,6 +4407,7 @@ void xmove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *xmat, doub
     free(uadv);
     free(flux);
     free(vface);
+    free(face_open);
 }
 
 void ymove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *ymat, double ****temp_pelagic, int time)
@@ -4426,7 +4429,7 @@ void ymove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *ymat, doub
                                          __FILE__); /* flux[l] = flux across the face between cells l and l+1 */
     double *vface = (double *)safe_malloc(n_y * sizeof(double), __LINE__,
                                           __FILE__); /* advective velocity at face l (depends on g,mu only) */
-    int *face_open = (int *)safe_malloc(n_x * sizeof(int), __LINE__, __FILE__); // Holds whether faces are open for movement (no land cells)
+    int *face_open = (int *)safe_malloc(n_y * sizeof(int), __LINE__, __FILE__); // Holds whether faces are open for movement (no land cells)
 
     for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
     {
@@ -4483,8 +4486,8 @@ void ymove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *ymat, doub
                 /* --- 2. diffusion: Crank-Nicolson with zero-flux (Neumann) BCs --- */
                 // RHS (I + r/2 L):
                 for (y_idx=0; y_idx<n_y; y_idx++) {
-                    double rl = (y_idx > 0) ? r * face_open[y_idx - 1] : 0.0 // face with prior cell
-                    double rr = (y_idx < n_y - 1) ? r * face_open[y_idx] : 0.0 // face with next cell
+                    double rl = (y_idx > 0) ? r * face_open[y_idx - 1] : 0.0; // face with prior cell
+                    double rr = (y_idx < n_y - 1) ? r * face_open[y_idx] : 0.0; // face with next cell
 
                     ymat->a[y_idx] = rl / 2.0;
                     ymat->b[y_idx] = 1.0 - (rl + rr) / 2.0;
@@ -4495,8 +4498,8 @@ void ymove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *ymat, doub
 
                 // LHS (I - r/2 L)
                 for (y_idx=0; y_idx<n_y; y_idx++) {
-                    double rl = (y_idx > 0) ? r * face_open[y_idx - 1] : 0.0 // face with prior cell
-                    double rr = (y_idx < n_y - 1) ? r * face_open[y_idx] : 0.0 // face with next cell
+                    double rl = (y_idx > 0) ? r * face_open[y_idx - 1] : 0.0; // face with prior cell
+                    double rr = (y_idx < n_y - 1) ? r * face_open[y_idx] : 0.0; // face with next cell
 
                     ymat->a[y_idx] = -rl / 2.0;
                     ymat->b[y_idx] = 1.0 + (rl + rr) / 2.0;
@@ -4515,6 +4518,7 @@ void ymove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *ymat, doub
     free(uadv);
     free(flux);
     free(vface);
+    free(face_open);
 }
 
 void trimul(MATRIX *matrix)
@@ -5559,13 +5563,13 @@ double y_start(double y, double t)
 // Helper function that checks if two neighbouring (horizontal) cells are both water
 // and would therefore accept movement fluxes across their boundary
 static int horizontal_face_valid(GRID *grid, int x_idx, int y_idx) {
-    return (!is_land(grid, x_idx, y_idx) && !is_land(grid, x_idx + 1, y_idx))
+    return !is_land(grid, x_idx, y_idx) && !is_land(grid, x_idx + 1, y_idx);
 }
 
 // Helper function that checks if two neighbouring (vertical) cells are both water
 // and would therefore accept movement fluxes across their boundary
 static int vertical_face_valid(GRID *grid, int x_idx, int y_idx) {
-    return (!is_land(grid, x_idx, y_idx) && !is_land(grid, x_idx, y_idx + 1))
+    return !is_land(grid, x_idx, y_idx) && !is_land(grid, x_idx, y_idx + 1);
 }
 
 //---------------------------------------------------------//
