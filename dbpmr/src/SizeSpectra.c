@@ -4367,35 +4367,38 @@ void xmove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *xmat, doub
                             uadv[x_idx] = 0.0; /* clamp tiny upwind undershoots */
                     }
                 }
+
                 /* --- 2. diffusion: Crank-Nicolson with zero-flux (Neumann) BCs; conserves mass --- */
                 /* RHS (I + r/2 L): xmat->r = RHS * uadv via trimul */
-                xmat->b[0] = 1.0 - r / 2.0;
-                xmat->c[0] = r / 2.0;
-                for (x_idx = 1; x_idx < n_x - 1; x_idx++)
-                {
-                    xmat->a[x_idx] = r / 2.0;
-                    xmat->b[x_idx] = 1.0 - r;
-                    xmat->c[x_idx] = r / 2.0;
-                }
-                xmat->a[n_x - 1] = r / 2.0;
-                xmat->b[n_x - 1] = 1.0 - r / 2.0;
-                for (x_idx = 0; x_idx < n_x; x_idx++)
+                for (x_idx=0; x_idx < n_x; x_idx++) {
+                    // Use face_open [0,1] as a multiplier to disable diffusion across closed faces (faces where land cells are present).
+                    double rl = (x_idx > 0) ? r * face_open[x_idx - 1] : 0.0; // Left face of cell
+                    double rr = (x_idx < n_x - 1) ? r * face_open[x_idx] : 0.0; // Right face of cell
+
+                    xmat->a[x_idx] = rl / 2.0;
+                    xmat->b[x_idx] = 1.0 - (rl + rr) / 2.0;
+                    xmat->c[x_idx] = rr / 2.0;
                     xmat->u[x_idx] = uadv[x_idx];
-                trimul(xmat);
-                /* LHS (I - r/2 L): solve LHS * unew = r */
-                xmat->b[0] = 1.0 + r / 2.0;
-                xmat->c[0] = -r / 2.0;
-                for (x_idx = 1; x_idx < n_x - 1; x_idx++)
-                {
-                    xmat->a[x_idx] = -r / 2.0;
-                    xmat->b[x_idx] = 1.0 + r;
-                    xmat->c[x_idx] = -r / 2.0;
                 }
-                xmat->a[n_x - 1] = -r / 2.0;
-                xmat->b[n_x - 1] = 1.0 + r / 2.0;
+                trimul(xmat);
+
+                /* LHS (I - r/2 L): solve LHS * unew = r */
+                for (x_idx=0; x_idx < n_x; x_idx++) {
+                    // Use face_open [0,1] as a multiplier to disable diffusion across closed faces (faces where land cells are present).
+                    double rl = (x_idx > 0) ? r * face_open[x_idx - 1] : 0.0; // Left face of cell
+                    double rr = (x_idx < n_x - 1) ? r * face_open[x_idx] : 0.0; // Right face of cell
+
+                    xmat->a[x_idx] = -rl / 2.0;
+                    xmat->b[x_idx] = 1.0 + (rl + rr) / 2.0;
+                    xmat->c[x_idx] = -rr / 2.0;
+                }
                 tridag(xmat);
-                for (x_idx = 0; x_idx < n_x; x_idx++)
-                    community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx] = xmat->u[x_idx];
+
+                for (x_idx = 0; x_idx < n_x; x_idx++) {
+                    if (!is_land(grid, x_idx, y_idx)) {
+                        community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx] = xmat->u[x_idx];
+                    }
+                }
             }
         }
     }
@@ -4423,6 +4426,7 @@ void ymove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *ymat, doub
                                          __FILE__); /* flux[l] = flux across the face between cells l and l+1 */
     double *vface = (double *)safe_malloc(n_y * sizeof(double), __LINE__,
                                           __FILE__); /* advective velocity at face l (depends on g,mu only) */
+    int *face_open = (int *)safe_malloc(n_x * sizeof(int), __LINE__, __FILE__); // Holds whether faces are open for movement (no land cells)
 
     for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
     {
@@ -4436,12 +4440,15 @@ void ymove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *ymat, doub
             int noadv = (C == 0.0 && D == 0.0); /* no advection -> identity; also avoids 0*NaN if g/mu carry NaN */
             for (x_idx = 0; x_idx < n_x; x_idx++)
             {
+                for (y_idx=0; y_idx < n_y - 1; y_idx++) { // Precompute where valid (water to water) faces occur between cells
+                    face_open[y_idx] = vertical_face_valid(grid, x_idx, y_idx);
+                }
                 /* --- 1. advection: conservative upwind flux form; zero flux at both walls.
                    CFL sub-stepped (see xmove_solver for the rationale). --- */
                 double vmax = 0.0;
                 for (y_idx = 0; y_idx < n_y - 1; y_idx++)
                 {
-                    vface[y_idx] = noadv
+                    vface[y_idx] = (noadv || !face_open[y_idx])
                                        ? 0.0
                                        : (C * (community->pelagic[pel_species_idx].g_values[sc_idx][x_idx][y_idx + 1] -
                                                community->pelagic[pel_species_idx].g_values[sc_idx][x_idx][y_idx]) -
@@ -4474,32 +4481,34 @@ void ymove_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *ymat, doub
                     }
                 }
                 /* --- 2. diffusion: Crank-Nicolson with zero-flux (Neumann) BCs --- */
-                ymat->b[0] = 1.0 - r / 2.0;
-                ymat->c[0] = r / 2.0;
-                for (y_idx = 1; y_idx < n_y - 1; y_idx++)
-                {
-                    ymat->a[y_idx] = r / 2.0;
-                    ymat->b[y_idx] = 1.0 - r;
-                    ymat->c[y_idx] = r / 2.0;
-                }
-                ymat->a[n_y - 1] = r / 2.0;
-                ymat->b[n_y - 1] = 1.0 - r / 2.0;
-                for (y_idx = 0; y_idx < n_y; y_idx++)
+                // RHS (I + r/2 L):
+                for (y_idx=0; y_idx<n_y; y_idx++) {
+                    double rl = (y_idx > 0) ? r * face_open[y_idx - 1] : 0.0 // face with prior cell
+                    double rr = (y_idx < n_y - 1) ? r * face_open[y_idx] : 0.0 // face with next cell
+
+                    ymat->a[y_idx] = rl / 2.0;
+                    ymat->b[y_idx] = 1.0 - (rl + rr) / 2.0;
+                    ymat->c[y_idx] = rr / 2.0;
                     ymat->u[y_idx] = uadv[y_idx];
-                trimul(ymat);
-                ymat->b[0] = 1.0 + r / 2.0;
-                ymat->c[0] = -r / 2.0;
-                for (y_idx = 1; y_idx < n_y - 1; y_idx++)
-                {
-                    ymat->a[y_idx] = -r / 2.0;
-                    ymat->b[y_idx] = 1.0 + r;
-                    ymat->c[y_idx] = -r / 2.0;
                 }
-                ymat->a[n_y - 1] = -r / 2.0;
-                ymat->b[n_y - 1] = 1.0 + r / 2.0;
+                trimul(ymat);
+
+                // LHS (I - r/2 L)
+                for (y_idx=0; y_idx<n_y; y_idx++) {
+                    double rl = (y_idx > 0) ? r * face_open[y_idx - 1] : 0.0 // face with prior cell
+                    double rr = (y_idx < n_y - 1) ? r * face_open[y_idx] : 0.0 // face with next cell
+
+                    ymat->a[y_idx] = -rl / 2.0;
+                    ymat->b[y_idx] = 1.0 + (rl + rr) / 2.0;
+                    ymat->c[y_idx] = -rr / 2.0;
+                }
                 tridag(ymat);
-                for (y_idx = 0; y_idx < n_y; y_idx++)
-                    community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx] = ymat->u[y_idx];
+
+                for (y_idx = 0; y_idx < n_y; y_idx++) {
+                    if (!is_land(grid, x_idx, y_idx)) {
+                        community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx] = ymat->u[y_idx];
+                    }
+                }                
             }
         }
     }
