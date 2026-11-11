@@ -4,6 +4,52 @@ int is_land(GRID *grid, int x_idx, int y_idx) {
     return (grid->land_mask[x_idx][y_idx] == 0);
 }
 
+void trimul(MATRIX *matrix)
+{
+    int i, n;
+    n = matrix->size;
+
+    matrix->r[0] = (matrix->b[0] * matrix->u[0]) + (matrix->c[0] * matrix->u[1]);
+    for (i = 1; i < n - 1; i++)
+    {
+        matrix->r[i] =
+            (matrix->a[i] * matrix->u[i - 1]) + (matrix->b[i] * matrix->u[i]) + (matrix->c[i] * matrix->u[i + 1]);
+    }
+    matrix->r[n - 1] = (matrix->a[n - 1] * matrix->u[n - 2]) + (matrix->b[n - 1] * matrix->u[n - 1]);
+}
+
+void tridag(MATRIX *matrix)
+/*Fast algorithm for inverting a tridiagonal matrix*/
+{
+    int j, n;
+    n = matrix->size;
+    double bet;
+    double *gam;
+
+    gam = (double *)safe_malloc(n * sizeof(double), __LINE__, __FILE__);
+    if (matrix->b[0] == 0)
+    {
+        error("error1");
+    }
+    bet = matrix->b[0];
+    matrix->u[0] = matrix->r[0] / bet;
+    for (j = 1; j <= (n - 1); j++)
+    {
+        gam[j] = matrix->c[j - 1] / bet;
+        bet = matrix->b[j] - (matrix->a[j] * gam[j]);
+        if (matrix->b[j] == 0)
+        {
+            error("error2");
+        }
+        matrix->u[j] = (matrix->r[j] - (matrix->a[j] * matrix->u[j - 1])) / bet;
+    }
+    for (j = (n - 2); j >= 0; j--)
+    {
+        matrix->u[j] -= (gam[j + 1] * matrix->u[j + 1]);
+    }
+    free(gam);
+}
+
 //---------------------------------------------------------//
 // These are memory allocation functions. Not to be edited //
 //---------------------------------------------------------//

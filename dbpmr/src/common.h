@@ -382,6 +382,10 @@ typedef struct vectors
 int is_land(GRID *, int, int);
 #define SKIP_IF_LAND(grid, x_idx, y_idx) {if (is_land(grid, x_idx, y_idx)) continue;}
 
+// Global matrix integration functions (also used in SizeSpectra.c)
+void tridag(MATRIX *);                                                     // Inverts a tridiagonal matrix
+void trimul(MATRIX *);
+
 /*Memory Management Functions*/
 void free_mem(RUN *, GRID *, COMMUNITY *, MATRIX *, MATRIX *, MATRIX *, MATRIX *, double **,
               double **);                      // Frees all allocated memory
