@@ -13,6 +13,8 @@
 #' @param diff_method Integer flagging the differencing/integration method
 #'   (`0`, `1` or `2`).
 #' @param movement_flag Bool flagging whether spatial movement processes will occur.
+#'   FALSE will turn movement off and TRUE will turn movement on. Currently, movement
+#'   only acts on pelagic species.
 #'
 #' @return A [run.params] object.
 #' @seealso [Setup.Grid()], [SizeSpectrum()]
@@ -30,7 +32,7 @@ Setup.Run<-function(filename, no_pelagic, no_benthic, spatial_dim, coupled_flag,
   if( !(spatial_dim==0 || spatial_dim==1 || spatial_dim==2) ) stop("Please enter a valid value for spatial_dim: (0,1,2)")
   if( !(coupled_flag==0 || coupled_flag==1) ) stop("Please enter a logical value for coupled_flag: (T,F)")
   if( !(diff_method==0 || diff_method==1 || diff_method==2) ) stop("Please enter an integer value for the differencing method: (0,1,2)")
-  if (!is.logical(movement_flag) stop("movement_flag must be boolean logical value"))
+  if (!is.logical(movement_flag)) stop("movement_flag must be boolean logical value")
 
 
 #-------------------------#
@@ -45,7 +47,7 @@ run.params@no_benthic<-as.integer(no_benthic)
 run.params@spatial_dim<-as.integer(spatial_dim)
 run.params@coupled_flag<-as.logical(coupled_flag)
 run.params@diff_method<-as.integer(diff_method)
-run.params@movement_flag <- as.integer(movement_flag)
+run.params@movement_flag <- movement_flag
 
 dir.create(filename)
 

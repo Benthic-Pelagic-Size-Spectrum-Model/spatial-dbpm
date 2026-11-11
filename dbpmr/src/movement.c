@@ -5,7 +5,7 @@
 // These contain functions that may be edited //
 //--------------------------------------------//
 
-static double Cfun(double m, double t, GRID *grid, PELAGIC *pelagic)
+double Cfun(double m, double t, GRID *grid, PELAGIC *pelagic)
 /*function determining prey search*/
 {
     double ans;
@@ -20,7 +20,7 @@ static double Cfun(double m, double t, GRID *grid, PELAGIC *pelagic)
     return ans;
 }
 
-static double Dfun(double m, double t, GRID *grid, PELAGIC *pelagic)
+double Dfun(double m, double t, GRID *grid, PELAGIC *pelagic)
 /*function determining predator avoidance tendancy*/
 {
     double ans;
@@ -35,7 +35,7 @@ static double Dfun(double m, double t, GRID *grid, PELAGIC *pelagic)
     return ans;
 }
 
-static double Diffun(double m, double t, GRID *grid, PELAGIC *pelagic)
+double Diffun(double m, double t, GRID *grid, PELAGIC *pelagic)
 /*function determining competition coefficient*/
 {
     double ans;
@@ -52,13 +52,13 @@ static double Diffun(double m, double t, GRID *grid, PELAGIC *pelagic)
 
 // Helper function that checks if two neighbouring (horizontal) cells are both water
 // and would therefore accept movement fluxes across their boundary
-static int horizontal_face_valid(GRID *grid, int x_idx, int y_idx) {
+int horizontal_face_valid(GRID *grid, int x_idx, int y_idx) {
     return !is_land(grid, x_idx, y_idx) && !is_land(grid, x_idx + 1, y_idx);
 }
 
 // Helper function that checks if two neighbouring (vertical) cells are both water
 // and would therefore accept movement fluxes across their boundary
-static int vertical_face_valid(GRID *grid, int x_idx, int y_idx) {
+int vertical_face_valid(GRID *grid, int x_idx, int y_idx) {
     return !is_land(grid, x_idx, y_idx) && !is_land(grid, x_idx, y_idx + 1);
 }
 

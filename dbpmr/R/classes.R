@@ -19,7 +19,7 @@
                         prototype(filename="SizeSpectrum",
                                   no_pelagic=as.integer(1), no_benthic=as.integer(0),
                                   spatial_dim=as.integer(0),
-                                  coupled_flag=TRUE, diff_method=as.integer(1)), movement_flag=FALSE)
+                                  coupled_flag=TRUE, diff_method=as.integer(1), movement_flag=FALSE))
 
 #' Grid discretisation parameters
 #'

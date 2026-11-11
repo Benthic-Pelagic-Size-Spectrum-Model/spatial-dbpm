@@ -7,8 +7,6 @@
 #include <math.h>
 #include "common.h"
 
-double phi(double, double, double, double); // Calculates feeding kernel for each pelagic species
-
 /*Predation, Growth and Renewal Functions*/
 void calculate_g_and_mu(RUN *run, GRID *, COMMUNITY *); // Calculates g and mu values given u values
 

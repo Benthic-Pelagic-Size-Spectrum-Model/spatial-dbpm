@@ -1,22 +1,5 @@
 #include "biology.h"
 
-double phi(double q, double q_0, double sig, double trunc)
-/*function determining prey preference distribution for the given values*/
-{
-    double ans;
-
-    if (q <= 0 || q < (q_0 - (trunc * sig)) || q > (q_0 + (trunc * sig)))
-    {
-        ans = 0;
-    }
-    else
-    {
-        ans = exp(-(q - q_0) * (q - q_0) / (2 * sig * sig));
-    }
-
-    return ans;
-}
-
 //--------------------------------------------//
 //      Growth and Mortality Functions        //
 // These contain functions that may be edited //

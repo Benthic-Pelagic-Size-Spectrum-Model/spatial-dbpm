@@ -1,4 +1,5 @@
 #include "setup.h"
+#include "file_outputs.h"
 
 //-----------------//
 // Setup Functions //
@@ -206,6 +207,7 @@ void setup_plankton(RUN *run, GRID *grid, PLANKTON *plankton, double *pla_params
         /*Create plankton input filename*/
         snprintf(plankton->fname_ts, sizeof(plankton->fname_ts), "%s/Input/%s_%s.txt", run->filename,
                  plankton->filename, "ts");
+        Rprintf("Trying to open: '%s'\n", plankton->fname_ts);
         plankton->fptr_ts = safe_fopen(plankton->fname_ts, "r", __LINE__, __FILE__);
 
         int MAX_LEN = grid->mnum * 15; // this is the upper bound for the row length in characters

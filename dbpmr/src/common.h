@@ -3,10 +3,12 @@
 // of land cells, matrix operations, and memory-management functions
 
 #ifndef COMMON_H
-#define COMMON_h
+#define COMMON_H
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <R.h>
 
 //------------------------//
 // Structure Declarations //
@@ -396,5 +398,8 @@ void free_mem(RUN *, GRID *, COMMUNITY *, MATRIX *, MATRIX *, MATRIX *, MATRIX *
               double **);                      // Frees all allocated memory
 void *safe_malloc(size_t, int, char *);        // Wrappered function for memory alloaction
 FILE *safe_fopen(char *, char *, int, char *); // Wrappered function for file opening
+
+/*biological function used across both setup.c and biology.c files*/
+double phi(double, double, double, double); // Calculates feeding kernel for each pelagic species
 
 #endif

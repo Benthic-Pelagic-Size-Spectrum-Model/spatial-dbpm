@@ -250,7 +250,7 @@ void setup_output(RUN *run, GRID *grid, OUTPUT *out, SEXP result)
 }
 
 // Calculate whether the current timestep is an output step
-static int is_output_timestep(GRID *grid, int ts_idx)
+int is_output_timestep(GRID *grid, int ts_idx)
 {
     if (ts_idx == 0)
         return grid->toutmin == 0;
@@ -263,7 +263,7 @@ static int is_output_timestep(GRID *grid, int ts_idx)
 // Calculate the interval of model steps within an outstep. e.g. if timestep outstep
 // is 1 and the model timestep is 1/48 then the interval is 48. This function ensures
 // that outstep is a multiple of step and at least 1 model step.
-static int output_interval(double outstep, double step)
+int output_interval(double outstep, double step)
 {
     int interval = (int)rint(outstep / step);
     if (interval < 1)
@@ -271,7 +271,7 @@ static int output_interval(double outstep, double step)
     return (interval);
 }
 
-static void record_output(RUN *run, GRID *grid, COMMUNITY *c, OUTPUT *out, int ts_idx)
+void record_output(RUN *run, GRID *grid, COMMUNITY *c, OUTPUT *out, int ts_idx)
 {
     int sc_idx, x_idx, y_idx;
     int pred_idx, pel_species_idx, ben_species_idx;
