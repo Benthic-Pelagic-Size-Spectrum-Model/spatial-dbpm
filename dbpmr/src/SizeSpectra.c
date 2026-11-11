@@ -1,4 +1,4 @@
-#include <SizeSpectra.h>
+#include "SizeSpectra.h"
 
 // This is the new R interface. SizeSpectrum() is now a wrapper function that
 // takes the objects from R (.Call()). SizeSpectrum() checks the SEXP objects from
