@@ -1,4 +1,4 @@
-#include <common.h>
+#include "common.h"
 
 int is_land(GRID *grid, int x_idx, int y_idx) {
     return (grid->land_mask[x_idx][y_idx] == 0);

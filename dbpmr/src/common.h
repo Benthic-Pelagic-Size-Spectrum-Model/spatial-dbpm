@@ -1,3 +1,6 @@
+#ifndef COMMON_H
+#define COMMON_h
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -384,3 +387,5 @@ void free_mem(RUN *, GRID *, COMMUNITY *, MATRIX *, MATRIX *, MATRIX *, MATRIX *
               double **);                      // Frees all allocated memory
 void *safe_malloc(size_t, int, char *);        // Wrappered function for memory alloaction
 FILE *safe_fopen(char *, char *, int, char *); // Wrappered function for file opening
+
+#endif
