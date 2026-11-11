@@ -1,4 +1,8 @@
-#include <common.h>
+#ifndef BIOLOGY_H
+#define BIOLOGY_H
+
+#include <math.h>
+#include "common.h"
 
 double phi(double, double, double, double); // Calculates feeding kernel for each pelagic species
 
@@ -13,7 +17,7 @@ double det_biomass(int, int, int, int, RUN *, GRID *, COMMUNITY *); // Calculate
 double g_pel(int, int, int, int, RUN *, GRID *,
              COMMUNITY *); // Calculates g values for pelagic system from biomass values
 double g_ben(int, int, int, int, RUN *, GRID *,
-             COMMUNITY *);                          // Calculates g values for benthic systsm from biomass values
+             COMMUNITY *);                          // Calculates g values for benthic system from biomass values
 double g_det(int, int, RUN *, GRID *, COMMUNITY *); // Calculates g values for detrital system from biomass values
 
 double mu_pel_pred(int, int, int, int, int, RUN *, GRID *, COMMUNITY *);
@@ -26,3 +30,5 @@ double mu_ben(int, int, int, int, RUN *, GRID *, COMMUNITY *); // Calculates mu 
 double mu_det(int, int, RUN *, GRID *, COMMUNITY *); // Calculates mu values for detrital system from biomass values
 
 void calculate_reproduction(RUN *, GRID *, COMMUNITY *); // Calculates reproduction for any system
+
+#endif

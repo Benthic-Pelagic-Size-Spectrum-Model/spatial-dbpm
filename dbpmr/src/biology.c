@@ -1,4 +1,4 @@
-#include <biology.h>
+#include "biology.h"
 
 double phi(double q, double q_0, double sig, double trunc)
 /*function determining prey preference distribution for the given values*/
