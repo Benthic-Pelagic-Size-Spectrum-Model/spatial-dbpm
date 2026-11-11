@@ -1,3 +1,5 @@
+// fishing.h and fishing.c contain fishing calculation functions.
+
 #ifndef FISHING_H
 #define FISHING_H
 

@@ -1,3 +1,7 @@
+// `common.h` and `common.c` files contain items that are common and used across
+// multiple C files in this project. These include struct definitions, skipping
+// of land cells, matrix operations, and memory-management functions
+
 #ifndef COMMON_H
 #define COMMON_h
 

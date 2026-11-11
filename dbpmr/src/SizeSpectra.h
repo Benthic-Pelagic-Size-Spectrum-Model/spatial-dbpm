@@ -1,3 +1,7 @@
+// SizeSpectra.h and SizeSpectra.c contain the main model functions that step the
+// size spectrum model through time. These files contain the function (SizeSpectrum)
+// that is called through R using .Call()
+
 #ifndef SIZESPECTRA_H
 #define SIZESPECTRA_H
 

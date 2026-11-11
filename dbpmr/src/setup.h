@@ -1,3 +1,6 @@
+// setup.h and setup.c contains functions used to perform initial setup of model
+// structs
+
 #ifndef SETUP_H
 #define SETUP_H
 
@@ -5,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <R.h>
 #include "common.h"
 
 //-----------------------//

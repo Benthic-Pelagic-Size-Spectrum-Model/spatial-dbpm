@@ -1,3 +1,5 @@
+// movement.h and movement.c contains function relating to biological movement processes.
+
 #ifndef MOVEMENT_H
 #define MOVEMENT_H
 

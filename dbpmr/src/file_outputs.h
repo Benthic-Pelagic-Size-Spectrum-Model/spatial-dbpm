@@ -1,3 +1,6 @@
+// file_outputs.h and file_outputs.c contain functions relating to the writing of
+// results to output files.
+
 #ifndef FILE_OUTPUTS_H
 #define FILE_OUTPUTS_H
 

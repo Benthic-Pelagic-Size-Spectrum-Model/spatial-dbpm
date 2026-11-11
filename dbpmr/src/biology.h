@@ -1,3 +1,6 @@
+// biology.h and biology.c files contain items relating to size spectrum model
+// processes and base biological and ecological functions
+
 #ifndef BIOLOGY_H
 #define BIOLOGY_H
 

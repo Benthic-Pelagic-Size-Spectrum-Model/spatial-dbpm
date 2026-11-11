@@ -1,3 +1,6 @@
+// memory_outputs.h and memory_outputs.c contain functions relevant to setting up
+// and writing memory outputs to return from C to R.
+
 #ifndef MEMORY_OUTPUTS_H
 #define MEMORY_OUTPUTS_H
 
