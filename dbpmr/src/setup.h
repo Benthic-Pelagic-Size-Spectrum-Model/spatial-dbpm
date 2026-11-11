@@ -1,7 +1,11 @@
+#ifndef SETUP_H
+#define SETUP_H
+
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include "common.h"
 
 //-----------------------//
 // Function Declarations //
@@ -23,3 +27,5 @@ void set_land_to_zero(RUN *, GRID *, COMMUNITY *);
 
 double x_start(double, double);
 double y_start(double, double);
+
+#endif
