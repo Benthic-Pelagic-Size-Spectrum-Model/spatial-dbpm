@@ -1,4 +1,4 @@
-#include <fishing.h>
+#include "fishing.h"
 
 void calculate_fishing(RUN *run, GRID *grid, COMMUNITY *community)
 {
