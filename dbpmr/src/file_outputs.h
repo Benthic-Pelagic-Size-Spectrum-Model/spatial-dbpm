@@ -1,7 +1,10 @@
-#include <math.h>
+#ifndef FILE_OUTPUTS_H
+#define FILE_OUTPUTS_H
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include "common.h"
 
 void print_run(RUN *, FILE *);
 void print_grid(GRID *, FILE *);
@@ -28,3 +31,5 @@ void print_detailed_header(GRID *, FILE *);
 void print_detailed_plankton(GRID *, PLANKTON *, int);
 void print_detailed_pelagic(RUN *, GRID *, PELAGIC *, int);
 void print_detailed_benthic(GRID *, BENTHIC *, int);
+
+#endif

@@ -1,5 +1,9 @@
+#ifndef MEMORY_OUTPUTS_H
+#define MEMORY_OUTPUTS_H
+
 #include <R.h>
 #include <Rinternals.h>
+#include "common.h"
 
 typedef struct output_info
 {
@@ -36,3 +40,5 @@ void setup_output(RUN *, GRID *, OUTPUT *, SEXP); // sets up the output containe
 int is_output_timestep(GRID *, int);
 int output_interval(double, double);
 void record_output(RUN *, GRID *, COMMUNITY *, OUTPUT *, int);
+
+#endif
