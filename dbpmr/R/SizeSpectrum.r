@@ -134,7 +134,8 @@
             as.integer(run.in@no_benthic),
             as.integer(run.in@spatial_dim),
             as.integer(run.in@coupled_flag),
-            as.integer(run.in@diff_method)
+            as.integer(run.in@diff_method),
+            as.integer(run.in@movement_flag)
         )
 
         #Grid Parameters (Float vector)

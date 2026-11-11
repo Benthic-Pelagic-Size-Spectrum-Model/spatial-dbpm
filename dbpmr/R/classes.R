@@ -15,11 +15,11 @@
   setClass("run.params",representation(filename="character",
                                        no_pelagic="integer", no_benthic="integer",
                                        spatial_dim="integer",
-                                       coupled_flag="logical", diff_method="integer"),
+                                       coupled_flag="logical", diff_method="integer", movement_flag="logical"),
                         prototype(filename="SizeSpectrum",
                                   no_pelagic=as.integer(1), no_benthic=as.integer(0),
                                   spatial_dim=as.integer(0),
-                                  coupled_flag=TRUE, diff_method=as.integer(1)))
+                                  coupled_flag=TRUE, diff_method=as.integer(1)), movement_flag=FALSE)
 
 #' Grid discretisation parameters
 #'

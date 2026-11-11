@@ -10,6 +10,7 @@ void print_run(RUN *run, FILE *fptr)
     fprintf(fptr, "spatial_dim:   %d\n", run->spatial_dim);
     fprintf(fptr, "coupled_flag:  %d\n", run->coupled_flag);
     fprintf(fptr, "diff_method:   %d\n", run->diff_method);
+    fprintf(fptr, "movemeng_flag: %d\n", run->movement_flag);
     fprintf(fptr, "\n");
 }
 

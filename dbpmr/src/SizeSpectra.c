@@ -31,7 +31,7 @@ SEXP SizeSpectrum(SEXP run_params_r, SEXP grid_params_r, SEXP plankton_params_r,
 
     // Checking the length of the parameter vectors that were passed from R.
     // The values here are taken from hardcoded indices throughout the code.
-    if (LENGTH(run_params_r) != 5)
+    if (LENGTH(run_params_r) != 6)
     {
         error("run_params_r must have 5 elements");
     }
@@ -611,37 +611,16 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, OUTPUT *out, 
         /*Calculate starting reproduction allocation*/
         calculate_reproduction(run, grid, community);
 
-        /*If Spatial Model is being used (1D = x movement only; 2D = x then y).
-          NOTE: the outer guard must admit spatial_dim==2 as well — the inner spatial_dim==2
-          block below only runs when this outer test passes, so a `==1`-only guard left ALL
-          movement dead for 2D runs (neither x nor y solver ran). */
-        if (run->spatial_dim == 1 || run->spatial_dim == 2)
-        {
-
-            /*Store itermediate time step as temp_pelagic*/
-
-            for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
-            {
-                for (sc_idx = 0; sc_idx < n_m; sc_idx++)
-                {
-                    for (x_idx = 0; x_idx < n_x; x_idx++)
-                    {
-                        for (y_idx = 0; y_idx < n_y; y_idx++)
-                        {
-                            temp_pelagic[pel_species_idx][sc_idx][x_idx][y_idx] =
-                                community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx];
-                        }
-                    }
-                }
-            }
-
-            /*Calculate spatial movements using intermediate values*/
-            xmove_solver(run, grid, community, xmatrix, temp_pelagic, ts_idx);
-
-            if (run->spatial_dim == 2)
+        if (run->movement_flag) {
+            /*If Spatial Model is being used (1D = x movement only; 2D = x then y).
+            NOTE: the outer guard must admit spatial_dim==2 as well — the inner spatial_dim==2
+            block below only runs when this outer test passes, so a `==1`-only guard left ALL
+            movement dead for 2D runs (neither x nor y solver ran). */
+            if (run->spatial_dim == 1 || run->spatial_dim == 2)
             {
 
                 /*Store itermediate time step as temp_pelagic*/
+
                 for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
                 {
                     for (sc_idx = 0; sc_idx < n_m; sc_idx++)
@@ -656,8 +635,31 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, OUTPUT *out, 
                         }
                     }
                 }
+
                 /*Calculate spatial movements using intermediate values*/
-                ymove_solver(run, grid, community, ymatrix, temp_pelagic, ts_idx);
+                xmove_solver(run, grid, community, xmatrix, temp_pelagic, ts_idx);
+
+                if (run->spatial_dim == 2)
+                {
+
+                    /*Store itermediate time step as temp_pelagic*/
+                    for (pel_species_idx = 0; pel_species_idx < n_pel_species; pel_species_idx++)
+                    {
+                        for (sc_idx = 0; sc_idx < n_m; sc_idx++)
+                        {
+                            for (x_idx = 0; x_idx < n_x; x_idx++)
+                            {
+                                for (y_idx = 0; y_idx < n_y; y_idx++)
+                                {
+                                    temp_pelagic[pel_species_idx][sc_idx][x_idx][y_idx] =
+                                        community->pelagic[pel_species_idx].u_values[sc_idx][x_idx][y_idx];
+                                }
+                            }
+                        }
+                    }
+                    /*Calculate spatial movements using intermediate values*/
+                    ymove_solver(run, grid, community, ymatrix, temp_pelagic, ts_idx);
+                }
             }
         }
 

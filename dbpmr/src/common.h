@@ -23,6 +23,7 @@ typedef struct run_info
     int diff_method;  // flag for integration method; 0-fast (poss. unstable), 1-slow (more stable)
     int write_files;
     int return_memory;
+    int movement_flag;
 
     char fname_summ[40];
     FILE *fptr_summ;

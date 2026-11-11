@@ -14,6 +14,7 @@ void setup_run(RUN *run, int *run_params, char *filename, int *output_params)
     run->diff_method = run_params[4];
     run->write_files = output_params[0];
     run->return_memory = output_params[1];
+    run->movement_flag = run_params[5];
 
     /*Create summary output filenames*/
     snprintf(run->fname_summ, sizeof(run->fname_summ), "%s/%s.txt", run->filename, "parameters");
