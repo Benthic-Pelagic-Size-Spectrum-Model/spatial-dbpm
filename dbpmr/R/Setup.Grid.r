@@ -71,3 +71,67 @@ Setup.Grid<-function(run, mmin=-12*log(10),mmax=6*log(10),mstep=0.1*log(10),mout
   
   return(grid.params)
 }
+
+#' Set up the grid discretisation
+#'
+#' Builds a [grid.params] object describing the mass, time and spatial
+#' discretisation of a run. Spatial dimensions not used by `run` are collapsed
+#' to a single trivial cell.
+#'
+#' @param run Terra SpatRaster object that contains 0 values (where land or invalid
+#'   cells are present) and 1 values (where water cells are present for modelling).
+#'
+#' @return A [grid.params] object.
+#' @seealso [Setup.Run()]
+#' @export
+Setup.Grid <- function (
+    rast, 
+    mmin=-12*log(10), 
+    mmax=6*log(10), 
+    mstep=0.1*log(10), 
+    moutstep=0.1*log(10), 
+    t1=0, 
+    tmax=1, 
+    tstep=1/365, 
+    toutmin=0, 
+    toutmax=tmax, 
+    toutstep=73/365
+){
+
+    grid.params<-new("grid.params")
+
+    grid.params@mmin<-mmin
+    grid.params@mmax<-mmax
+    grid.params@mstep<-mstep
+    grid.params@moutstep<-moutstep
+
+    grid.params@t1<-t1
+    grid.params@tmax<-tmax         #in years
+    grid.params@tstep<-tstep       #in years
+    grid.params@toutmin<-toutmin   #in years
+    grid.params@toutmax<-toutmax   #in years
+    grid.params@toutstep<-toutstep #in years
+    
+    if (crs(rast) == "") {
+        stop("rast terra SpatRaster must have a valid CRS attribute `crs(rast)`.")
+    }
+
+    if (!is.lonlat(rast)) {
+        stop("rast terra SpatRaster must use a projected Coordinate Reference System")
+    }
+
+    # Check that all values in `rast` are 0s or 1s designating land and water cells.
+    if (any(!values(rast) %in% c(0, 1))) {
+        stop("rast terra SpatRaster must only contain 0 values (land cells) and 1 values (water cells).")
+    }
+
+    ny <- ncol(rast)
+    grid_mask_matrix <- t(as.matrix(rast, wide=TRUE))[, ny:1]
+    grid.params@spatial_grid_matrix <- grid_mask_matrix
+
+    grid.params@x_res <- res(rast)[1]
+    gird.params@y_res <- res(rast)[2]
+
+
+    return(grid.params)
+}

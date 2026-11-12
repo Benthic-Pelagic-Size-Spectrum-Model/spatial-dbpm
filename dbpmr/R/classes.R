@@ -28,7 +28,9 @@
 #'
 #' @aliases grid.params
 #' @export
-  setClass("grid.params",representation(mmin="numeric", mmax="numeric", mstep="numeric", moutstep="numeric",
+  setClass(
+      "grid.params",
+      representation(mmin="numeric", mmax="numeric", mstep="numeric", moutstep="numeric",
                                         t1="numeric", tmax="numeric", tstep="numeric", toutmin="numeric", toutmax="numeric", toutstep="numeric",
                                         xmin="numeric", xmax="numeric", xstep="numeric", xoutstep="numeric",
                                         ymin="numeric", ymax="numeric", ystep="numeric", youtstep="numeric"),
