@@ -17,12 +17,28 @@
 #'   [Setup.Forcing()]. When given, it replaces the `forcing_ts.txt` input file
 #'   (it is an error to supply both).
 #'
-#' @return A character vector of the paths and species filenames produced by the
-#'   run, suitable for passing to [Read.In()].
-#' @seealso [Read.In()], [Setup.Run()]
+#' @param output Where the model output goes. `"files"` (the default) writes the
+#'   text result files under the run directory. `"arrays"` returns the output to
+#'   R as arrays and writes no per-timestep text output. `"both"` does both.
+#'
+#' @return With `output = "files"`, a character vector of the paths and species
+#'   filenames produced by the run, suitable for passing to [Read.In()].
+#'
+#'   With `output = "arrays"` or `"both"`, an object of class `dbpmr_output`: a
+#'   list with the output coordinates `t` (years), `x`, `y` and `m` (natural-log
+#'   body mass), the abundance density of each group as arrays with dimensions
+#'   `[x, y, m, t]` (`plankton`, and the named lists `pelagic` and `benthic`,
+#'   one array per species), and `detritus` biomass as `[x, y, t]`. Values are
+#'   those the text files would hold: the same output times, cells and size
+#'   classes (set by `toutstep`, `xoutstep`, `youtstep` and `moutstep` in
+#'   [Setup.Grid()]), with zeros outside a group's size range. With `"both"` the
+#'   character vector described above is attached as the attribute `"files"`.
+#'   See [Write.NetCDF()] to save the object.
+#' @seealso [Read.In()], [Write.NetCDF()], [Setup.Run()]
 #' @export
 `SizeSpectrum` <-
-function(run.in, grid.in, plankton.in, pelagic.in, benthic.in, detritus.in, forcing = NULL){
+function(run.in, grid.in, plankton.in, pelagic.in, benthic.in, detritus.in, forcing = NULL, output = c("files", "arrays", "both")){
+  output <- match.arg(output)
 
 #run.in is an object of class of run.params (2 strings and 6 integers relating to the entire run process)
 
@@ -338,7 +354,8 @@ tiny<-1e-7
     as.double(det.params), 
     as.character(names.params), 
     as.integer(flags.params),
-    inputs
+    inputs,
+    c(files = 0L, both = 1L, arrays = 2L)[[output]]
   )
 
 #-----------------------------------------------------------------#
@@ -364,6 +381,23 @@ tiny<-1e-7
     filenames[run.in@no_pelagic+run.in@no_benthic+3]<-detritus.in@filename
   }
   
-  return(filenames)
+  if(output == "files") return(filenames)
+
+  # Output returned from C as arrays: give them their dimensions and names
+  dims <- c(length(x$x), length(x$y), length(x$m), length(x$t))
+  shape <- function(a){ dim(a) <- dims; a }
+  shape_all <- function(l, nms){ l <- lapply(l, shape); names(l) <- nms; l }
+  out <- list(t = x$t, x = x$x, y = x$y, m = x$m,
+              plankton = shape(x$plankton),
+              pelagic = shape_all(x$pelagic, pel.names),
+              benthic = NULL, detritus = NULL)
+  if(run.in@no_benthic!=0){
+    out$benthic <- shape_all(x$benthic, ben.names)
+    det <- x$detritus; dim(det) <- dims[c(1, 2, 4)]
+    out$detritus <- det
+  }
+  class(out) <- "dbpmr_output"
+  if(output == "both") attr(out, "files") <- filenames
+  return(out)
 }
 
