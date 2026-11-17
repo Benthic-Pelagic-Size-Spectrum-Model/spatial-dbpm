@@ -733,7 +733,7 @@ void setup_plankton(RUN *run, GRID *grid, PLANKTON *plankton, double *pla_params
              /*Read in each line one at a time (corresponding to spectra at a spatial point)*/
              for(k=0 ; k<x ; k++){
                      for(l=0 ; l<y ; l++){
-                             fgets(input,MAX_LEN,plankton->fptr_ts);
+                             if(fgets(input,MAX_LEN,plankton->fptr_ts)==NULL){/* unexpected EOF: leave buffer as-is (pre-existing behaviour) */}
                              input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                              
                              result=(char *)strtok(input,sep);    //this is the 1st value
@@ -1030,7 +1030,7 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
              /*Read in each line one at a time (corresponding to spectra at a spatial point)*/
              for(k=0 ; k<x ; k++){
                      for(l=0 ; l<y ; l++){
-                             fgets(input,MAX_LEN,pelagic->fptr_ts);
+                             if(fgets(input,MAX_LEN,pelagic->fptr_ts)==NULL){/* unexpected EOF: leave buffer as-is (pre-existing behaviour) */}
                              input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                              
                              result=(char *)strtok(input,sep);    //this is the 1st value
@@ -1288,7 +1288,7 @@ void setup_benthic(RUN *run, GRID *grid, BENTHIC *benthic, double *ben_params, c
              /*Read in each line one at a time (corresponding to spectra at a spatial point)*/
              for(k=0 ; k<x ; k++){
                      for(l=0 ; l<y ; l++){
-                             fgets(input,MAX_LEN,benthic->fptr_ts);
+                             if(fgets(input,MAX_LEN,benthic->fptr_ts)==NULL){/* unexpected EOF: leave buffer as-is (pre-existing behaviour) */}
                              input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                              
                              result=(char *)strtok(input,sep);    //this is the 1st value
@@ -1410,7 +1410,7 @@ void setup_detritus(RUN *run, GRID *grid, DETRITUS *detritus, double *det_params
              /*Read in each line one at a time (corresponding to spectra at a spatial point)*/
              for(k=0 ; k<x ; k++){
                      for(l=0 ; l<y ; l++){
-                             fgets(input,MAX_LEN,detritus->fptr_ts);
+                             if(fgets(input,MAX_LEN,detritus->fptr_ts)==NULL){/* unexpected EOF: leave buffer as-is (pre-existing behaviour) */}
                              input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                              
                              result=(char *)strtok(input,sep);    //this is the 1st value
@@ -2703,7 +2703,7 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
              /* each line one at a time (corresponding to spectra at a spatial point)*/
              for(k=0 ; k<x ; k++){
                      for(l=0 ; l<y ; l++){
-                             fgets(input,MAX_LEN,community->plankton->fptr_ts);
+                             if(fgets(input,MAX_LEN,community->plankton->fptr_ts)==NULL){/* unexpected EOF: leave buffer as-is (pre-existing behaviour) */}
                              input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                              
                              result=(char *)strtok(input,sep);    //this is the 1st value
@@ -2750,7 +2750,7 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                      /* each line one at a time (corresponding to spectra at a spatial point)*/
                      for(k=0 ; k<x ; k++){
                              for(l=0 ; l<y ; l++){
-                                     fgets(input,MAX_LEN,community->pelagic[s].fptr_ts);
+                                     if(fgets(input,MAX_LEN,community->pelagic[s].fptr_ts)==NULL){/* unexpected EOF: leave buffer as-is (pre-existing behaviour) */}
                                      input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                                      
                                      result=(char *)strtok(input,sep);    //this is the 1st value
@@ -2799,7 +2799,7 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                              /* each line one at a time (corresponding to spectra at a spatial point)*/
                              for(k=0 ; k<x ; k++){
                                      for(l=0 ; l<y ; l++){
-                                             fgets(input,MAX_LEN,community->benthic[b].fptr_ts);
+                                             if(fgets(input,MAX_LEN,community->benthic[b].fptr_ts)==NULL){/* unexpected EOF: leave buffer as-is (pre-existing behaviour) */}
                                              input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                                              
                                              result=(char *)strtok(input,sep);    //this is the 1st value
@@ -2887,7 +2887,7 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                      /* each line one at a time (corresponding to spectra at a spatial point)*/
                      for(k=0 ; k<x ; k++){
                              for(l=0 ; l<y ; l++){
-                                     fgets(input,MAX_LEN,community->detritus->fptr_ts);
+                                     if(fgets(input,MAX_LEN,community->detritus->fptr_ts)==NULL){/* unexpected EOF: leave buffer as-is (pre-existing behaviour) */}
                                      input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                                      
                                      result=(char *)strtok(input,sep);    //this is the 1st value
@@ -3616,7 +3616,7 @@ void calculate_fishing(RUN *run, GRID *grid, COMMUNITY *community)
                      /*Read in each line one at a time (corresponding to fishing mortality at a spatial point)*/
                      for(k=0 ; k<x ; k++){
                              for(l=0 ; l<y ; l++){
-                                     fgets(input,MAX_LEN,community->pelagic[s].fptr_fish_ts);
+                                     if(fgets(input,MAX_LEN,community->pelagic[s].fptr_fish_ts)==NULL){/* unexpected EOF: leave buffer as-is (pre-existing behaviour) */}
                                      input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                                      
                                      result=(char *)strtok(input,sep);    //this is the 1st value
@@ -3645,7 +3645,7 @@ void calculate_fishing(RUN *run, GRID *grid, COMMUNITY *community)
                              /*Read in each line one at a time (corresponding to fishing mortality at a spatial point)*/
                              for(k=0 ; k<x ; k++){
                                      for(l=0 ; l<y ; l++){
-                                             fgets(input,MAX_LEN,community->benthic[b].fptr_fish_ts);
+                                             if(fgets(input,MAX_LEN,community->benthic[b].fptr_fish_ts)==NULL){/* unexpected EOF: leave buffer as-is (pre-existing behaviour) */}
                                              input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                                              
                                              result=(char *)strtok(input,sep);    //this is the 1st value
@@ -3729,7 +3729,7 @@ void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
                      /*Read in each line one at a time (corresponding to spectra at a spatial point)*/
                      for(k=0 ; k<x ; k++){
                              for(l=0 ; l<y ; l++){
-                                     fgets(input,MAX_LEN,community->pelagic[s].fptr_rep_ts);
+                                     if(fgets(input,MAX_LEN,community->pelagic[s].fptr_rep_ts)==NULL){/* unexpected EOF: leave buffer as-is (pre-existing behaviour) */}
                                      input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                                      
                                      result=(char *)strtok(input,sep);    //this is the 1st value
@@ -3803,7 +3803,7 @@ void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
                              /*Read in each line one at a time (corresponding to spectra at a spatial point)*/
                              for(k=0 ; k<x ; k++){
                                      for(l=0 ; l<y ; l++){
-                                             fgets(input,MAX_LEN,community->benthic[b].fptr_rep_ts);
+                                             if(fgets(input,MAX_LEN,community->benthic[b].fptr_rep_ts)==NULL){/* unexpected EOF: leave buffer as-is (pre-existing behaviour) */}
                                              input[strlen(input)-1]='\0'; //replacing the newline \n char of the line of text with a null \0 char
                                              
                                              result=(char *)strtok(input,sep);    //this is the 1st value
