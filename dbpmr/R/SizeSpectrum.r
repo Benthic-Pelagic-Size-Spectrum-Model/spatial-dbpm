@@ -207,14 +207,25 @@ tiny<-1e-7
 # Error Checking Steps #
 #----------------------#
 
-  # Check sufficient parameters have been inputed
-  if(sum(is.infinite(grid.params))!=0) stop("Not enough Grid Values Inputed")
-  if(sum(is.infinite(pla.params))!=0) stop("Not enough Plankton Parameter Values Inputed")
-  if(sum(is.infinite(pel.params))!=0) stop("Not enough Pelagic Parameter Values Inputed")
-  if(run.in@no_benthic!=0){
-    if(sum(is.infinite(ben.params))!=0) stop("Not enough Benthic Parameter Values Inputed")
-    if(sum(is.infinite(det.params))!=0) stop("Not enough Detritus Parameter Values Inputed")
+  # Check that every value handed to the C code is finite. .C() used to reject NA/NaN/Inf
+  # itself; .Call() does not, so a NaN parameter would otherwise run to completion and
+  # fill the output files with NaN.
+  check_finite <- function(v, what, nms = NULL){
+    bad <- which(!is.finite(v))
+    if(length(bad)!=0){
+      where <- if(is.null(nms)) paste("position", paste(bad, collapse=", ")) else paste(nms[bad], collapse=", ")
+      stop("Non-finite value (NA, NaN or Inf) in the ", what, " parameters: ", where)
+    }
   }
+  check_finite(grid.params, "grid")
+  check_finite(pla.params, "plankton", c("mmin", "mmax", "mu_0", "beta", "u_0", "lambda"))
+  check_finite(pel.params, "pelagic")
+  if(run.in@no_benthic!=0){
+    check_finite(ben.params, "benthic")
+    check_finite(det.params, "detritus")
+  }
+  if(anyNA(run.params)) stop("Missing value (NA) in the run parameters")
+  if(anyNA(flags.params)) stop("Missing value (NA) in the species flags")
 
   if((length(pelagic.in))!=run.in@no_pelagic) stop("Incorrect number of Pelagic species Inputed")
   if(run.in@no_benthic!=0){
@@ -285,7 +296,17 @@ tiny<-1e-7
 # Call C code #
 #-------------#
 
-  x<-.C(C_SizeSpectrum, run.params, grid.params, pla.params, pel.params, ben.params, det.params, names.params, flags.params)
+  x <- .Call(
+    C_SizeSpectrum, 
+    as.integer(run.params), 
+    as.double(grid.params), 
+    as.double(pla.params), 
+    as.double(pel.params), 
+    as.double(ben.params), 
+    as.double(det.params), 
+    as.character(names.params), 
+    as.integer(flags.params)
+  )
 
 #-----------------------------------------------------------------#
 # Return filenames of files that have been produced by the C code #
