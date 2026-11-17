@@ -47,10 +47,14 @@ typedef struct output_arrays{
         int *mi;               //grid index of each output size class
         int it;                //next output time slot
         double *t,*x,*y,*m;    //coordinate vectors
+        int want_g,want_mu,want_pred,want_fish;   //also return growth, total mortality, predation mortality, fishing mortality
         double *pla;           //plankton abundance
         double **pel;          //abundance of each pelagic species
         double **ben;          //abundance of each benthic species
         double *det;           //detritus biomass [x][y][time]
+        double **pel_g,**pel_mu,**pel_fish;   //growth rate, total mortality and fishing mortality of each pelagic species (NULL if not wanted)
+        double ***pel_pred;    //pel_pred[s][p]: predation mortality on pelagic species s from pelagic species p
+        double **ben_g,**ben_mu,**ben_pred,**ben_fish;   //the same for each benthic species (predation from all pelagic species)
         SEXP list;             //the R list holding all of the above
         } OUTPUT_ARRAYS;
 
@@ -554,6 +558,22 @@ static int forcing_from_arrays(RUN *run, GRID *grid, int k, int l, double *vals)
         return N_FRC;
 }
 
+/*Allocate one array of len values per species as element `pos` of an R list (which must be protected),
+  and return C pointers to their data*/
+static double **species_arrays(SEXP parent, int pos, int nspecies, R_xlen_t len)
+{
+        int s;
+        SEXP l = allocVector(VECSXP, nspecies);
+        SET_VECTOR_ELT(parent, pos, l);
+        double **ptr = (double **) R_alloc(nspecies, sizeof(double *));
+        for (s = 0; s < nspecies; s++) {
+                SEXP v = allocVector(REALSXP, len);
+                SET_VECTOR_ELT(l, s, v);
+                ptr[s] = REAL(v);
+        }
+        return ptr;
+}
+
 /*Allocate the arrays returned to R. Sizes follow the text output: every (xoutstep/xstep)-th and
   (youtstep/ystep)-th cell, every (moutstep/mstep)-th size class plus the last one, and every output time
   in [toutmin,toutmax]. The list is left PROTECTed; the .Call wrapper unprotects it when returning it.*/
@@ -586,7 +606,9 @@ static void setup_output_arrays(RUN *run, GRID *grid, OUTPUT_ARRAYS *out)
 
         R_xlen_t ncell = (R_xlen_t)out->nxo * out->nyo;
         R_xlen_t nfull = ncell * out->nmo * out->nto;
-        const char *names[] = {"t", "x", "y", "m", "plankton", "pelagic", "benthic", "detritus", ""};
+        const char *names[] = {"t", "x", "y", "m", "plankton", "pelagic", "benthic", "detritus",
+                               "pelagic_growth", "pelagic_mortality", "pelagic_predation", "pelagic_fishing",
+                               "benthic_growth", "benthic_mortality", "benthic_predation", "benthic_fishing", ""};
         SEXP list = PROTECT(mkNamed(VECSXP, names));
         out->list = list;
         SEXP v;
@@ -599,15 +621,26 @@ static void setup_output_arrays(RUN *run, GRID *grid, OUTPUT_ARRAYS *out)
         for (k = 0; k < out->nmo; k++) out->m[k] = grid->m_values[out->mi[k]];
         for (k = 0; k < out->nto; k++) out->t[k] = NA_REAL;
         v = allocVector(REALSXP, nfull); SET_VECTOR_ELT(list, 4, v); out->pla = REAL(v);
-        SEXP pel = allocVector(VECSXP, n); SET_VECTOR_ELT(list, 5, pel);
-        out->pel = (double **) R_alloc(n, sizeof(double *));
-        for (s = 0; s < n; s++) { v = allocVector(REALSXP, nfull); SET_VECTOR_ELT(pel, s, v); out->pel[s] = REAL(v); }
+        out->pel = species_arrays(list, 5, n, nfull);
+        out->pel_g    = out->want_g    ? species_arrays(list, 8, n, nfull)  : NULL;
+        out->pel_mu   = out->want_mu   ? species_arrays(list, 9, n, nfull)  : NULL;
+        out->pel_fish = out->want_fish ? species_arrays(list, 11, n, nfull) : NULL;
+        out->pel_pred = NULL;
+        if (out->want_pred) {
+                /*one list per prey species, holding one array per pelagic predator species*/
+                SEXP pred = allocVector(VECSXP, n); SET_VECTOR_ELT(list, 10, pred);
+                out->pel_pred = (double ***) R_alloc(n, sizeof(double **));
+                for (s = 0; s < n; s++) out->pel_pred[s] = species_arrays(pred, s, n, nfull);
+        }
         out->ben = NULL; out->det = NULL;
+        out->ben_g = NULL; out->ben_mu = NULL; out->ben_pred = NULL; out->ben_fish = NULL;
         if (c != 0) {
-                SEXP ben = allocVector(VECSXP, c); SET_VECTOR_ELT(list, 6, ben);
-                out->ben = (double **) R_alloc(c, sizeof(double *));
-                for (s = 0; s < c; s++) { v = allocVector(REALSXP, nfull); SET_VECTOR_ELT(ben, s, v); out->ben[s] = REAL(v); }
+                out->ben = species_arrays(list, 6, c, nfull);
                 v = allocVector(REALSXP, ncell * out->nto); SET_VECTOR_ELT(list, 7, v); out->det = REAL(v);
+                if (out->want_g)    out->ben_g    = species_arrays(list, 12, c, nfull);
+                if (out->want_mu)   out->ben_mu   = species_arrays(list, 13, c, nfull);
+                if (out->want_pred) out->ben_pred = species_arrays(list, 14, c, nfull);
+                if (out->want_fish) out->ben_fish = species_arrays(list, 15, c, nfull);
         }
 }
 
@@ -615,7 +648,7 @@ static void setup_output_arrays(RUN *run, GRID *grid, OUTPUT_ARRAYS *out)
 static void capture_output(RUN *run, GRID *grid, COMMUNITY *community, int time)
 {
         OUTPUT_ARRAYS *o = run->out;
-        int ii, kk, ll, s;
+        int ii, kk, ll, s, p;
         if (o == NULL || o->mode == 0 || o->it >= o->nto) return;
         o->t[o->it] = grid->t_values[time];
         for (kk = 0; kk < o->nxo; kk++) {
@@ -626,8 +659,24 @@ static void capture_output(RUN *run, GRID *grid, COMMUNITY *community, int time)
                                 int i = o->mi[ii];
                                 R_xlen_t idx = (R_xlen_t)kk + (R_xlen_t)o->nxo * ((R_xlen_t)ll + (R_xlen_t)o->nyo * ((R_xlen_t)ii + (R_xlen_t)o->nmo * o->it));
                                 o->pla[idx] = community->plankton->u_values[i][k][l];
-                                for (s = 0; s < run->no_pelagic; s++) o->pel[s][idx] = community->pelagic[s].u_values[i][k][l];
-                                for (s = 0; s < run->no_benthic; s++) o->ben[s][idx] = community->benthic[s].u_values[i][k][l];
+                                for (s = 0; s < run->no_pelagic; s++) {
+                                        PELAGIC *pe = &community->pelagic[s];
+                                        o->pel[s][idx] = pe->u_values[i][k][l];
+                                        if (o->pel_g != NULL)    o->pel_g[s][idx]    = pe->g_values[i][k][l];
+                                        if (o->pel_mu != NULL)   o->pel_mu[s][idx]   = pe->mu_values[i][k][l];
+                                        if (o->pel_fish != NULL) o->pel_fish[s][idx] = pe->mu_fish_values[i][k][l];
+                                        if (o->pel_pred != NULL) {
+                                                for (p = 0; p < run->no_pelagic; p++) o->pel_pred[s][p][idx] = pe->mu_pred_values[p][i][k][l];
+                                        }
+                                }
+                                for (s = 0; s < run->no_benthic; s++) {
+                                        BENTHIC *be = &community->benthic[s];
+                                        o->ben[s][idx] = be->u_values[i][k][l];
+                                        if (o->ben_g != NULL)    o->ben_g[s][idx]    = be->g_values[i][k][l];
+                                        if (o->ben_mu != NULL)   o->ben_mu[s][idx]   = be->mu_values[i][k][l];
+                                        if (o->ben_pred != NULL) o->ben_pred[s][idx] = be->mu_pred_values[i][k][l];
+                                        if (o->ben_fish != NULL) o->ben_fish[s][idx] = be->mu_fish_values[i][k][l];
+                                }
                         }
                         if (o->det != NULL) {
                                 o->det[(R_xlen_t)kk + (R_xlen_t)o->nxo * ((R_xlen_t)ll + (R_xlen_t)o->nyo * o->it)] = community->detritus->w_values[k][l];
@@ -729,12 +778,18 @@ SEXP SizeSpectrum(
                 names_params[i] = (char *) CHAR(STRING_ELT(names_params_r, i));
         }
         
-        // Output mode: 0 = text files only (returns NULL), 1 = text files and arrays, 2 = arrays only.
-        if (!isInteger(output_r) || LENGTH(output_r) != 1 || INTEGER(output_r)[0] < 0 || INTEGER(output_r)[0] > 2) {
-                error("output_r must be a single integer: 0 (files), 1 (files and arrays) or 2 (arrays)");
+        // Output: c(mode, growth, mortality, predation, fishing). mode: 0 = text files only (returns NULL),
+        // 1 = text files and arrays, 2 = arrays only. The other four are 0/1 flags for the optional
+        // variables returned alongside abundance.
+        if (!isInteger(output_r) || LENGTH(output_r) != 5 || INTEGER(output_r)[0] < 0 || INTEGER(output_r)[0] > 2) {
+                error("output_r must be 5 integers: mode (0 files, 1 files and arrays, 2 arrays) and four 0/1 variable flags");
         }
         OUTPUT_ARRAYS out;
         out.mode = INTEGER(output_r)[0];
+        out.want_g = INTEGER(output_r)[1] != 0;
+        out.want_mu = INTEGER(output_r)[2] != 0;
+        out.want_pred = INTEGER(output_r)[3] != 0;
+        out.want_fish = INTEGER(output_r)[4] != 0;
         out.list = R_NilValue;
 
         // Optional inputs passed as R arrays instead of text files (inputs_r is NULL or a named list).

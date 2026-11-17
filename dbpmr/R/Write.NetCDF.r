@@ -5,12 +5,14 @@
 #'
 #' @details
 #' The file has the dimensions `x`, `y`, `size` (natural-log body mass in grams)
-#' and `time` (model years). Each of the plankton, pelagic and benthic groups is
-#' written as a variable `[x, y, size, time]` holding its abundance density per
-#' unit natural-log body mass, named after the group (`plankton`, and the
-#' species file names used in [Setup.Pelagic()] / [Setup.Benthic()]). Detritus
-#' biomass, when present, is written as `detritus` with dimensions
-#' `[x, y, time]`.
+#' and `time` (model years). Every variable in the output object is written with
+#' dimensions `[x, y, size, time]` and named `<group>_<variable>`, where the
+#' group is the plankton or species file name: `<group>_abundance` (abundance
+#' density per unit natural-log body mass), `<group>_growth`,
+#' `<group>_mortality`, `<group>_fishing` and, for predation mortality,
+#' `<prey>_predation_by_<predator>` for a pelagic prey species and
+#' `<group>_predation` for a benthic one. Detritus biomass, when present, is
+#' written as `detritus` with dimensions `[x, y, time]`.
 #'
 #' By default `x` and `y` are the model grid coordinates. Supply `x` and `y`
 #' (and `xname`, `yname`, `xunits`, `yunits`) to label the cells differently,
@@ -45,18 +47,29 @@ function(output, file, x = output$x, y = output$y, xname = "x", yname = "y",
   dy <- ncdf4::ncdim_def(yname, yunits, as.numeric(y))
   dm <- ncdf4::ncdim_def("size", "ln(g)", output$m, longname = "natural-log body mass")
   dt <- ncdf4::ncdim_def("time", "years", output$t, longname = "model time")
-  groups <- c(list(plankton = output$plankton), output$pelagic, output$benthic)
-  if(anyDuplicated(names(groups))) stop("group names must be unique: ", paste(names(groups), collapse = ", "))
-  vars <- lapply(names(groups), function(nm)
-    ncdf4::ncvar_def(nm, "", list(dx, dy, dm, dt), missval = NA_real_, prec = "double", compression = compression,
-                     longname = paste(nm, "abundance density per unit natural-log body mass")))
-  names(vars) <- names(groups)
+  # flatten to one named [x, y, size, time] array per NetCDF variable, with its units and description
+  arrs <- list(); meta <- list()
+  add <- function(name, a, units, longname){ arrs[[name]] <<- a; meta[[name]] <<- c(units, longname) }
+  for(g in names(output$abundance)) add(paste0(g, "_abundance"), output$abundance[[g]], "", paste(g, "abundance density per unit natural-log body mass"))
+  for(g in names(output$growth))    add(paste0(g, "_growth"), output$growth[[g]], "yr-1", paste(g, "growth rate (rate of change of natural-log body mass)"))
+  for(g in names(output$mortality)) add(paste0(g, "_mortality"), output$mortality[[g]], "yr-1", paste(g, "total mortality rate"))
+  for(g in names(output$predation)){
+    p <- output$predation[[g]]
+    if(is.list(p)) for(pr in names(p)) add(paste0(g, "_predation_by_", pr), p[[pr]], "yr-1", paste(g, "predation mortality rate from", pr))
+    else add(paste0(g, "_predation"), p, "yr-1", paste(g, "predation mortality rate"))
+  }
+  for(g in names(output$fishing))   add(paste0(g, "_fishing"), output$fishing[[g]], "yr-1", paste(g, "fishing mortality rate"))
+  if(anyDuplicated(names(arrs))) stop("variable names must be unique: ", paste(names(arrs)[duplicated(names(arrs))], collapse = ", "))
+  vars <- lapply(names(arrs), function(nm)
+    ncdf4::ncvar_def(nm, meta[[nm]][1], list(dx, dy, dm, dt), missval = NA_real_, prec = "double", compression = compression,
+                     longname = meta[[nm]][2]))
+  names(vars) <- names(arrs)
   if(!is.null(output$detritus))
     vars$detritus <- ncdf4::ncvar_def("detritus", "", list(dx, dy, dt), missval = NA_real_, prec = "double",
                                       compression = compression, longname = "detritus biomass")
   nc <- ncdf4::nc_create(file, vars, force_v4 = TRUE)
   on.exit(ncdf4::nc_close(nc), add = TRUE)
-  for(nm in names(groups)) ncdf4::ncvar_put(nc, vars[[nm]], groups[[nm]])
+  for(nm in names(arrs)) ncdf4::ncvar_put(nc, vars[[nm]], arrs[[nm]])
   if(!is.null(output$detritus)) ncdf4::ncvar_put(nc, vars$detritus, output$detritus)
   ncdf4::ncatt_put(nc, 0, "title", "dbpmr model output")
   ncdf4::ncatt_put(nc, 0, "source", paste("dbpmr", as.character(utils::packageVersion("dbpmr"))))
@@ -67,7 +80,8 @@ function(output, file, x = output$x, y = output$y, xname = "x", yname = "y",
 print.dbpmr_output <- function(x, ...){
   cat(sprintf("dbpmr output arrays: %d x %d cells, %d size classes, %d output times (t = %g to %g)\n",
               length(x$x), length(x$y), length(x$m), length(x$t), min(x$t), max(x$t)))
-  cat("  groups [x, y, m, t]:", paste(c("plankton", names(x$pelagic), names(x$benthic)), collapse = ", "), "\n")
+  cat("  groups:", paste(names(x$abundance), collapse = ", "), "\n")
+  cat("  variables [x, y, m, t]:", paste(intersect(c("abundance", "growth", "mortality", "predation", "fishing"), names(x)), collapse = ", "), "\n")
   if(!is.null(x$detritus)) cat("  detritus [x, y, t]\n")
   invisible(x)
 }

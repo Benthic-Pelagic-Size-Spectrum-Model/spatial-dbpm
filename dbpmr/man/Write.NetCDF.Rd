@@ -39,12 +39,14 @@ Saves the output returned by \code{\link[=SizeSpectrum]{SizeSpectrum()}} with \c
 }
 \details{
 The file has the dimensions \code{x}, \code{y}, \code{size} (natural-log body mass in grams)
-and \code{time} (model years). Each of the plankton, pelagic and benthic groups is
-written as a variable \verb{[x, y, size, time]} holding its abundance density per
-unit natural-log body mass, named after the group (\code{plankton}, and the
-species file names used in \code{\link[=Setup.Pelagic]{Setup.Pelagic()}} / \code{\link[=Setup.Benthic]{Setup.Benthic()}}). Detritus
-biomass, when present, is written as \code{detritus} with dimensions
-\verb{[x, y, time]}.
+and \code{time} (model years). Every variable in the output object is written with
+dimensions \verb{[x, y, size, time]} and named \verb{<group>_<variable>}, where the
+group is the plankton or species file name: \verb{<group>_abundance} (abundance
+density per unit natural-log body mass), \verb{<group>_growth},
+\verb{<group>_mortality}, \verb{<group>_fishing} and, for predation mortality,
+\verb{<prey>_predation_by_<predator>} for a pelagic prey species and
+\verb{<group>_predation} for a benthic one. Detritus biomass, when present, is
+written as \code{detritus} with dimensions \verb{[x, y, time]}.
 
 By default \code{x} and \code{y} are the model grid coordinates. Supply \code{x} and \code{y}
 (and \code{xname}, \code{yname}, \code{xunits}, \code{yunits}) to label the cells differently,
