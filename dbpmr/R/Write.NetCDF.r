@@ -9,7 +9,7 @@
 #' dimensions `[x, y, size, time]` and named `<group>_<variable>`, where the
 #' group is the plankton or species file name: `<group>_abundance` (abundance
 #' density per unit natural-log body mass), `<group>_growth`,
-#' `<group>_mortality`, `<group>_fishing` and, for predation mortality,
+#' `<group>_mortality`, `<group>_fishing`, `<group>_catch` and, for predation mortality,
 #' `<prey>_predation_by_<predator>` for a pelagic prey species and
 #' `<group>_predation` for a benthic one. Detritus biomass, when present, is
 #' written as `detritus` with dimensions `[x, y, time]`.
@@ -59,6 +59,7 @@ function(output, file, x = output$x, y = output$y, xname = "x", yname = "y",
     else add(paste0(g, "_predation"), p, "yr-1", paste(g, "predation mortality rate"))
   }
   for(g in names(output$fishing))   add(paste0(g, "_fishing"), output$fishing[[g]], "yr-1", paste(g, "fishing mortality rate"))
+  for(g in names(output$catch))     add(paste0(g, "_catch"), output$catch[[g]], "", paste(g, "catch rate density per year (fishing mortality x abundance x body mass) per unit natural-log body mass"))
   if(anyDuplicated(names(arrs))) stop("variable names must be unique: ", paste(names(arrs)[duplicated(names(arrs))], collapse = ", "))
   vars <- lapply(names(arrs), function(nm)
     ncdf4::ncvar_def(nm, meta[[nm]][1], list(dx, dy, dm, dt), missval = NA_real_, prec = "double", compression = compression,
@@ -81,7 +82,7 @@ print.dbpmr_output <- function(x, ...){
   cat(sprintf("dbpmr output arrays: %d x %d cells, %d size classes, %d output times (t = %g to %g)\n",
               length(x$x), length(x$y), length(x$m), length(x$t), min(x$t), max(x$t)))
   cat("  groups:", paste(names(x$abundance), collapse = ", "), "\n")
-  cat("  variables [x, y, m, t]:", paste(intersect(c("abundance", "growth", "mortality", "predation", "fishing"), names(x)), collapse = ", "), "\n")
+  cat("  variables [x, y, m, t]:", paste(intersect(c("abundance", "growth", "mortality", "predation", "fishing", "catch"), names(x)), collapse = ", "), "\n")
   if(!is.null(x$detritus)) cat("  detritus [x, y, t]\n")
   invisible(x)
 }

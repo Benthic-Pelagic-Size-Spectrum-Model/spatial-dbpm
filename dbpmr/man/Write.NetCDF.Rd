@@ -43,7 +43,7 @@ and \code{time} (model years). Every variable in the output object is written wi
 dimensions \verb{[x, y, size, time]} and named \verb{<group>_<variable>}, where the
 group is the plankton or species file name: \verb{<group>_abundance} (abundance
 density per unit natural-log body mass), \verb{<group>_growth},
-\verb{<group>_mortality}, \verb{<group>_fishing} and, for predation mortality,
+\verb{<group>_mortality}, \verb{<group>_fishing}, \verb{<group>_catch} and, for predation mortality,
 \verb{<prey>_predation_by_<predator>} for a pelagic prey species and
 \verb{<group>_predation} for a benthic one. Detritus biomass, when present, is
 written as \code{detritus} with dimensions \verb{[x, y, time]}.
