@@ -1,6 +1,24 @@
 #include "fishing.h"
 
 
+/*Set the fishing mortality of one species from an array passed from R: in each cell the rate of the
+  current time point's layer applies to the size classes within [lo, hi] of the species' range, zero to the rest.*/
+static void fishing_from_array(RUN *run, GRID *grid, const FISHING_ARRAY *fa, double ***mu_fish, int imin, int imax)
+{
+     int i,k,l;
+     int x=grid->xnum, y=grid->ynum;
+     int tp=run->fish_block < fa->nblock ? run->fish_block : fa->nblock-1;
+     R_xlen_t layer=fa->layer[tp];
+     for(k=0 ; k<x ; k++){
+             for(l=0 ; l<y ; l++){
+                     double rate=fa->rate[(R_xlen_t)k+(R_xlen_t)x*((R_xlen_t)l+(R_xlen_t)y*layer)];
+                     for(i=imin ; i<(imax+1) ; i++){
+                             mu_fish[i][k][l]=(grid->m_values[i]>=fa->lo && grid->m_values[i]<=fa->hi) ? rate : 0.0;
+                     }
+             }
+     }
+}
+
 void calculate_fishing(RUN *run, GRID *grid, COMMUNITY *community)
 {
      int i,k,l,s,b;
@@ -13,7 +31,12 @@ void calculate_fishing(RUN *run, GRID *grid, COMMUNITY *community)
      
      /*Pelagic Fishing*/
      for(s=0 ; s<n ; s++){
-             if(community->pelagic[s].fishing_flag==1){
+             if(community->pelagic[s].fishing_flag==1 && community->pelagic[s].fish_arr!=NULL){
+                     /*Fishing mortality supplied from R as an array*/
+                     fishing_from_array(run, grid, community->pelagic[s].fish_arr, community->pelagic[s].mu_fish_values,
+                                        community->pelagic[s].ipelmin, community->pelagic[s].ipelmax);
+             }
+             else if(community->pelagic[s].fishing_flag==1){
                      int MAX_LEN=grid->mnum*15; //this is the upper bound for the row length in characters
                      char *input;               //input string to store line as string
                      input=(char *)safe_malloc(MAX_LEN*sizeof(char),__LINE__,__FILE__); 
@@ -42,7 +65,12 @@ void calculate_fishing(RUN *run, GRID *grid, COMMUNITY *community)
      /*Benthic Fishing*/
      if(run->no_benthic!=0){
              for(b=0 ; b<c ; b++){
-                     if(community->benthic[b].fishing_flag==1){
+                     if(community->benthic[b].fishing_flag==1 && community->benthic[b].fish_arr!=NULL){
+                             /*Fishing mortality supplied from R as an array*/
+                             fishing_from_array(run, grid, community->benthic[b].fish_arr, community->benthic[b].mu_fish_values,
+                                                community->benthic[b].ibenmin, community->benthic[b].ibenmax);
+                     }
+                     else if(community->benthic[b].fishing_flag==1){
                              int MAX_LEN=grid->mnum*15; //this is the upper bound for the row length in characters
                              char *input;               //input string to store line as string
                              input=(char *)safe_malloc(MAX_LEN*sizeof(char),__LINE__,__FILE__); 
@@ -109,4 +137,6 @@ void calculate_fishing(RUN *run, GRID *grid, COMMUNITY *community)
                      }
              }
      }
+
+     run->fish_block++;   /*one call per model time point (the first is the initial state)*/
 }

@@ -117,3 +117,41 @@ layer_index <- function(grid.in, nl, layer = NULL, time = NULL) {
     stop(sprintf("layer must be whole numbers between 1 and the number of layers (%d)", nl))
   as.integer(layer)
 }
+
+#' Attach in-memory fishing mortality to a species object (internal)
+#'
+#' Validates a fishing-mortality rate given as a scalar, per-layer vector,
+#' `[x, y]` matrix or `[x, y, layer]` array, the fished size range and the
+#' time-point-to-layer mapping, and stores them in the `fishing_arrays` slot.
+#' Used by [Setup.fishing()].
+#'
+#' @param species A pelagic or benthic parameter object with `fishing_flag = TRUE`.
+#' @param grid.in A [grid.params] object.
+#' @param rate,min_size,max_size,layer,time See [Setup.fishing()].
+#' @return The species object with `fishing_arrays` filled.
+#' @keywords internal
+#' @noRd
+fishing_arrays <- function(species, grid.in, rate, min_size = -Inf, max_size = Inf, layer = NULL, time = NULL) {
+  nx <- length(grid_seq(grid.in@xmin, grid.in@xmax, grid.in@xstep))
+  ny <- length(grid_seq(grid.in@ymin, grid.in@ymax, grid.in@ystep))
+  if (!is.numeric(rate)) stop("rate must be numeric")
+  if (any(!is.finite(rate))) stop("rate must not contain NA, NaN or Inf")
+  if (any(rate < 0)) stop("rate must be non-negative")
+  d <- dim(rate)
+  a <- if (is.null(d)) array(rep(as.numeric(rate), each = nx * ny), c(nx, ny, length(rate)))    # scalar or one value per layer
+       else if (length(d) == 2L) {
+         if (d[1] != nx || d[2] != ny) stop(sprintf("rate: a matrix must be [x = %d, y = %d]; got [%s]", nx, ny, paste(d, collapse = ", ")))
+         array(as.numeric(rate), c(nx, ny, 1L))
+       } else {
+         if (length(d) != 3L || d[1] != nx || d[2] != ny)
+           stop(sprintf("rate: an array must be [x = %d, y = %d, layers]; got [%s]", nx, ny, paste(d, collapse = ", ")))
+         rate
+       }
+  storage.mode(a) <- "double"
+  if (!is.numeric(min_size) || !is.numeric(max_size) || length(min_size) != 1 || length(max_size) != 1 || is.na(min_size) || is.na(max_size) || min_size > max_size)
+    stop("min_size and max_size must be single numbers with min_size <= max_size")
+  species@fishing_arrays <- list(rate = a, layer = layer_index(grid.in, dim(a)[3], layer, time),
+                                 range = c(as.numeric(min_size), as.numeric(max_size)))
+  species
+}
+

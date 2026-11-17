@@ -4,7 +4,18 @@
 \alias{Setup.fishing}
 \title{Write fishing input for a species}
 \usage{
-Setup.fishing(species, run.in, grid.in, func, dataname)
+Setup.fishing(
+  species,
+  run.in,
+  grid.in,
+  func,
+  dataname,
+  rate,
+  min_size = -Inf,
+  max_size = Inf,
+  layer,
+  time
+)
 }
 \arguments{
 \item{species}{A pelagic or benthic parameter object with \code{fishing_flag} set.}
@@ -17,16 +28,44 @@ Setup.fishing(species, run.in, grid.in, func, dataname)
 
 \item{dataname}{Path to a CSV file of fishing values (first line is the file
 type).}
+
+\item{rate}{Fishing mortality rate (per year) of the fished size classes,
+held in memory. A single number (the same everywhere and always), a vector
+with one value per layer (the same in every cell, varying in time), a
+matrix \verb{[x, y]} (varying between cells, constant in time) or an array
+\verb{[x, y, layer]} (varying in both).}
+
+\item{min_size, max_size}{Used with \code{rate}: the fished size range, as
+natural-log body mass. Size classes of the species outside it have zero
+fishing mortality. By default the whole size range of the species is
+fished.}
+
+\item{layer}{Used with \code{rate}: for each model time point
+(\code{seq(0, tmax, tstep)}) the layer it uses, as whole numbers from 1. May be
+omitted when there is one layer per time point, or a single layer.}
+
+\item{time}{Used with \code{rate} instead of \code{layer}: the start time (in model
+years) of each layer; each time point uses the latest layer that has
+started.}
 }
 \value{
-Invisibly \code{NULL}; called for the side effect of writing the input
-file under the run's \code{Input} directory.
+Invisibly \code{NULL} when writing an input file under the run's \code{Input}
+directory. When \code{rate} is given, invisibly the species object with the
+rate attached (assign it).
 }
 \description{
 Generates the \verb{_fishing_ts.txt} fishing-mortality time-series input file for a
 pelagic or benthic species whose \code{fishing_flag} is \code{TRUE}. The values may be
 supplied as a function of mass/time/space or read from a CSV data file.
 Exactly one of \code{func} or \code{dataname} must be given.
+}
+\details{
+Fishing mortality can instead be supplied in memory with \code{rate}, with no
+input file written: a rate that applies to every size class between
+\code{min_size} and \code{max_size} and may differ between cells and through time. In
+that case the function returns the species object carrying the rate, which
+must be assigned and passed on to \code{\link[=SizeSpectrum]{SizeSpectrum()}}:
+\code{pe <- Setup.fishing(pe, run, grid, rate = f, min_size = log(250))}.
 }
 \seealso{
 \code{\link[=Setup.ts]{Setup.ts()}}, \code{\link[=Setup.Rep]{Setup.Rep()}}

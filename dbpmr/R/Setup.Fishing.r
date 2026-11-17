@@ -5,25 +5,56 @@
 #' supplied as a function of mass/time/space or read from a CSV data file.
 #' Exactly one of `func` or `dataname` must be given.
 #'
+#' Fishing mortality can instead be supplied in memory with `rate`, with no
+#' input file written: a rate that applies to every size class between
+#' `min_size` and `max_size` and may differ between cells and through time. In
+#' that case the function returns the species object carrying the rate, which
+#' must be assigned and passed on to [SizeSpectrum()]:
+#' `pe <- Setup.fishing(pe, run, grid, rate = f, min_size = log(250))`.
+#'
 #' @param species A pelagic or benthic parameter object with `fishing_flag` set.
 #' @param run.in A [run.params] object.
 #' @param grid.in A [grid.params] object.
 #' @param func A function of `(m, t, x, y)` returning fishing mortality.
 #' @param dataname Path to a CSV file of fishing values (first line is the file
 #'   type).
+#' @param rate Fishing mortality rate (per year) of the fished size classes,
+#'   held in memory. A single number (the same everywhere and always), a vector
+#'   with one value per layer (the same in every cell, varying in time), a
+#'   matrix `[x, y]` (varying between cells, constant in time) or an array
+#'   `[x, y, layer]` (varying in both).
+#' @param min_size,max_size Used with `rate`: the fished size range, as
+#'   natural-log body mass. Size classes of the species outside it have zero
+#'   fishing mortality. By default the whole size range of the species is
+#'   fished.
+#' @param layer Used with `rate`: for each model time point
+#'   (`seq(0, tmax, tstep)`) the layer it uses, as whole numbers from 1. May be
+#'   omitted when there is one layer per time point, or a single layer.
+#' @param time Used with `rate` instead of `layer`: the start time (in model
+#'   years) of each layer; each time point uses the latest layer that has
+#'   started.
 #'
-#' @return Invisibly `NULL`; called for the side effect of writing the input
-#'   file under the run's `Input` directory.
+#' @return Invisibly `NULL` when writing an input file under the run's `Input`
+#'   directory. When `rate` is given, invisibly the species object with the
+#'   rate attached (assign it).
 #' @seealso [Setup.ts()], [Setup.Rep()]
 #' @export
 `Setup.fishing`<-
-function(species, run.in, grid.in, func, dataname){
+function(species, run.in, grid.in, func, dataname, rate, min_size = -Inf, max_size = Inf, layer, time){
 #func is a function of the variables m, x, y, and z
 #dataname is a filename containing either a vector of intercepts, two vectors of intercepts and slopes or a full matrix of ts values
 
 #Input checking stuff
 if(species@speciestype=='plankton' || species@speciestype=='detritus') stop ("Fishing can only be applied to pelagic or benthic systems")
 if(species@fishing_flag==FALSE) stop ("Fishing values are not to be specified since fishing_flag==F")
+
+#Fishing mortality held in memory as an array: nothing is written
+if(!missing(rate)){
+  if(!missing(func) || !missing(dataname)) stop("rate cannot be combined with func or dataname")
+  return(invisible(fishing_arrays(species, grid.in, rate, min_size, max_size,
+                                  if(missing(layer)) NULL else layer, if(missing(time)) NULL else time)))
+}
+if(!missing(layer) || !missing(time)) stop("layer and time are only used with rate")
 
 if(missing(func) && missing(dataname)) stop("A function or data for the initial step must be given")
 if(!missing(func) && !missing(dataname)) stop("Only one of a function or data for the initial step must be given")
