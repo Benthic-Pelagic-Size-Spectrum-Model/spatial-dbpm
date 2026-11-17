@@ -6,7 +6,8 @@ Date: 2026-10-14
 Authors@R: c(
     person("Julia", "Blanchard", email = "julia.blanchard@utas.edu.au",
            role = c("aut", "cre")),
-    person("Matthew", "Castle", role = "aut"))
+    person("Matthew", "Castle", role = "aut"),
+    person("Benjamin", "Grier", role = "ctb"))
 Description: R implementation of the Dynamic Benthic Pelagic Model (DBPM)
     with spatial size-spectrum capabilities for marine ecosystems. Provides
     helpers to configure a model run, an interface to the underlying C
