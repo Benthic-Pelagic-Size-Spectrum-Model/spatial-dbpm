@@ -26,16 +26,29 @@ pelagic species).}
 With \code{output = "files"}, a character vector of the paths and species
 filenames produced by the run, suitable for passing to \code{\link[=Read.In]{Read.In()}}.
 
-With \code{output = "arrays"} or \code{"both"}, an object of class \code{dbpmr_output}: a
-list with the output coordinates \code{t} (years), \code{x}, \code{y} and \code{m} (natural-log
-body mass), the abundance density of each group as arrays with dimensions
-\verb{[x, y, m, t]} (\code{plankton}, and the named lists \code{pelagic} and \code{benthic},
-one array per species), and \code{detritus} biomass as \verb{[x, y, t]}. Values are
-those the text files would hold: the same output times, cells and size
-classes (set by \code{toutstep}, \code{xoutstep}, \code{youtstep} and \code{moutstep} in
-\code{\link[=Setup.Grid]{Setup.Grid()}}), with zeros outside a group's size range. With \code{"both"} the
-character vector described above is attached as the attribute \code{"files"}.
-See \code{\link[=Write.NetCDF]{Write.NetCDF()}} to save the object.
+With \code{output = "arrays"} or \code{"both"}, an object of class \code{dbpmr_output}, a
+list with:
+\itemize{
+\item \code{t} (years), \code{x}, \code{y} and \code{m} (natural-log body mass): the output
+coordinates;
+\item \code{abundance}: a named list with one array per group (the plankton and each
+pelagic and benthic species, named by their file names), each with
+dimensions \verb{[x, y, m, t]};
+\item \code{growth}, \code{mortality}, \code{fishing}: named lists with one \verb{[x, y, m, t]}
+array per pelagic and benthic species, holding the growth rate, the total
+mortality rate and the fishing mortality rate;
+\item \code{predation}: predation mortality rate. For a pelagic species, a list with
+one array per pelagic predator species; for a benthic species, one array
+(predation by all pelagic species);
+\item \code{detritus}: detritus biomass as \verb{[x, y, t]} (when the run has benthos).
+}
+
+The values are those the text files would hold (\code{results.txt},
+\code{growth.txt}, \code{mortality.txt}, \code{predation*.txt}, \code{fishing.txt}): the same
+output times, cells and size classes (set by \code{toutstep}, \code{xoutstep},
+\code{youtstep} and \code{moutstep} in \code{\link[=Setup.Grid]{Setup.Grid()}}), with zeros outside a group's
+size range. With \code{"both"} the character vector described above is attached
+as the attribute \code{"files"}. See \code{\link[=Write.NetCDF]{Write.NetCDF()}} to save the object.
 }
 \description{
 Validates the supplied parameter objects, assembles the transfer vectors and
