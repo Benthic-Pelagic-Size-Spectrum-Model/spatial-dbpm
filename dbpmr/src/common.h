@@ -37,6 +37,21 @@ typedef struct fishing_array{
         double lo,hi;          //fished size range (natural-log body mass)
         } FISHING_ARRAY;
 
+/*Fishing effort allocated among cells by gravity (opt-in, supplied from R). The fishing mortality set for each
+  species (from an array or a file) is taken as the rate at evenly spread effort; in cell (k,l) it is multiplied
+  by ncell*share(k,l), where share is proportional to
+       access(k,l) * sum over fished species of thickness(k,l) * sum over sizes of mu_fish*u*exp(m)*mstep,
+  i.e. to the accessible catch rate per unit area that evenly spread effort would take, with u the abundance at the
+  latest update. The shares sum to one over the grid, so the mean multiplier is one: effort is moved between
+  cells, not added.*/
+typedef struct gravity_input{
+        const double *access;     //[x][y] accessibility weight of each cell (>= 0)
+        const double *thick_pel;  //[x][y] layer thickness (m) that turns pelagic density per volume into per area
+        const double *thick_ben;  //[x][y] the same for benthic species
+        R_xlen_t len;             //length of each of the three (checked against x*y once the grid is known)
+        int nupdate;              //number of timesteps between updates of the abundances the shares are based on (1 = every timestep)
+        } GRAVITY_INPUT;
+
 typedef struct array_inputs{
         const double *pla_int; //plankton intercept a
         const double *pla_slp; //plankton slope b
@@ -55,6 +70,7 @@ typedef struct array_inputs{
 
         FISHING_ARRAY *fish_pel;   //one entry per pelagic species (NULL = none supplied for any species)
         FISHING_ARRAY *fish_ben;   //one entry per benthic species
+        const GRAVITY_INPUT *gravity;  //effort allocated among cells by gravity (NULL = off)
         } ARRAY_INPUTS;
 
 /*Model output handed back to R as arrays (opt-in). The arrays live in R memory (elements of the list
@@ -102,6 +118,9 @@ typedef struct run_info{
         const ARRAY_INPUTS *arr; //inputs supplied from R as arrays (NULL or have_forcing=0 -> forcing comes from the file, if any)
         int frc_step;          //timesteps of array forcing applied so far
         int fish_block;        //number of times fishing mortality has been set (indexes the time point of array fishing)
+        double **fish_share;   //gravity: multiplier ncell*share on fishing mortality in each cell (NULL = gravity off)
+        double **share_u_pel;  //gravity: abundance of each pelagic species at the latest update, [species][m + mnum*(x + xnum*y)] (NULL when the shares are recalculated every timestep)
+        double **share_u_ben;  //gravity: the same for each benthic species
         OUTPUT_ARRAYS *out;    //output returned to R as arrays (NULL or mode 0 -> text files only)
         int forcing_ncol;      //number of columns in each data row
         int col_pel_tempeff;   //column index of each channel (-1 if absent)

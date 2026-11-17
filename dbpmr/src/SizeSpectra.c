@@ -161,6 +161,7 @@ SEXP SizeSpectrum(
         arr.pla_nlayer = 0; arr.pla_nblock = 0; arr.pla_len = 0;
         arr.have_forcing = 0; arr.frc_layer = NULL; arr.frc_nblock = 0;
         arr.fish_pel = NULL; arr.fish_ben = NULL;
+        arr.gravity = NULL;
         for (i = 0; i < N_FRC; i++) { arr.frc[i] = NULL; arr.frc_nlayer[i] = 0; arr.frc_len[i] = 0; }
         if (inputs_r != R_NilValue) {
                 if (!isNewList(inputs_r)) {
@@ -225,6 +226,21 @@ SEXP SizeSpectrum(
                 // Fishing mortality as arrays, per species.
                 arr.fish_pel = read_fishing_arrays(inputs_r, "fishing_pelagic", npel);
                 arr.fish_ben = read_fishing_arrays(inputs_r, "fishing_benthic", nben);
+
+                // Effort allocated among cells by gravity.
+                SEXP gv_r = get_list_element(inputs_r, "gravity");
+                if (gv_r != R_NilValue) {
+                        SEXP ga = get_list_element(gv_r, "access"), gp = get_list_element(gv_r, "thick_pel");
+                        SEXP gb = get_list_element(gv_r, "thick_ben"), gn = get_list_element(gv_r, "nupdate");
+                        if (!isReal(ga) || !isReal(gp) || !isReal(gb) || !isInteger(gn) || LENGTH(gn) != 1 ||
+                            XLENGTH(gp) != XLENGTH(ga) || XLENGTH(gb) != XLENGTH(ga) || INTEGER(gn)[0] < 1) {
+                                error("gravity: access, thick_pel and thick_ben must be numeric of equal length and nupdate a positive integer");
+                        }
+                        GRAVITY_INPUT *gv = (GRAVITY_INPUT *) R_alloc(1, sizeof(GRAVITY_INPUT));
+                        gv->access = REAL(ga); gv->thick_pel = REAL(gp); gv->thick_ben = REAL(gb);
+                        gv->len = XLENGTH(ga); gv->nupdate = INTEGER(gn)[0];
+                        arr.gravity = gv;
+                }
         }
 
         SizeSpectrum_internals(
@@ -279,6 +295,35 @@ static void SizeSpectrum_internals(int *run_params, double *grid_params, double 
     
     /*Setup grid*/
     setup_grid(&grid, grid_params);
+
+    /*Effort allocated among cells by gravity: the multiplier on fishing mortality in each cell*/
+    run.fish_share=NULL;
+    run.share_u_pel=NULL;
+    run.share_u_ben=NULL;
+    if(arr!=NULL && arr->gravity!=NULL){
+            int k,l;
+            if(arr->gravity->len!=(R_xlen_t)grid.xnum*(R_xlen_t)grid.ynum) error("gravity: access and thickness must have one value per cell (x*y = %d)", grid.xnum*grid.ynum);
+            run.fish_share=(double **)safe_malloc(grid.xnum*sizeof(double *),__LINE__,__FILE__);
+            for(k=0 ; k<grid.xnum ; k++){
+                    run.fish_share[k]=(double *)safe_malloc(grid.ynum*sizeof(double),__LINE__,__FILE__);
+                    for(l=0 ; l<grid.ynum ; l++) run.fish_share[k][l]=1.0;
+            }
+            if(arr->gravity->nupdate>1){
+                    size_t len=(size_t)grid.mnum*(size_t)grid.xnum*(size_t)grid.ynum, j;
+                    run.share_u_pel=(double **)safe_malloc(run.no_pelagic*sizeof(double *),__LINE__,__FILE__);
+                    for(s=0 ; s<run.no_pelagic ; s++){
+                            run.share_u_pel[s]=(double *)safe_malloc(len*sizeof(double),__LINE__,__FILE__);
+                            for(j=0 ; j<len ; j++) run.share_u_pel[s][j]=0.0;
+                    }
+                    if(run.no_benthic!=0){
+                            run.share_u_ben=(double **)safe_malloc(run.no_benthic*sizeof(double *),__LINE__,__FILE__);
+                            for(b=0 ; b<run.no_benthic ; b++){
+                                    run.share_u_ben[b]=(double *)safe_malloc(len*sizeof(double),__LINE__,__FILE__);
+                                    for(j=0 ; j<len ; j++) run.share_u_ben[b][j]=0.0;
+                            }
+                    }
+            }
+    }
 
     /*Setup community*/
     community.plankton=(PLANKTON *)safe_malloc(sizeof(PLANKTON),__LINE__,__FILE__);

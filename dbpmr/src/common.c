@@ -71,6 +71,20 @@ void free_mem(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, MAT
      n=run->no_pelagic;
      c=run->no_benthic;
      
+     /*Free the gravity multiplier on fishing mortality*/
+     if(run->fish_share!=NULL){
+             for(k=0 ; k<x ; k++) free(run->fish_share[k]);
+             free(run->fish_share);
+     }
+     if(run->share_u_pel!=NULL){
+             for(s=0 ; s<n ; s++) free(run->share_u_pel[s]);
+             free(run->share_u_pel);
+     }
+     if(run->share_u_ben!=NULL){
+             for(b=0 ; b<c ; b++) free(run->share_u_ben[b]);
+             free(run->share_u_ben);
+     }
+
      /*Free grid values*/
      free(grid->m_values);
      free(grid->exp_m_values);

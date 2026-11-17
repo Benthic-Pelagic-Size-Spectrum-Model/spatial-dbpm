@@ -16,6 +16,9 @@
 #' @param forcing Optional environmental forcing held in memory, from
 #'   [Setup.Forcing()]. When given, it replaces the `forcing_ts.txt` input file
 #'   (it is an error to supply both).
+#' @param gravity Optional allocation of fishing effort among cells during the
+#'   run, from [Setup.Gravity()]. The rates given to [Setup.fishing()] are then
+#'   the fishing mortality at evenly spread effort.
 #'
 #' @param output Where the model output goes. `"files"` (the default) writes the
 #'   text result files under the run directory. `"arrays"` returns the output to
@@ -63,7 +66,7 @@
 #' @export
 `SizeSpectrum` <-
 function(run.in, grid.in, plankton.in, pelagic.in, benthic.in, detritus.in, forcing = NULL, output = c("files", "arrays", "both"),
-         variables = c("abundance", "growth", "mortality", "predation", "fishing", "catch")){
+         variables = c("abundance", "growth", "mortality", "predation", "fishing", "catch"), gravity = NULL){
   output <- match.arg(output)
   variables <- match.arg(variables, several.ok = TRUE)
 
@@ -390,6 +393,19 @@ tiny<-1e-7
     fnl <- vapply(fnames, function(nm) if(is.null(forcing$channels[[nm]])) 0L else dim(forcing$channels[[nm]])[3], integer(1))
     if(is.null(inputs)) inputs <- list()
     inputs <- c(inputs, fin, list(forcing_layer=as.integer(forcing$layer-1L), forcing_nlayer=as.integer(fnl)))
+  }
+
+  if(!is.null(gravity)){
+    if(!inherits(gravity, "dbpmr_gravity")) stop("gravity must be created with Setup.Gravity()")
+    fgrid <- c(length(grid_seq(grid.in@xmin, grid.in@xmax, grid.in@xstep)), length(grid_seq(grid.in@ymin, grid.in@ymax, grid.in@ystep)))
+    if(!identical(as.integer(dim(gravity$access)), as.integer(fgrid)))
+      stop("gravity was built for a different grid; rebuild it with Setup.Gravity() using this grid")
+    fished <- c(vapply(pelagic.in, function(sp) isTRUE(sp@fishing_flag), TRUE),
+                if(run.in@no_benthic!=0) vapply(benthic.in, function(sp) isTRUE(sp@fishing_flag), TRUE))
+    if(!any(fished)) stop("gravity was supplied but no species is fished (fishing_flag = TRUE and a rate from Setup.fishing())")
+    if(is.null(inputs)) inputs <- list()
+    inputs$gravity <- list(access=as.double(gravity$access), thick_pel=as.double(gravity$pelagic_thickness),
+                           thick_ben=as.double(gravity$benthic_thickness), nupdate=as.integer(gravity$nupdate))
   }
 
   x <- .Call(
