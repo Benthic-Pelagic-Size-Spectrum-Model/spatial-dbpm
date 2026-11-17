@@ -50,5 +50,10 @@ Authors:
   \item Matthew Castle
 }
 
+Other contributors:
+\itemize{
+  \item Benjamin Grier [contributor]
+}
+
 }
 \keyword{internal}
