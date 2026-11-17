@@ -64,8 +64,6 @@ plankton_ts_arrays <- function(species, grid.in, intercept, slope, layer = NULL,
   if (is.null(intercept) || is.null(slope)) stop("both intercept and slope must be given")
   nx <- length(grid_seq(grid.in@xmin, grid.in@xmax, grid.in@xstep))
   ny <- length(grid_seq(grid.in@ymin, grid.in@ymax, grid.in@ystep))
-  trange <- seq(0, grid.in@tmax, grid.in@tstep)
-  nb <- length(trange)
   as3 <- function(a, nm) {
     if (!is.numeric(a)) stop(nm, " must be numeric")
     if (is.null(dim(a))) a <- array(a, c(1L, 1L, length(a)))                       # 0-D: one value per layer
@@ -81,6 +79,26 @@ plankton_ts_arrays <- function(species, grid.in, intercept, slope, layer = NULL,
   if (any(intercept < 0))
     stop("intercept must be non-negative: it is the abundance density at m = 0, not its logarithm")
   nl <- dim(intercept)[3]
+  layer <- layer_index(grid.in, nl, layer, time)
+  species@ts_arrays <- list(intercept = intercept, slope = slope, layer = as.integer(layer))
+  species
+}
+
+#' Layer used at each model time point (internal)
+#'
+#' Shared by the array inputs: resolves `layer` (one entry per time point) or
+#' `time` (start time of each layer) into a whole-number layer index, 1-based,
+#' for each time point `seq(0, tmax, tstep)`.
+#'
+#' @param grid.in A [grid.params] object.
+#' @param nl Number of layers in the arrays.
+#' @param layer,time See [Setup.ts()].
+#' @return Integer vector, one layer per model time point.
+#' @keywords internal
+#' @noRd
+layer_index <- function(grid.in, nl, layer = NULL, time = NULL) {
+  trange <- seq(0, grid.in@tmax, grid.in@tstep)
+  nb <- length(trange)
   if (!is.null(layer) && !is.null(time)) stop("give only one of layer or time")
   if (!is.null(time)) {
     if (length(time) != nl || is.unsorted(time, strictly = TRUE)) stop("time must give one strictly increasing start time per layer")
@@ -97,6 +115,5 @@ plankton_ts_arrays <- function(species, grid.in, intercept, slope, layer = NULL,
   if (length(layer) != nb) stop(sprintf("layer must have one entry per time point (%d), got %d", nb, length(layer)))
   if (any(!is.finite(layer)) || any(layer != round(layer)) || any(layer < 1) || any(layer > nl))
     stop(sprintf("layer must be whole numbers between 1 and the number of layers (%d)", nl))
-  species@ts_arrays <- list(intercept = intercept, slope = slope, layer = as.integer(layer))
-  species
+  as.integer(layer)
 }

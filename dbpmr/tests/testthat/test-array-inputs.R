@@ -81,3 +81,86 @@ test_that("Setup.ts validates intercept/slope arrays", {
   expect_error(Setup.ts(Setup.Plankton(run, filename = "plankton"), run, grid, intercept = ok, slope = sl, layer = lay), "ts_flag = TRUE")
   expect_error(Setup.ts(Setup.Pelagic(run, filename = "fish", initial_flag = TRUE), run, grid, intercept = ok, slope = sl, layer = lay), "plankton only")
 })
+
+# ---------------------------------------------------------------------------------------------
+# Forcing channels (temperature, export, depth) as arrays via Setup.Forcing(), instead of
+# <run>/Input/forcing_ts.txt.
+
+# final pelagic and benthic biomass per cell. tp, tb: [x, month] temperature multipliers; dep: depth per cell.
+run_forcing <- function(tp, tb, dep, how = c("file", "array"), sink = 0.3) {
+  how <- match.arg(how)
+  wd <- tempfile("frc"); dir.create(wd); old <- setwd(wd); on.exit(setwd(old), add = TRUE)
+  nx <- nrow(tp); tmax <- 3; dt <- 1/48
+  run  <- Setup.Run("R", 1, 1, spatial_dim = if (nx > 1) 1 else 0, coupled_flag = TRUE, diff_method = 1)
+  grid <- if (nx > 1) Setup.Grid(run, tmax = tmax, tstep = dt, toutstep = 1, xmin = 0, xmax = nx - 1, xstep = 1, xoutstep = 1)
+          else Setup.Grid(run, tmax = tmax, tstep = dt, toutstep = 1)
+  uni <- function(sp) { m <- dbpmr:::grid_seq(sp@mmin, sp@mmax, grid@mstep); matrix(sp@u_0 * exp(sp@lambda * m), nrow = 1) }
+  pl <- Setup.Plankton(run, filename = "plankton", initial_flag = TRUE); Setup.ts(pl, run, grid, mat = uni(pl))
+  pe <- Setup.Pelagic(run, filename = "fish", comp = 0, prey = 0, pred = 0, initial_flag = TRUE); Setup.ts(pe, run, grid, mat = uni(pe))
+  be <- Setup.Benthic(run, filename = "benthos", initial_flag = TRUE); Setup.ts(be, run, grid, mat = uni(be))
+  de <- Setup.Detritus(run, filename = "detritus")
+  fo <- NULL
+  if (how == "file") {
+    nst <- round(tmax / dt) + 2; jm <- mon(seq_len(nst) * dt)       # row r is applied while advancing to time r * dt
+    rows <- unlist(lapply(jm, function(j) sprintf("%.17g,%.17g,%.17g,%.17g", tp[, j], tb[, j], sink, dep)))   # x rows per timestep
+    writeLines(c("pel_tempeff,ben_tempeff,sinking_rate,depth", rows), file.path("R", "Input", "forcing_ts.txt"))
+    if (nx > 1) { Sys.setenv(FORCING_PERCELL = "1"); on.exit(Sys.unsetenv("FORCING_PERCELL"), add = TRUE) }
+  } else {
+    a3 <- function(m) array(m, c(nx, 1, 12))
+    fo <- Setup.Forcing(run, grid, pel_tempeff = a3(tp), ben_tempeff = a3(tb), sinking_rate = sink,
+                        depth = matrix(dep, nx, 1), layer = mon(seq(0, tmax, dt)))
+  }
+  invisible(capture.output(SizeSpectrum(run, grid, pl, pe, be, de, forcing = fo)))
+  final <- function(nm) {
+    L <- readLines(file.path("R", nm, "results.txt"))
+    num <- function(z) suppressWarnings(as.numeric(strsplit(z, ",")[[1]]))
+    hdr <- num(L[5]); mc <- which(!is.na(hdr)); m <- hdr[mc]; dd <- diff(m)[1]
+    rws <- lapply(L[6:length(L)][nchar(L[6:length(L)]) > 0], num)
+    rws <- rws[sapply(rws, function(v) length(v) >= max(mc) && !is.na(v[1]) && !is.na(v[2]))]
+    last <- rws[sapply(rws, `[`, 1) == max(sapply(rws, `[`, 1))]
+    b0 <- sapply(last, function(v) sum(v[mc] * exp(m) * dd, na.rm = TRUE)); xx <- sapply(last, `[`, 2)
+    unname(sapply(sort(unique(xx)), function(q) b0[which(xx == q)[1]]))
+  }
+  list(pel = final("fish"), ben = final("benthos"), wrote_file = file.exists(file.path("R", "Input", "forcing_ts.txt")))
+}
+temps <- function(nx) list(tp = outer(seq(0.7, 1.3, length.out = nx), 1 + 0.2 * sin(2 * pi * (1:12) / 12)),
+                           tb = outer(seq(0.9, 1.1, length.out = nx), 1 + 0.1 * cos(2 * pi * (1:12) / 12)),
+                           dep = seq(150, 200, length.out = nx))
+
+test_that("forcing arrays give the same 0-D run as forcing_ts.txt, without writing one", {
+  s <- temps(1)
+  f <- run_forcing(s$tp, s$tb, s$dep, "file"); r <- run_forcing(s$tp, s$tb, s$dep, "array")
+  expect_true(f$wrote_file); expect_false(r$wrote_file)
+  expect_equal(r$pel, f$pel, tolerance = 1e-10); expect_equal(r$ben, f$ben, tolerance = 1e-10)
+})
+
+test_that("per-cell forcing arrays give the same spatial run as per-cell forcing_ts.txt", {
+  s <- temps(3)
+  f <- run_forcing(s$tp, s$tb, s$dep, "file"); r <- run_forcing(s$tp, s$tb, s$dep, "array")
+  expect_equal(r$pel, f$pel, tolerance = 1e-10); expect_equal(r$ben, f$ben, tolerance = 1e-10)
+  expect_true(all(diff(r$pel) != 0))                         # the cells really differ
+})
+
+test_that("Setup.Forcing validates its input and SizeSpectrum refuses arrays plus a file", {
+  wd <- tempfile("v"); dir.create(wd); old <- setwd(wd); on.exit(setwd(old), add = TRUE)
+  run  <- Setup.Run("R", 1, 1, spatial_dim = 2, coupled_flag = TRUE, diff_method = 1)
+  grid <- Setup.Grid(run, tmax = 1, tstep = 1/48, toutstep = 1, xmin = 0, xmax = 2, xstep = 1, xoutstep = 1, ymin = 0, ymax = 1, ystep = 1, youtstep = 1)
+  lay <- mon(seq(0, 1, 1/48)); a <- array(1, c(3, 2, 12))
+  fo <- Setup.Forcing(run, grid, pel_tempeff = a, ben_tempeff = 1:12 / 12, depth = matrix(200, 3, 2), sinking_rate = 0.3, layer = lay)
+  expect_s3_class(fo, "dbpmr_forcing")
+  expect_equal(lapply(fo$channels, dim), list(pel_tempeff = c(3L, 2L, 12L), ben_tempeff = c(3L, 2L, 12L), depth = c(3L, 2L, 1L), sinking_rate = c(3L, 2L, 1L)))
+  expect_equal(fo$channels$ben_tempeff[2, 1, ], 1:12 / 12)
+  expect_error(Setup.Forcing(run, grid, temperature = a, layer = lay), "unknown forcing channel")
+  expect_error(Setup.Forcing(run, grid, pel_tempeff = a, ben_tempeff = array(1, c(3, 2, 6)), layer = lay), "same number of layers")
+  expect_error(Setup.Forcing(run, grid, pel_tempeff = array(1, c(2, 3, 12)), layer = lay), "x = 3, y = 2")
+  expect_error(Setup.Forcing(run, grid, pel_tempeff = a), "12 layers but the run has 49 time points")
+  expect_error(Setup.Forcing(run, grid, pel_tempeff = replace(a, 5, NA), layer = lay), "NA, NaN or Inf")
+  expect_error(Setup.Forcing(run, grid, residence_time = matrix(1:6, 3, 2)), "same in every cell")
+  expect_error(Setup.Forcing(run, grid), "at least one forcing channel")
+  pl <- Setup.Plankton(run, filename = "plankton"); pe <- Setup.Pelagic(run, filename = "fish")
+  be <- Setup.Benthic(run, filename = "benthos"); de <- Setup.Detritus(run, filename = "detritus")
+  expect_error(SizeSpectrum(run, grid, pl, pe, be, de, forcing = list(pel_tempeff = 1)), "Setup.Forcing")
+  dir.create(file.path("R", "Input"), showWarnings = FALSE); writeLines("pel_tempeff", file.path("R", "Input", "forcing_ts.txt"))
+  expect_error(SizeSpectrum(run, grid, pl, pe, be, de, forcing = fo), "use one or the other")
+})
+
