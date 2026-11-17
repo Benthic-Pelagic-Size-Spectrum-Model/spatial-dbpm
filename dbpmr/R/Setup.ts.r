@@ -16,6 +16,10 @@
 #' the returned object must be assigned:
 #' `pe <- Setup.ts(pe, run, grid, initial = u0)`.
 #'
+#' A group whose values are forced through time (`ts_flag = TRUE`) can be given
+#' its whole series in memory with `series`, in the same way:
+#' `be <- Setup.ts(be, run, grid, series = u, time = 0:49)`.
+#'
 #' @param species A species parameter object (e.g. from [Setup.Pelagic()]).
 #' @param run.in A [run.params] object.
 #' @param grid.in A [grid.params] object.
@@ -30,10 +34,10 @@
 #'   body mass; `intercept` is the abundance density at `m = 0`, not its
 #'   logarithm). For a 1-D run a matrix `[x, layer]` and for a 0-D run a vector
 #'   with one value per layer are also accepted.
-#' @param layer Used with `intercept`/`slope`: for each model time point
+#' @param layer Used with `intercept`/`slope` or `series`: for each model time point
 #'   (`seq(0, tmax, tstep)`) the layer it uses, as whole numbers from 1. May be
 #'   omitted when there is one layer per time point, or a single layer.
-#' @param time Used with `intercept`/`slope` instead of `layer`: the start time
+#' @param time Used with `intercept`/`slope` or `series` instead of `layer`: the start time
 #'   (in model years) of each layer; each time point uses the latest layer that
 #'   has started.
 #' @param initial Starting values held in memory (`initial_flag = TRUE`,
@@ -42,6 +46,12 @@
 #'   (`seq(mmin, mmax, by = mstep)`), as a vector (the same in every cell) or an
 #'   array `[x, y, size class]`. For the detritus: the biomass, as a single
 #'   number or a matrix `[x, y]`.
+#' @param series Values forced through time, held in memory (`ts_flag = TRUE`).
+#'   For the plankton or a pelagic or benthic species: the abundance density as
+#'   an array `[x, y, size class, layer]`, or a matrix `[size class, layer]`
+#'   applied to every cell. For the detritus: the biomass as a single number, one
+#'   value per layer, a matrix `[x, y]` or an array `[x, y, layer]`. `layer` or
+#'   `time` says which layer each model time point uses.
 #'
 #' @details For an initial condition (`ts_flag = FALSE`) the supplied `mat` /
 #'   data may have either a single row, applied uniformly to every spatial cell,
@@ -51,19 +61,27 @@
 #'   nested within time.
 #'
 #' @return Invisibly `NULL` when writing an input file under the run's `Input`
-#'   directory. When `intercept` and `slope`, or `initial`, are given, invisibly
-#'   the object with the arrays attached (assign it).
+#'   directory. When `intercept` and `slope`, `initial` or `series` are given,
+#'   invisibly the object with the arrays attached (assign it).
 #' @seealso [Setup.Rep()], [Setup.fishing()]
 #' @export
 `Setup.ts`<-
-function(species, run.in, grid.in, func, mat, dataname, intercept, slope, layer, time, initial){
+function(species, run.in, grid.in, func, mat, dataname, intercept, slope, layer, time, initial, series){
 #func is a function of the variables m, x, y, and z
 
 #Starting values held in memory: nothing is written
 if(!missing(initial)){
-  if(!missing(func) || !missing(mat) || !missing(dataname) || !missing(intercept) || !missing(slope) || !missing(layer) || !missing(time))
-    stop("initial cannot be combined with func, mat, dataname, intercept, slope, layer or time")
+  if(!missing(func) || !missing(mat) || !missing(dataname) || !missing(intercept) || !missing(slope) || !missing(layer) || !missing(time) || !missing(series))
+    stop("initial cannot be combined with func, mat, dataname, intercept, slope, series, layer or time")
   return(invisible(initial_array(species, grid.in, initial)))
+}
+
+#Values forced through time held in memory: nothing is written
+if(!missing(series)){
+  if(!missing(func) || !missing(mat) || !missing(dataname) || !missing(intercept) || !missing(slope))
+    stop("series cannot be combined with func, mat, dataname, intercept or slope")
+  return(invisible(series_array(species, grid.in, series,
+                                if(missing(layer)) NULL else layer, if(missing(time)) NULL else time)))
 }
 
 #Plankton time series held in memory as intercept/slope arrays: nothing is written
@@ -75,7 +93,7 @@ if(!missing(intercept) || !missing(slope)){
                                       if(missing(layer)) NULL else layer,
                                       if(missing(time)) NULL else time)))
 }
-if(!missing(layer) || !missing(time)) stop("layer and time are only used with intercept and slope")
+if(!missing(layer) || !missing(time)) stop("layer and time are only used with intercept and slope, or with series")
 #dataname is a filename containing either a vector of intercepts, two vectors of intercepts and slopes or a full matrix of ts values
 
 #Input checking stuff

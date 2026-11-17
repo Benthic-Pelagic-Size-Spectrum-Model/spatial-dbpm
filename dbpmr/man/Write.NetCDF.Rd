@@ -48,6 +48,10 @@ density per unit natural-log body mass), \verb{<group>_growth},
 \verb{<group>_predation} for a benthic one. Detritus biomass, when present, is
 written as \code{detritus} with dimensions \verb{[x, y, time]}.
 
+The parameters of the run (\code{output$parameters}) are saved as global
+attributes named \verb{run.<name>}, \verb{grid.<name>} and \verb{<group>.<name>}, so the
+file records how it was produced.
+
 By default \code{x} and \code{y} are the model grid coordinates. Supply \code{x} and \code{y}
 (and \code{xname}, \code{yname}, \code{xunits}, \code{yunits}) to label the cells differently,
 for example with longitude and latitude when the model grid is in metres.

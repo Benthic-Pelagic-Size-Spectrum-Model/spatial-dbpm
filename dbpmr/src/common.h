@@ -37,11 +37,18 @@ typedef struct fishing_array{
         double lo,hi;          //fished size range (natural-log body mass)
         } FISHING_ARRAY;
 
-/*Other inputs of one species supplied from R as arrays instead of text files. Each pointer is NULL when that
-  input was not supplied (it is then read from its file, or the default is used).*/
+/*Other inputs of one group (the plankton, a pelagic or benthic species, or the detritus) supplied from R as arrays
+  instead of text files. Each pointer is NULL when that input was not supplied (it is then read from its file, or
+  the default is used).*/
 typedef struct species_input{
-        const double *initial;    //starting abundance, an R array [x][y][size class of the species]; replaces _ts.txt
+        const double *initial;    //starting abundance, an R array [x][y][size class of the species] ([x][y] for detritus); replaces _ts.txt
         R_xlen_t initial_len;     //length of initial (checked against x*y*number of size classes of the species)
+        const double *series;     //abundance forced through time (ts_flag), an R array [x][y][size class of the species][layer]
+                                  //([x][y][layer] for detritus); replaces _ts.txt
+        const int *series_layer;  //0-based layer at each model time point (0, tstep, 2*tstep, ...)
+        int series_nlayer;        //number of layers
+        int series_nblock;        //length of series_layer
+        R_xlen_t series_len;      //length of series (checked against x*y*size classes*layers)
         const double *rep;        //egg density through time (rep_method 1), an R array [x][y][layer]; replaces _rep_ts.txt
         const int *rep_layer;     //0-based layer at each model time point (0, tstep, 2*tstep, ...)
         int rep_nlayer;           //number of layers
@@ -91,10 +98,8 @@ typedef struct array_inputs{
 
         SPECIES_INPUT *sp_pel;     //other inputs of each pelagic species (NULL = none supplied for any species)
         SPECIES_INPUT *sp_ben;     //other inputs of each benthic species
-        const double *pla_initial; //starting plankton abundance, an R array [x][y][plankton size class] (NULL = file or default)
-        R_xlen_t pla_initial_len;
-        const double *det_initial; //starting detritus biomass, an R matrix [x][y] (NULL = file or default)
-        R_xlen_t det_initial_len;
+        SPECIES_INPUT *sp_pla;     //other inputs of the plankton (one entry; NULL = none supplied)
+        SPECIES_INPUT *sp_det;     //other inputs of the detritus (one entry; NULL = none supplied)
         } ARRAY_INPUTS;
 
 /*Model output handed back to R as arrays (opt-in). The arrays live in R memory (elements of the list
@@ -143,6 +148,7 @@ typedef struct run_info{
         int frc_step;          //timesteps of array forcing applied so far
         int fish_block;        //number of times fishing mortality has been set (indexes the time point of array fishing)
         int rep_block;         //number of times reproduction has been set (indexes the time point of array reproduction)
+        int ts_step;           //number of timesteps taken (indexes the time point of a forced series held in memory)
         double **fish_share;   //gravity: multiplier ncell*share on fishing mortality in each cell (NULL = gravity off)
         double **share_u_pel;  //gravity: abundance of each pelagic species at the latest update, [species][m + mnum*(x + xnum*y)] (NULL when the shares are recalculated every timestep)
         double **share_u_ben;  //gravity: the same for each benthic species
@@ -177,6 +183,9 @@ typedef struct run_info{
         double gravity;        //gravity channel value (unused; presence via col_gravity toggles gravity fishing)
 
         } RUN;
+
+/*1 when the run writes its text output files, 0 when the output goes to R as arrays only*/
+static inline int run_writes_files(const RUN *run){ return run->out==NULL || run->out->mode!=2; }
 
 /*Contains all information regarding grid discretisation*/
 typedef struct grid_info{
@@ -225,6 +234,7 @@ typedef struct plankton_info{
         int initial_flag;
         int ts_flag;
         const ARRAY_INPUTS *arr; //plankton series supplied from R as arrays (NULL = read the _ts file)
+        const SPECIES_INPUT *in; //other inputs supplied from R as arrays (NULL = none)
         int ts_block;          //next time block to load from the arrays
         
         double ***u_values;
@@ -453,6 +463,7 @@ typedef struct detritus_info{
         
         FILE *fptr_ts;         //time series file ptrr
         
+        const SPECIES_INPUT *in; //inputs supplied from R as arrays (NULL = none)
         } DETRITUS;
 
 /*Contains all species data*/

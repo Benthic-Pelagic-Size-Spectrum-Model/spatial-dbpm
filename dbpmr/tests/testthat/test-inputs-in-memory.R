@@ -8,7 +8,7 @@
 #   eggs:   function(t, x) giving the egg density of the fish (rep_method 1) or NULL
 #   refuge: per-size vector, or [x, 1, size] array (memory only), or NULL; min_A its floor
 run_inputs <- function(memory, nx = 3, scale = 1 + 0.5 * (seq_len(nx) - 1), pref = NULL, eggs = NULL, refuge = NULL, min_A = 0,
-                       tmax = 2, assign = TRUE, also_files = FALSE) {
+                       tmax = 2, assign = TRUE, also_files = FALSE, rerun_files = FALSE) {
   on.exit(Sys.unsetenv("REFUGE_MIN_A"), add = TRUE)
   wd <- tempfile("mem"); dir.create(wd); old <- setwd(wd); on.exit(setwd(old), add = TRUE)
   run  <- Setup.Run("R", 1, 1, spatial_dim = if (nx > 1) 1 else 0, coupled_flag = TRUE, diff_method = 1)
@@ -43,6 +43,11 @@ run_inputs <- function(memory, nx = 3, scale = 1 + 0.5 * (seq_len(nx) - 1), pref
   out <- NULL
   invisible(capture.output(out <- SizeSpectrum(run, grid, pl, pe, be, de, output = "arrays")))
   attr(out, "input_files") <- list.files(file.path("R", "Input"))
+  attr(out, "on_disk") <- list.files(".", recursive = TRUE, include.dirs = TRUE)
+  if (rerun_files) {                                                           # the same objects, now writing the text output
+    invisible(capture.output(SizeSpectrum(run, grid, pl, pe, be, de, output = "files")))
+    attr(out, "rerun") <- list.files("R", recursive = TRUE)
+  }
   out
 }
 same_run <- function(a, b, tol = 1e-10) {
@@ -63,6 +68,14 @@ test_that("starting values held in memory give the same run as the _ts files, an
     expect_equal(u0[, has, drop = FALSE], outer(sc, u0[1, has]), tolerance = 1e-12)   # the starting state is what was supplied
     expect_equal(as.vector(m$detritus[, 1, 1]), 0.6 * sc)
   }
+})
+
+test_that("with every input in memory and the output as arrays, nothing is left on disk", {
+  m <- run_inputs(TRUE, pref = c(0.2, 0.4, 0.8), refuge = band(0, 1.5), rerun_files = TRUE)
+  expect_length(attr(m, "on_disk"), 0)                                         # not even the run folder
+  expect_named(m$parameters$groups, c("plankton", "fish", "benthos", "detritus"))
+  expect_setequal(m$parameters$groups$fish$in_memory, c("initial", "pref_ben", "refuge"))
+  expect_true(all(c("parameters.txt", "fish/results.txt", "detritus/summary.txt") %in% attr(m, "rerun")))   # text output still works afterwards
 })
 
 test_that("per-cell pref_ben held in memory gives the same run as the _cellpar file", {
@@ -101,6 +114,52 @@ test_that("a refuge that differs between cells gives each cell the result of its
   expect_false(isTRUE(all.equal(grid_run$abundance$fish[1, 1, , ], grid_run$abundance$fish[2, 1, , ])))
 })
 
+# One group forced through time (ts_flag = TRUE), the others starting from their default spectra. With `memory`
+# the forced group gets its series, and the others their starting values, in memory; otherwise all go through
+# Setup.ts(func = ), whose text files hold 16 decimal places.
+run_series <- function(who, memory, nx = 2, tmax = 1) {
+  wd <- tempfile("ser"); dir.create(wd); old <- setwd(wd); on.exit(setwd(old), add = TRUE)
+  run  <- Setup.Run("R", 1, 1, spatial_dim = 1, coupled_flag = TRUE, diff_method = 1)
+  grid <- Setup.Grid(run, tmax = tmax, tstep = 1/48, toutstep = 0.25, xmin = 0, xmax = nx - 1, xstep = 1, xoutstep = 1)
+  pl <- Setup.Plankton(run, filename = "plankton", initial_flag = TRUE, ts_flag = who == "plankton")
+  pe <- Setup.Pelagic(run, filename = "fish", comp = 0, prey = 0, pred = 0, initial_flag = TRUE, ts_flag = who == "fish")
+  be <- Setup.Benthic(run, filename = "benthos", initial_flag = TRUE, ts_flag = who == "benthos")
+  de <- Setup.Detritus(run, filename = "detritus", initial_flag = TRUE, ts_flag = who == "detritus")
+  tt <- seq(0, tmax, 1/48); xs <- seq_len(nx) - 1
+  amp  <- function(t, x) (1 + 0.5 * x) * (1 + 0.3 * sin(2 * pi * t))            # differs between cells and through time
+  spec <- function(sp) sp@u_0 * exp(sp@lambda * dbpmr:::grid_seq(sp@mmin, sp@mmax, grid@mstep))
+  set_group <- function(sp) {
+    forced <- sp@filename == who; det <- sp@speciestype == "detritus"
+    base <- function(m) if (det) 0.6 else sp@u_0 * exp(sp@lambda * m)
+    if (!memory) { Setup.ts(sp, run, grid, func = function(m, t, x, y) base(m) * (if (forced) amp(t, x) else 1)); return(sp) }
+    if (!forced) return(Setup.ts(sp, run, grid, initial = if (det) 0.6 else spec(sp)))
+    at <- outer(xs, tt, function(x, t) amp(t, x))                               # [x, time point]
+    if (det) return(Setup.ts(sp, run, grid, series = array(0.6 * at, c(nx, 1, length(tt)))))
+    a <- array(0, c(nx, 1, length(spec(sp)), length(tt)))
+    for (k in seq_len(nx)) for (j in seq_along(tt)) a[k, 1, , j] <- spec(sp) * at[k, j]
+    Setup.ts(sp, run, grid, series = a)                                         # one layer per time point
+  }
+  pl <- set_group(pl); pe <- set_group(pe); be <- set_group(be); de <- set_group(de)
+  out <- NULL
+  invisible(capture.output(out <- SizeSpectrum(run, grid, pl, pe, be, de, output = "arrays")))
+  attr(out, "on_disk") <- list.files(".", recursive = TRUE, include.dirs = TRUE)
+  attr(out, "amp") <- outer(xs, out$t, function(x, t) amp(t, x))
+  out
+}
+
+test_that("a series forced through time held in memory gives the same run as the _ts file, for every group", {
+  for (who in c("plankton", "fish", "benthos", "detritus")) {
+    f <- run_series(who, FALSE); m <- run_series(who, TRUE)
+    for (g in c("plankton", "fish", "benthos")) expect_equal(m$abundance[[g]], f$abundance[[g]], tolerance = 1e-7, info = paste(who, g))
+    expect_equal(m$detritus, f$detritus, tolerance = 1e-7, info = who)
+    expect_length(attr(m, "on_disk"), 0)
+    # the forced group follows the series it was given, in every cell and at every output time
+    if (who == "detritus") expect_equal(m$detritus[, 1, ], 0.6 * attr(m, "amp"), tolerance = 1e-12)
+    else { i <- which(m$abundance[[who]][1, 1, , 1] > 0)[3]
+           expect_equal(m$abundance[[who]][, 1, i, ] / m$abundance[[who]][1, 1, i, 1], attr(m, "amp"), tolerance = 1e-12, info = who) }
+  }
+})
+
 test_that("forgetting to assign, or supplying both memory and file, is an error", {
   expect_error(run_inputs(TRUE, assign = FALSE), "assign the result")
   expect_error(run_inputs(TRUE, also_files = TRUE), "use one or the other")
@@ -123,6 +182,16 @@ test_that("the in-memory inputs are validated", {
   expect_error(Setup.ts(pe, run, grid, initial = rep(1, ns), mat = matrix(1, 1, ns)), "cannot be combined")
   expect_error(Setup.ts(Setup.Pelagic(run, filename = "fish"), run, grid, initial = rep(1, ns)), "initial_flag = TRUE")
   expect_error(Setup.ts(de, run, grid, initial = matrix(1, 2, 3)), "x = 3, y = 2")
+
+  pt <- Setup.Pelagic(run, filename = "fish", initial_flag = TRUE, ts_flag = TRUE); dt <- Setup.Detritus(run, filename = "detritus", ts_flag = TRUE)
+  expect_equal(dim(Setup.ts(pt, run, grid, series = matrix(1, ns, 2), time = c(0, 0.5))@arrays$series$values), c(3L, 2L, ns, 2L))
+  expect_equal(dim(Setup.ts(pt, run, grid, series = array(1, c(3, 2, ns, 49)))@arrays$series$values), c(3L, 2L, ns, 49L))
+  expect_equal(dim(Setup.ts(dt, run, grid, series = c(0.5, 0.6), time = c(0, 0.5))@arrays$series$values), c(3L, 2L, 2L))
+  expect_error(Setup.ts(pe, run, grid, series = matrix(1, ns, 2), time = c(0, 0.5)), "ts_flag = TRUE")
+  expect_error(Setup.ts(pt, run, grid, series = matrix(1, 5, 2), time = c(0, 0.5)), "size classes of fish")
+  expect_error(Setup.ts(pt, run, grid, series = matrix(1, ns, 3)), "3 layers but the run has 49 time points")
+  expect_error(Setup.ts(pt, run, grid, series = matrix(-1, ns, 49)), "non-negative")
+  expect_error(Setup.ts(pt, run, grid, series = matrix(1, ns, 49), initial = rep(1, ns)), "cannot be combined")
 
   expect_equal(dim(Setup.Rep(pe, run, grid, eggs = c(1, 2), time = c(0, 0.5))@arrays$reproduction$values), c(3L, 2L, 2L))
   expect_error(Setup.Rep(pe, run, grid, eggs = -1), "non-negative")
