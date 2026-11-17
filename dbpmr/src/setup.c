@@ -358,6 +358,7 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
      /*Pelagic Species Flags and Methods*/
      pelagic->rep_method=rep_method;
      {char *e=getenv("PEL_IMM_FRAC"); pelagic->imm_frac = e ? atof(e) : 0.0; pelagic->rec0 = 0.0; pelagic->rec0_frozen = 0;}
+     if(pelagic->in!=NULL && pelagic->in->has_imm_frac) pelagic->imm_frac=pelagic->in->imm_frac;   /*given as a parameter of the species: overrides the environment*/
      pelagic->initial_flag=initial_flag;
      pelagic->ts_flag=ts_flag;
      pelagic->fishing_flag=fishing_flag;

@@ -60,8 +60,10 @@
 #'   * `parameters`: the parameters of the run, as a list with `run`, `grid`,
 #'     `groups` (one entry per group, named by its file name, holding its
 #'     parameter values and, in `in_memory`, the names of the inputs it was given
-#'     in memory), `forcing` (the forcing channels supplied in memory) and
-#'     `gravity`. [Write.NetCDF()] saves it with the file.
+#'     in memory), `forcing` (the forcing channels supplied in memory and
+#'     `temp_on_mort`), `gravity`, and `environment` (the settings that were
+#'     taken from environment variables). [Write.NetCDF()] saves it with the
+#'     file.
 #'
 #'   The values are those the text files would hold (`results.txt`,
 #'   `growth.txt`, `mortality.txt`, `predation*.txt`, `fishing.txt`): the same
@@ -430,6 +432,7 @@ tiny<-1e-7
                "; build it with a grid whose mmin and mmax span all the species")
         out$refuge <- a$refuge$values; out$refuge_min_a <- as.double(a$refuge$min_A)
       }
+      if(methods::is(sp, "pelagic.params") && !is.na(sp@imm_frac)) out$imm_frac <- as.double(sp@imm_frac)   # recruitment floor given as a parameter
       if(!is.null(a$pref_ben)){
         not_both(sp@filename, "_cellpar.txt", "per-cell parameters")
         same_grid(a$pref_ben, sp@filename, "per-cell parameters", "Setup.CellParams()")
@@ -466,6 +469,7 @@ tiny<-1e-7
     fnl <- vapply(fnames, function(nm) if(is.null(forcing$channels[[nm]])) 0L else dim(forcing$channels[[nm]])[3], integer(1))
     if(is.null(inputs)) inputs <- list()
     inputs <- c(inputs, fin, list(forcing_layer=as.integer(forcing$layer-1L), forcing_nlayer=as.integer(fnl)))
+    if(!is.null(forcing$temp_on_mort)) inputs$forcing_temp_on_mort <- as.integer(forcing$temp_on_mort)
   }
 
   if(!is.null(gravity)){
@@ -558,8 +562,11 @@ tiny<-1e-7
   groups <- c(list(plankton.in), pelagic.in, if(has_ben) c(benthic.in, list(detritus.in)))
   out$parameters <- list(run = record(run.in), grid = record(grid.in),
                          groups = stats::setNames(lapply(groups, record), vapply(groups, function(g) g@filename, "")),
-                         forcing = if(!is.null(forcing)) names(forcing$channels),
+                         forcing = if(!is.null(forcing)) list(channels = names(forcing$channels), temp_on_mort = forcing$temp_on_mort),
                          gravity = if(!is.null(gravity)) list(update = gravity$update))
+  # settings still taken from the environment (where the matching argument was left at its default)
+  env <- Sys.getenv(c("PEL_IMM_FRAC", "TEMP_ON_MORT", "REFUGE_MIN_A", "FORCING_PERCELL"), unset = NA)
+  out$parameters$environment <- env[!is.na(env)]
   class(out) <- "dbpmr_output"
   if(output == "both") attr(out, "files") <- filenames
   # Arrays-only output writes nothing: remove the folders made for this run if they are still empty

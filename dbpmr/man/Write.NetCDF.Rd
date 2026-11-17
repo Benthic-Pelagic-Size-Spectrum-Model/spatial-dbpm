@@ -49,8 +49,9 @@ density per unit natural-log body mass), \verb{<group>_growth},
 written as \code{detritus} with dimensions \verb{[x, y, time]}.
 
 The parameters of the run (\code{output$parameters}) are saved as global
-attributes named \verb{run.<name>}, \verb{grid.<name>} and \verb{<group>.<name>}, so the
-file records how it was produced.
+attributes named \verb{run.<name>}, \verb{grid.<name>}, \verb{<group>.<name>},
+\verb{forcing.<name>} and \verb{environment.<name>}, so the file records how it was
+produced.
 
 By default \code{x} and \code{y} are the model grid coordinates. Supply \code{x} and \code{y}
 (and \code{xname}, \code{yname}, \code{xunits}, \code{yunits}) to label the cells differently,

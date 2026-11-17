@@ -95,7 +95,7 @@ year.
 
 ```{r}
 LN10 <- log(10)
-Sys.setenv(PEL_IMM_FRAC = "0.15")        # connectivity/recruitment floor (engine env var)
+imm  <- 0.15                             # recruitment floor (imm_frac of the pelagic species)
 ascl <- 1/3; mu0s <- 0.5                 # search-volume scaling A/3, natural-mortality scaling
 dh <- params$defecate_prop; dl <- params$def_low
 Kp <- (1-dh)*params$growth_pred; Rp <- (1-dh)*(1-(params$growth_pred+params$energy_pred)); Ep <- (1-dh)*params$energy_pred
@@ -115,7 +115,8 @@ run_cell <- function(depth, cint, cslp, ctex, ctob, cexp, nyr, state = NULL) {
   pe <- Setup.Pelagic(run, filename = "fish", mmin = -3*LN10, mmat = 2*LN10, mmax = 6*LN10,
                       alpha = params$metabolic_req_pred, A = 64*ascl, mu_0 = params$natural_mort*mu0s,
                       pref_ben = prefben, K_pla = Kp, R_pla = Rp, Ex_pla = Ep, K_pel = Kp, R_pel = Rp,
-                      Ex_pel = Ep, K_ben = Kl, R_ben = Rl, Ex_ben = El, rep_method = 2, fishing_flag = FALSE)
+                      Ex_pel = Ep, K_ben = Kl, R_ben = Rl, Ex_ben = El, rep_method = 2, fishing_flag = FALSE,
+                      imm_frac = imm)
   be <- Setup.Benthic(run, filename = "benthos", mmin = -3*LN10, mmat = 1*LN10, mmax = 4*LN10,
                       alpha = params$metabolic_req_detritivore, A = 6.4*ascl, mu_0 = params$natural_mort*mu0s,
                       K_det = Kl, R_det = Rl, Ex_det = El, rep_method = 2, fishing_flag = FALSE)
@@ -292,10 +293,11 @@ the arrays it is given. The plankton spectrum goes in as intercept and slope
 arrays (`Setup.ts()`), temperature, export and depth as forcing arrays
 (`Setup.Forcing()`), the depth-dependent benthic feeding preference as a per-cell
 parameter (`Setup.CellParams()`), the starting spectra with `Setup.ts(initial = )`,
-and the output comes back as arrays (`output = "arrays"`). Every input is held
-in memory, so the run reads no input files; the only files it writes are a
-record of the parameters and empty headers for the text output. The functions
-that take arrays return the object they were given, which must be assigned.
+and the output comes back as arrays (`output = "arrays"`). With every input
+held in memory and the output returned as arrays, the run reads and writes no
+files; the record of its parameters comes back in the output object. The
+functions that take arrays return the object they were given, which must be
+assigned.
 Fishing is optional and is used in the next section.
 
 ```{r eval = FALSE}
@@ -322,7 +324,7 @@ run_dbpm <- function(int, slp, tex, tob, exp, depth, nyr = 25, layer = NULL, fis
                       alpha = params$metabolic_req_pred, A = 64*ascl, mu_0 = params$natural_mort*mu0s,
                       K_pla = Kp, R_pla = Rp, Ex_pla = Ep, K_pel = Kp, R_pel = Rp, Ex_pel = Ep,
                       K_ben = Kl, R_ben = Rl, Ex_ben = El, rep_method = 2, fishing_flag = fished,
-                      prey = prey, pred = pred, comp = comp, initial_flag = TRUE)
+                      prey = prey, pred = pred, comp = comp, initial_flag = TRUE, imm_frac = imm)
   be <- Setup.Benthic(run, filename = "benthos", mmin = -3*LN10, mmat = 1*LN10, mmax = 4*LN10,
                       alpha = params$metabolic_req_detritivore, A = 6.4*ascl, mu_0 = params$natural_mort*mu0s,
                       K_det = Kl, R_det = Rl, Ex_det = El, rep_method = 2, fishing_flag = fished,

@@ -83,8 +83,10 @@ movement step and differs slightly.);
 \item \code{parameters}: the parameters of the run, as a list with \code{run}, \code{grid},
 \code{groups} (one entry per group, named by its file name, holding its
 parameter values and, in \code{in_memory}, the names of the inputs it was given
-in memory), \code{forcing} (the forcing channels supplied in memory) and
-\code{gravity}. \code{\link[=Write.NetCDF]{Write.NetCDF()}} saves it with the file.
+in memory), \code{forcing} (the forcing channels supplied in memory and
+\code{temp_on_mort}), \code{gravity}, and \code{environment} (the settings that were
+taken from environment variables). \code{\link[=Write.NetCDF]{Write.NetCDF()}} saves it with the
+file.
 }
 
 The values are those the text files would hold (\code{results.txt},

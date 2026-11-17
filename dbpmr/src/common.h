@@ -59,6 +59,8 @@ typedef struct species_input{
         double refuge_min_a;      //floor on availability used with refuge (replaces the REFUGE_MIN_A environment variable)
         const double *pref_ben;   //benthic feeding preference in each cell (pelagic), an R matrix [x][y]; replaces _cellpar.txt
         R_xlen_t pref_ben_len;    //length of pref_ben (checked against x*y)
+        int has_imm_frac;         //1 = imm_frac was supplied from R (pelagic); 0 = use the PEL_IMM_FRAC environment variable
+        double imm_frac;          //recruitment floor as a fraction of the peak unfished recruitment
         } SPECIES_INPUT;
 
 /*Fishing effort allocated among cells by gravity (opt-in, supplied from R). The fishing mortality set for each
@@ -98,6 +100,8 @@ typedef struct array_inputs{
 
         SPECIES_INPUT *sp_pel;     //other inputs of each pelagic species (NULL = none supplied for any species)
         SPECIES_INPUT *sp_ben;     //other inputs of each benthic species
+        int temp_on_mort;          //whether temperature scales background mortality: 1 or 0 as supplied from R with the
+                                   //forcing; -1 = not supplied (the TEMP_ON_MORT environment variable is used, default 1)
         SPECIES_INPUT *sp_pla;     //other inputs of the plankton (one entry; NULL = none supplied)
         SPECIES_INPUT *sp_det;     //other inputs of the detritus (one entry; NULL = none supplied)
         } ARRAY_INPUTS;

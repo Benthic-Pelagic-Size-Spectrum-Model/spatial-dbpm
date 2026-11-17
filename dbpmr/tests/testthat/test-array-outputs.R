@@ -88,7 +88,7 @@ test_that("output = 'arrays' returns the same arrays and writes no output files"
   expect_false(dir.exists(file.path("R", "fish")))                             # the empty group folders are removed
   expect_true(file.exists(file.path("R", "Input", "fish_fishing_ts.txt")))     # the input file the run was given is untouched
   # the record that parameters.txt would hold comes back with the output
-  expect_named(arr$parameters, c("run", "grid", "groups", "forcing", "gravity"))
+  expect_named(arr$parameters, c("run", "grid", "groups", "forcing", "gravity", "environment"))
   expect_named(arr$parameters$groups, c("plankton", "fish", "benthos", "detritus"))
   expect_equal(arr$parameters$groups$fish$mmax, 6 * log(10)); expect_true(arr$parameters$groups$fish$fishing_flag)
   expect_equal(arr$parameters$grid$tstep, 1/48); expect_equal(arr$parameters$run$spatial_dim, 2L)

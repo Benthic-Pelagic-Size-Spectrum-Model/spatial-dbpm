@@ -55,6 +55,12 @@
 #'   initial-condition, time-series and fishing input files are supplied.
 #' @param filename Character string naming the species (and its output
 #'   directory). Required.
+#' @param imm_frac Recruitment floor, for `rep_method` 2 or 3: in each cell,
+#'   recruitment is not allowed to fall below this fraction of the highest
+#'   recruitment that cell reached before the floor first applied. It stands for
+#'   larvae arriving from outside the modelled region. `0` switches it off. The
+#'   default, `NA`, takes the value from the `PEL_IMM_FRAC` environment variable
+#'   (off if that is not set), as before this argument existed.
 #'
 #' @return A [pelagic.params] object.
 #' @note `rep_method = 1` requires a reproduction time-series input file (see
@@ -63,7 +69,7 @@
 #'   with an error. The other methods (`0`, `2`, `3`) need no input file.
 #' @seealso [Setup.Benthic()], [Setup.Rep()], [Setup.fishing()]
 #' @export
-Setup.Pelagic<-function(run.in, mmin=-3*log(10), mmat=2*log(10), mmax=6*log(10), A=640, alpha=0.82, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-1, K_pla, R_pla, Ex_pla, K_pel=0.2, R_pel=0.2, Ex_pel=0.3, K_ben=0.1, R_ben=0.2, Ex_ben=0.4, pref_pla=1, pref_pel=1, pref_ben=1, q_0=log(100), sig=log(10), trunc=2, prey=0, pred=0, comp=0.1, gamma_prey=0.33, gamma_pred=0.33, gamma_comp=0.75, rep_method=2, initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE, filename){
+Setup.Pelagic<-function(run.in, mmin=-3*log(10), mmat=2*log(10), mmax=6*log(10), A=640, alpha=0.82, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-1, K_pla, R_pla, Ex_pla, K_pel=0.2, R_pel=0.2, Ex_pel=0.3, K_ben=0.1, R_ben=0.2, Ex_ben=0.4, pref_pla=1, pref_pel=1, pref_ben=1, q_0=log(100), sig=log(10), trunc=2, prey=0, pred=0, comp=0.1, gamma_prey=0.33, gamma_pred=0.33, gamma_comp=0.75, rep_method=2, initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE, filename, imm_frac=NA){
 
   #Assign Default Values
   if( missing(filename) ) stop("A Species filename must be given")
@@ -145,6 +151,8 @@ Setup.Pelagic<-function(run.in, mmin=-3*log(10), mmat=2*log(10), mmax=6*log(10),
   species@initial_flag<-as.logical(initial_flag)
   species@ts_flag<-as.logical(ts_flag)
   species@fishing_flag<-as.logical(fishing_flag)
+  if( length(imm_frac)!=1 || !(is.na(imm_frac) || (is.numeric(imm_frac) && is.finite(imm_frac) && imm_frac>=0)) ) stop("Please enter a valid value for imm_frac: (a single non-negative number, or NA)")
+  species@imm_frac<-as.numeric(imm_frac)
 
   dir.create(paste(run.in@filename,"/",filename,sep=""),showWarnings=FALSE)
   

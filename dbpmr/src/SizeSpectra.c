@@ -67,6 +67,7 @@ static SPECIES_INPUT *read_species_inputs(SEXP inputs, const char *name, int nsp
                 si[s].rep = NULL; si[s].rep_layer = NULL; si[s].rep_nlayer = 0; si[s].rep_nblock = 0; si[s].rep_len = 0;
                 si[s].refuge = NULL; si[s].refuge_len = 0; si[s].refuge_min_a = 0.0;
                 si[s].pref_ben = NULL; si[s].pref_ben_len = 0;
+                si[s].has_imm_frac = 0; si[s].imm_frac = 0.0;
                 if (el == R_NilValue) continue;
                 SEXP v;
                 if ((v = get_list_element(el, "initial")) != R_NilValue) {
@@ -103,6 +104,10 @@ static SPECIES_INPUT *read_species_inputs(SEXP inputs, const char *name, int nsp
                         SEXP ma = get_list_element(el, "refuge_min_a");
                         if (!isReal(v) || !isReal(ma) || LENGTH(ma) != 1) error("%s[[%d]]: refuge and refuge_min_a must be numeric", name, s + 1);
                         si[s].refuge = REAL(v); si[s].refuge_len = XLENGTH(v); si[s].refuge_min_a = REAL(ma)[0];
+                }
+                if ((v = get_list_element(el, "imm_frac")) != R_NilValue) {
+                        if (!isReal(v) || LENGTH(v) != 1) error("%s[[%d]]: imm_frac must be a single number", name, s + 1);
+                        si[s].has_imm_frac = 1; si[s].imm_frac = REAL(v)[0];
                 }
                 if ((v = get_list_element(el, "pref_ben")) != R_NilValue) {
                         if (!isReal(v)) error("%s[[%d]]: pref_ben must be numeric", name, s + 1);
@@ -230,6 +235,7 @@ SEXP SizeSpectrum(
         arr.gravity = NULL;
         arr.sp_pel = NULL; arr.sp_ben = NULL;
         arr.sp_pla = NULL; arr.sp_det = NULL;
+        arr.temp_on_mort = -1;
         for (i = 0; i < N_FRC; i++) { arr.frc[i] = NULL; arr.frc_nlayer[i] = 0; arr.frc_len[i] = 0; }
         if (inputs_r != R_NilValue) {
                 if (!isNewList(inputs_r)) {
@@ -298,6 +304,11 @@ SEXP SizeSpectrum(
                 // Other inputs as arrays: starting abundance, reproduction, refuge and per-cell parameters.
                 arr.sp_pel = read_species_inputs(inputs_r, "species_pelagic", npel);
                 arr.sp_ben = read_species_inputs(inputs_r, "species_benthic", nben);
+                SEXP tom_r = get_list_element(inputs_r, "forcing_temp_on_mort");
+                if (tom_r != R_NilValue) {
+                        if (!isInteger(tom_r) || LENGTH(tom_r) != 1) error("forcing_temp_on_mort must be a single integer");
+                        arr.temp_on_mort = INTEGER(tom_r)[0] != 0;
+                }
                 arr.sp_pla = read_species_inputs(inputs_r, "species_plankton", 1);
                 arr.sp_det = read_species_inputs(inputs_r, "species_detritus", 1);
 
@@ -512,6 +523,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      run->pel_tempeff_c=NULL; run->ben_tempeff_c=NULL; run->sinking_rate_c=NULL;
      run->depth_c=NULL; run->export_attn_c=NULL; run->export_gamma_c=NULL; run->export_magg_c=NULL;
      { char *e=getenv("TEMP_ON_MORT"); run->temp_on_mort = e ? atoi(e) : 1; }
+     if(run->arr!=NULL && run->arr->temp_on_mort>=0) run->temp_on_mort=run->arr->temp_on_mort;   /*given with the forcing: overrides the environment*/
      if(run->arr!=NULL && run->arr->have_forcing){
              /*Forcing channels supplied from R as arrays: forcing_ts.txt is not opened. A channel that is
                present gets its own position as column index, so everything keyed on col_* works unchanged.*/
@@ -1060,13 +1072,13 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                      if(run->col_export_magg>=0 && run->col_export_magg<nv) run->export_magg=vals[run->col_export_magg];
                      if(run->col_gravity>=0 && run->col_gravity<nv) run->gravity=vals[run->col_gravity];
              }
-             /* TEMP_ON_MORT (env, default 1): whether temperature scales background mortality.
+             /* temp_on_mort (given with the forcing, else the TEMP_ON_MORT environment variable, default 1):
+                whether temperature scales background mortality.
                 =0 -> temperature drives FEEDING only; mu_0 held at base. Rationale: the model does
                 not resolve metabolic maintenance costs (respiration) or their temperature response,
                 so mu_0*tempeff is a lone, unbalanced "cost of warmth"; feeding has a clean
-                encounter-rate justification, mortality does not. Read once. */
-             static int tom = -1;
-             if(tom < 0){ char *e = getenv("TEMP_ON_MORT"); tom = e ? atoi(e) : 1; }
+                encounter-rate justification, mortality does not. Set once per run in the forcing set-up. */
+             int tom = run->temp_on_mort;
              for(s=0 ; s<n ; s++){
                      community->pelagic[s].A    = community->pelagic[s].A_base    * run->pel_tempeff;
                      community->pelagic[s].mu_0 = tom ? community->pelagic[s].mu_0_base * run->pel_tempeff

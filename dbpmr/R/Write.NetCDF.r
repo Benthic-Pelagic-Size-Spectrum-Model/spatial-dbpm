@@ -15,8 +15,9 @@
 #' written as `detritus` with dimensions `[x, y, time]`.
 #'
 #' The parameters of the run (`output$parameters`) are saved as global
-#' attributes named `run.<name>`, `grid.<name>` and `<group>.<name>`, so the
-#' file records how it was produced.
+#' attributes named `run.<name>`, `grid.<name>`, `<group>.<name>`,
+#' `forcing.<name>` and `environment.<name>`, so the file records how it was
+#' produced.
 #'
 #' By default `x` and `y` are the model grid coordinates. Supply `x` and `y`
 #' (and `xname`, `yname`, `xunits`, `yunits`) to label the cells differently,
@@ -87,7 +88,9 @@ function(output, file, x = output$x, y = output$y, xname = "x", yname = "y",
     if(is.logical(v)) v <- as.integer(v)
     ncdf4::ncatt_put(nc, 0, paste(g, nm, sep = "."), if(is.numeric(v) && length(v) == 1) v else paste(v, collapse = ", "))
   }
-  if(length(pars$forcing)) ncdf4::ncatt_put(nc, 0, "forcing.in_memory", paste(pars$forcing, collapse = ", "))
+  if(length(pars$forcing$channels)) ncdf4::ncatt_put(nc, 0, "forcing.in_memory", paste(pars$forcing$channels, collapse = ", "))
+  if(!is.null(pars$forcing$temp_on_mort)) ncdf4::ncatt_put(nc, 0, "forcing.temp_on_mort", as.integer(pars$forcing$temp_on_mort))
+  for(nm in names(pars$environment)) ncdf4::ncatt_put(nc, 0, paste0("environment.", nm), pars$environment[[nm]])
   if(!is.null(pars$gravity)) ncdf4::ncatt_put(nc, 0, "gravity.update", pars$gravity$update)
   invisible(file)
 }
