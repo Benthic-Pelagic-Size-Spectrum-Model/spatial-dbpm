@@ -57,3 +57,17 @@ test_that("Setup.ts (ts_flag = FALSE) populates all spatial cells", {
   # wrong row count is rejected
   expect_error(Setup.ts(pe, run, grid, mat = matrix(0.5, nrow = 3, ncol = nbins)))
 })
+
+test_that("SizeSpectrum() stops on a non-finite parameter instead of writing NaN output", {
+  wd <- tempfile("nf"); dir.create(wd); old <- setwd(wd); on.exit(setwd(old), add = TRUE)
+  run  <- Setup.Run("R", 1, 1, 0, TRUE, 1); grid <- Setup.Grid(run, tmax = 1, tstep = 1/48, toutstep = 1)
+  pl <- Setup.Plankton(run, filename = "plankton"); pe <- Setup.Pelagic(run, filename = "fish")
+  be <- Setup.Benthic(run, filename = "benthos"); de <- Setup.Detritus(run, filename = "detritus")
+  # .Call() does not reject NA/NaN/Inf the way .C() did, so SizeSpectrum() must check before calling C
+  bad <- Setup.Plankton(run, filename = "plankton", lambda = NaN)
+  expect_error(SizeSpectrum(run, grid, bad, pe, be, de), "Non-finite value.*plankton.*lambda")
+  bad <- Setup.Pelagic(run, filename = "fish", mu_0 = Inf)
+  expect_error(SizeSpectrum(run, grid, pl, bad, be, de), "Non-finite value.*pelagic")
+  bad <- Setup.Benthic(run, filename = "benthos", A = NA_real_)
+  expect_error(SizeSpectrum(run, grid, pl, pe, bad, de), "Non-finite value.*benthic")
+})
