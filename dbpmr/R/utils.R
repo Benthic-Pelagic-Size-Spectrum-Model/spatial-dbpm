@@ -47,13 +47,13 @@ mass_index <- function(mass, target) {
 #' Attach an in-memory plankton time series to a plankton object (internal)
 #'
 #' Validates intercept/slope arrays and the time-point-to-layer mapping and
-#' stores them in the `ts_arrays` slot. Used by [Setup.ts()].
+#' stores them as `ts` in the `arrays` slot. Used by [Setup.ts()].
 #'
 #' @param species A plankton parameter object with `ts_flag = TRUE`.
 #' @param grid.in A [grid.params] object.
 #' @param intercept,slope Arrays `[x, y, layer]`.
 #' @param layer,time See [Setup.ts()].
-#' @return The plankton object with `ts_arrays` filled.
+#' @return The plankton object with `arrays$ts` filled.
 #' @keywords internal
 #' @noRd
 plankton_ts_arrays <- function(species, grid.in, intercept, slope, layer = NULL, time = NULL) {
@@ -80,7 +80,7 @@ plankton_ts_arrays <- function(species, grid.in, intercept, slope, layer = NULL,
     stop("intercept must be non-negative: it is the abundance density at m = 0, not its logarithm")
   nl <- dim(intercept)[3]
   layer <- layer_index(grid.in, nl, layer, time)
-  species@ts_arrays <- list(intercept = intercept, slope = slope, layer = as.integer(layer))
+  species@arrays$ts <- list(intercept = intercept, slope = slope, layer = as.integer(layer))
   species
 }
 
@@ -122,36 +122,96 @@ layer_index <- function(grid.in, nl, layer = NULL, time = NULL) {
 #'
 #' Validates a fishing-mortality rate given as a scalar, per-layer vector,
 #' `[x, y]` matrix or `[x, y, layer]` array, the fished size range and the
-#' time-point-to-layer mapping, and stores them in the `fishing_arrays` slot.
+#' time-point-to-layer mapping, and stores them as `fishing` in the `arrays` slot.
 #' Used by [Setup.fishing()].
 #'
 #' @param species A pelagic or benthic parameter object with `fishing_flag = TRUE`.
 #' @param grid.in A [grid.params] object.
 #' @param rate,min_size,max_size,layer,time See [Setup.fishing()].
-#' @return The species object with `fishing_arrays` filled.
+#' @return The species object with `arrays$fishing` filled.
 #' @keywords internal
 #' @noRd
 fishing_arrays <- function(species, grid.in, rate, min_size = -Inf, max_size = Inf, layer = NULL, time = NULL) {
-  nx <- length(grid_seq(grid.in@xmin, grid.in@xmax, grid.in@xstep))
-  ny <- length(grid_seq(grid.in@ymin, grid.in@ymax, grid.in@ystep))
-  if (!is.numeric(rate)) stop("rate must be numeric")
-  if (any(!is.finite(rate))) stop("rate must not contain NA, NaN or Inf")
-  if (any(rate < 0)) stop("rate must be non-negative")
-  d <- dim(rate)
-  a <- if (is.null(d)) array(rep(as.numeric(rate), each = nx * ny), c(nx, ny, length(rate)))    # scalar or one value per layer
-       else if (length(d) == 2L) {
-         if (d[1] != nx || d[2] != ny) stop(sprintf("rate: a matrix must be [x = %d, y = %d]; got [%s]", nx, ny, paste(d, collapse = ", ")))
-         array(as.numeric(rate), c(nx, ny, 1L))
-       } else {
-         if (length(d) != 3L || d[1] != nx || d[2] != ny)
-           stop(sprintf("rate: an array must be [x = %d, y = %d, layers]; got [%s]", nx, ny, paste(d, collapse = ", ")))
-         rate
-       }
-  storage.mode(a) <- "double"
+  a <- xyl_array(rate, "rate", grid.in)
   if (!is.numeric(min_size) || !is.numeric(max_size) || length(min_size) != 1 || length(max_size) != 1 || is.na(min_size) || is.na(max_size) || min_size > max_size)
     stop("min_size and max_size must be single numbers with min_size <= max_size")
-  species@fishing_arrays <- list(rate = a, layer = layer_index(grid.in, dim(a)[3], layer, time),
+  species@arrays$fishing <- list(rate = a, layer = layer_index(grid.in, dim(a)[3], layer, time),
                                  range = c(as.numeric(min_size), as.numeric(max_size)))
   species
 }
 
+#' A non-negative input as an `[x, y, layer]` array (internal)
+#'
+#' Shared by the array inputs that vary in space and time: a single number, one
+#' value per layer, an `[x, y]` matrix or an `[x, y, layer]` array becomes an
+#' `[x, y, layer]` array of doubles.
+#'
+#' @param a The values.
+#' @param nm Name used in error messages.
+#' @param grid.in A [grid.params] object.
+#' @return A numeric array `[x, y, layer]`.
+#' @keywords internal
+#' @noRd
+xyl_array <- function(a, nm, grid.in) {
+  nx <- length(grid_seq(grid.in@xmin, grid.in@xmax, grid.in@xstep))
+  ny <- length(grid_seq(grid.in@ymin, grid.in@ymax, grid.in@ystep))
+  if (!is.numeric(a)) stop(nm, " must be numeric")
+  if (any(!is.finite(a))) stop(nm, " must not contain NA, NaN or Inf")
+  if (any(a < 0)) stop(nm, " must be non-negative")
+  d <- dim(a)
+  out <- if (is.null(d)) array(rep(as.numeric(a), each = nx * ny), c(nx, ny, length(a)))    # scalar or one value per layer
+         else if (length(d) == 2L) {
+           if (d[1] != nx || d[2] != ny) stop(sprintf("%s: a matrix must be [x = %d, y = %d]; got [%s]", nm, nx, ny, paste(d, collapse = ", ")))
+           array(as.numeric(a), c(nx, ny, 1L))
+         } else {
+           if (length(d) != 3L || d[1] != nx || d[2] != ny)
+             stop(sprintf("%s: an array must be [x = %d, y = %d, layers]; got [%s]", nm, nx, ny, paste(d, collapse = ", ")))
+           a
+         }
+  storage.mode(out) <- "double"
+  out
+}
+
+#' Attach an in-memory starting state to a species object (internal)
+#'
+#' Validates a starting abundance (plankton, pelagic or benthic species: one
+#' value per size class of the species, the same in every cell, or an
+#' `[x, y, size class]` array) or starting biomass (detritus: one number or an
+#' `[x, y]` matrix) and stores it as `initial` in the `arrays` slot. Used by
+#' [Setup.ts()].
+#'
+#' @param species A parameter object with `initial_flag = TRUE` and `ts_flag = FALSE`.
+#' @param grid.in A [grid.params] object.
+#' @param initial See [Setup.ts()].
+#' @return The object with `arrays$initial` filled.
+#' @keywords internal
+#' @noRd
+initial_array <- function(species, grid.in, initial) {
+  if (!isTRUE(species@initial_flag)) stop("initial supplies starting values: create ", species@filename, " with initial_flag = TRUE")
+  if (isTRUE(species@ts_flag)) stop("initial supplies starting values only; ", species@filename, " has ts_flag = TRUE (a full time series)")
+  nx <- length(grid_seq(grid.in@xmin, grid.in@xmax, grid.in@xstep))
+  ny <- length(grid_seq(grid.in@ymin, grid.in@ymax, grid.in@ystep))
+  if (!is.numeric(initial)) stop("initial must be numeric")
+  if (any(!is.finite(initial))) stop("initial must not contain NA, NaN or Inf")
+  if (any(initial < 0)) stop("initial must be non-negative")
+  d <- dim(initial)
+  if (species@speciestype == "detritus") {
+    a <- if (length(initial) == 1L) matrix(as.numeric(initial), nx, ny)
+         else if (is.null(d) && ny == 1L && length(initial) == nx) matrix(as.numeric(initial), nx, 1L)
+         else if (length(d) == 2L && d[1] == nx && d[2] == ny) matrix(as.numeric(initial), nx, ny)
+         else stop(sprintf("initial for detritus must be a single number or a matrix [x = %d, y = %d]", nx, ny))
+  } else {
+    ns <- length(grid_seq(species@mmin, species@mmax, grid.in@mstep))
+    if (length(d) == 2L && d[1] == 1L) { initial <- as.vector(initial); d <- NULL }             # one row: the same in every cell
+    a <- if (is.null(d)) {
+           if (length(initial) != ns) stop(sprintf("initial must have one value per size class of %s (%d); got %d", species@filename, ns, length(initial)))
+           array(rep(as.numeric(initial), each = nx * ny), c(nx, ny, ns))
+         } else if (length(d) == 2L && ny == 1L && d[1] == nx && d[2] == ns) array(as.numeric(initial), c(nx, 1L, ns))   # 1-D run: [x, size class]
+         else if (length(d) == 3L && d[1] == nx && d[2] == ny && d[3] == ns) initial
+         else stop(sprintf("initial must be a vector with one value per size class of %s (%d) or an array [x = %d, y = %d, %d]; got [%s]",
+                           species@filename, ns, nx, ny, ns, paste(d, collapse = ", ")))
+  }
+  storage.mode(a) <- "double"
+  species@arrays$initial <- a
+  species
+}

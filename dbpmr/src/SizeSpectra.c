@@ -6,6 +6,12 @@
   (numeric [x, y, layer]), layer (0-based layer at each time point), nlayer and range (lo, hi).*/
 static FISHING_ARRAY *read_fishing_arrays(SEXP inputs, const char *name, int nsp);
 
+/*Other array inputs for the nsp species of one type, from element `name` of the inputs list: a list with one
+  entry per species, each NULL or a list that may hold initial (numeric [x, y, size class]), rep (numeric
+  [x, y, layer]) with rep_layer and rep_nlayer, refuge (numeric [x, y, size class]) with refuge_min_a, and
+  pref_ben (numeric [x, y]).*/
+static SPECIES_INPUT *read_species_inputs(SEXP inputs, const char *name, int nsp);
+
 /*Element of an R list by name (R_NilValue if absent)*/
 static SEXP get_list_element(SEXP list, const char *name)
 {
@@ -44,6 +50,51 @@ static FISHING_ARRAY *read_fishing_arrays(SEXP inputs, const char *name, int nsp
                 fa[s].len = XLENGTH(rate); fa[s].lo = REAL(range)[0]; fa[s].hi = REAL(range)[1];
         }
         return fa;
+}
+
+static SPECIES_INPUT *read_species_inputs(SEXP inputs, const char *name, int nsp)
+{
+        SEXP lst = get_list_element(inputs, name);
+        int s, j;
+        if (lst == R_NilValue || nsp < 1) return NULL;
+        if (!isNewList(lst) || LENGTH(lst) != nsp) error("%s must be a list with one entry per species", name);
+        SPECIES_INPUT *si = (SPECIES_INPUT *) R_alloc(nsp, sizeof(SPECIES_INPUT));
+        for (s = 0; s < nsp; s++) {
+                SEXP el = VECTOR_ELT(lst, s);
+                si[s].initial = NULL; si[s].initial_len = 0;
+                si[s].rep = NULL; si[s].rep_layer = NULL; si[s].rep_nlayer = 0; si[s].rep_nblock = 0; si[s].rep_len = 0;
+                si[s].refuge = NULL; si[s].refuge_len = 0; si[s].refuge_min_a = 0.0;
+                si[s].pref_ben = NULL; si[s].pref_ben_len = 0;
+                if (el == R_NilValue) continue;
+                SEXP v;
+                if ((v = get_list_element(el, "initial")) != R_NilValue) {
+                        if (!isReal(v)) error("%s[[%d]]: initial must be numeric", name, s + 1);
+                        si[s].initial = REAL(v); si[s].initial_len = XLENGTH(v);
+                }
+                if ((v = get_list_element(el, "rep")) != R_NilValue) {
+                        SEXP layer = get_list_element(el, "rep_layer"), nl = get_list_element(el, "rep_nlayer");
+                        if (!isReal(v) || !isInteger(layer) || !isInteger(nl) || LENGTH(nl) != 1) {
+                                error("%s[[%d]]: rep must be numeric, rep_layer and rep_nlayer integer", name, s + 1);
+                        }
+                        int nlayer = INTEGER(nl)[0];
+                        if (nlayer < 1 || LENGTH(layer) < 1 || XLENGTH(v) < nlayer) error("%s[[%d]]: inconsistent lengths in rep", name, s + 1);
+                        for (j = 0; j < LENGTH(layer); j++) {
+                                if (INTEGER(layer)[j] < 0 || INTEGER(layer)[j] >= nlayer) error("%s[[%d]]: rep layer index out of range at time point %d", name, s + 1, j + 1);
+                        }
+                        si[s].rep = REAL(v); si[s].rep_layer = INTEGER(layer); si[s].rep_nlayer = nlayer;
+                        si[s].rep_nblock = LENGTH(layer); si[s].rep_len = XLENGTH(v);
+                }
+                if ((v = get_list_element(el, "refuge")) != R_NilValue) {
+                        SEXP ma = get_list_element(el, "refuge_min_a");
+                        if (!isReal(v) || !isReal(ma) || LENGTH(ma) != 1) error("%s[[%d]]: refuge and refuge_min_a must be numeric", name, s + 1);
+                        si[s].refuge = REAL(v); si[s].refuge_len = XLENGTH(v); si[s].refuge_min_a = REAL(ma)[0];
+                }
+                if ((v = get_list_element(el, "pref_ben")) != R_NilValue) {
+                        if (!isReal(v)) error("%s[[%d]]: pref_ben must be numeric", name, s + 1);
+                        si[s].pref_ben = REAL(v); si[s].pref_ben_len = XLENGTH(v);
+                }
+        }
+        return si;
 }
 
 // This is the new R interface. SizeSpectrum() is now a wrapper function that
@@ -162,6 +213,8 @@ SEXP SizeSpectrum(
         arr.have_forcing = 0; arr.frc_layer = NULL; arr.frc_nblock = 0;
         arr.fish_pel = NULL; arr.fish_ben = NULL;
         arr.gravity = NULL;
+        arr.sp_pel = NULL; arr.sp_ben = NULL;
+        arr.pla_initial = NULL; arr.pla_initial_len = 0; arr.det_initial = NULL; arr.det_initial_len = 0;
         for (i = 0; i < N_FRC; i++) { arr.frc[i] = NULL; arr.frc_nlayer[i] = 0; arr.frc_len[i] = 0; }
         if (inputs_r != R_NilValue) {
                 if (!isNewList(inputs_r)) {
@@ -227,6 +280,19 @@ SEXP SizeSpectrum(
                 arr.fish_pel = read_fishing_arrays(inputs_r, "fishing_pelagic", npel);
                 arr.fish_ben = read_fishing_arrays(inputs_r, "fishing_benthic", nben);
 
+                // Other inputs as arrays: starting abundance, reproduction, refuge and per-cell parameters.
+                arr.sp_pel = read_species_inputs(inputs_r, "species_pelagic", npel);
+                arr.sp_ben = read_species_inputs(inputs_r, "species_benthic", nben);
+                SEXP pin = get_list_element(inputs_r, "plankton_initial"), din = get_list_element(inputs_r, "detritus_initial");
+                if (pin != R_NilValue) {
+                        if (!isReal(pin)) error("plankton_initial must be numeric");
+                        arr.pla_initial = REAL(pin); arr.pla_initial_len = XLENGTH(pin);
+                }
+                if (din != R_NilValue) {
+                        if (!isReal(din)) error("detritus_initial must be numeric");
+                        arr.det_initial = REAL(din); arr.det_initial_len = XLENGTH(din);
+                }
+
                 // Effort allocated among cells by gravity.
                 SEXP gv_r = get_list_element(inputs_r, "gravity");
                 if (gv_r != R_NilValue) {
@@ -291,6 +357,7 @@ static void SizeSpectrum_internals(int *run_params, double *grid_params, double 
     run.arr=arr;          //inputs supplied from R as arrays (may hold none)
     run.frc_step=0;
     run.fish_block=0;
+    run.rep_block=0;
     run.out=out;          //output returned to R as arrays (mode 0 = none)
     
     /*Setup grid*/
@@ -340,6 +407,7 @@ static void SizeSpectrum_internals(int *run_params, double *grid_params, double 
     temp_pel_params=setup_pelagic_params(run.no_pelagic, pel_params);
     for(s=0 ; s<run.no_pelagic ; s++){
             community.pelagic[s].fish_arr=(arr!=NULL && arr->fish_pel!=NULL && arr->fish_pel[s].rate!=NULL) ? &arr->fish_pel[s] : NULL;
+            community.pelagic[s].in=(arr!=NULL && arr->sp_pel!=NULL) ? &arr->sp_pel[s] : NULL;
             setup_pelagic(&run, &grid, &(community.pelagic[s]), temp_pel_params[s], names_params[s+2], flags_params[4*s+2], flags_params[4*s+3], flags_params[4*s+4], flags_params[4*s+5]);
     }
     
@@ -348,6 +416,7 @@ static void SizeSpectrum_internals(int *run_params, double *grid_params, double 
             temp_ben_params=setup_benthic_params(run.no_benthic, ben_params);
             for(b=0 ; b<run.no_benthic ; b++){
                     community.benthic[b].fish_arr=(arr!=NULL && arr->fish_ben!=NULL && arr->fish_ben[b].rate!=NULL) ? &arr->fish_ben[b] : NULL;
+                    community.benthic[b].in=(arr!=NULL && arr->sp_ben!=NULL) ? &arr->sp_ben[b] : NULL;
                     setup_benthic(&run, &grid, &(community.benthic[b]), temp_ben_params[b], names_params[b+run.no_pelagic+2], flags_params[4*b+(2+(4*run.no_pelagic))], flags_params[4*b+(3+(4*run.no_pelagic))], flags_params[4*b+(4+(4*run.no_pelagic))], flags_params[4*b+(5+(4*run.no_pelagic))]);
             }
     
@@ -870,7 +939,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      
      /*Close reproduction files*/
      for(s=0 ; s<n ; s++){
-             if(community->pelagic[s].rep_method==1){
+             if(community->pelagic[s].rep_method==1 && !(community->pelagic[s].in!=NULL && community->pelagic[s].in->rep!=NULL)){
                      if(community->pelagic[s].ts_flag==0){
                              fclose(community->pelagic[s].fptr_rep_ts);
                      }
@@ -878,7 +947,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      }
      if(run->no_benthic!=0){
              for(b=0 ; b<c ; b++){
-                     if(community->benthic[b].rep_method==1){
+                     if(community->benthic[b].rep_method==1 && !(community->benthic[b].in!=NULL && community->benthic[b].in->rep!=NULL)){
                              if(community->benthic[b].ts_flag==0){
                                      fclose(community->benthic[b].fptr_rep_ts);
                              }

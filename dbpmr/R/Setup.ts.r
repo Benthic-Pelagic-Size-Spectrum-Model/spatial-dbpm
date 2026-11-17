@@ -11,6 +11,11 @@
 #' the plankton object carrying the arrays, which must be assigned and passed on
 #' to [SizeSpectrum()]: `pl <- Setup.ts(pl, run, grid, intercept = a, slope = b)`.
 #'
+#' Starting values can also be held in memory, with `initial`, for the plankton,
+#' a pelagic or benthic species, or the detritus. Again no file is written and
+#' the returned object must be assigned:
+#' `pe <- Setup.ts(pe, run, grid, initial = u0)`.
+#'
 #' @param species A species parameter object (e.g. from [Setup.Pelagic()]).
 #' @param run.in A [run.params] object.
 #' @param grid.in A [grid.params] object.
@@ -31,6 +36,12 @@
 #' @param time Used with `intercept`/`slope` instead of `layer`: the start time
 #'   (in model years) of each layer; each time point uses the latest layer that
 #'   has started.
+#' @param initial Starting values held in memory (`initial_flag = TRUE`,
+#'   `ts_flag = FALSE`). For the plankton or a pelagic or benthic species: the
+#'   abundance density in each size class of that species
+#'   (`seq(mmin, mmax, by = mstep)`), as a vector (the same in every cell) or an
+#'   array `[x, y, size class]`. For the detritus: the biomass, as a single
+#'   number or a matrix `[x, y]`.
 #'
 #' @details For an initial condition (`ts_flag = FALSE`) the supplied `mat` /
 #'   data may have either a single row, applied uniformly to every spatial cell,
@@ -40,13 +51,20 @@
 #'   nested within time.
 #'
 #' @return Invisibly `NULL` when writing an input file under the run's `Input`
-#'   directory. When `intercept` and `slope` are given, invisibly the plankton
-#'   object with the arrays attached (assign it).
+#'   directory. When `intercept` and `slope`, or `initial`, are given, invisibly
+#'   the object with the arrays attached (assign it).
 #' @seealso [Setup.Rep()], [Setup.fishing()]
 #' @export
 `Setup.ts`<-
-function(species, run.in, grid.in, func, mat, dataname, intercept, slope, layer, time){
+function(species, run.in, grid.in, func, mat, dataname, intercept, slope, layer, time, initial){
 #func is a function of the variables m, x, y, and z
+
+#Starting values held in memory: nothing is written
+if(!missing(initial)){
+  if(!missing(func) || !missing(mat) || !missing(dataname) || !missing(intercept) || !missing(slope) || !missing(layer) || !missing(time))
+    stop("initial cannot be combined with func, mat, dataname, intercept, slope, layer or time")
+  return(invisible(initial_array(species, grid.in, initial)))
+}
 
 #Plankton time series held in memory as intercept/slope arrays: nothing is written
 if(!missing(intercept) || !missing(slope)){

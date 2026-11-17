@@ -37,6 +37,23 @@ typedef struct fishing_array{
         double lo,hi;          //fished size range (natural-log body mass)
         } FISHING_ARRAY;
 
+/*Other inputs of one species supplied from R as arrays instead of text files. Each pointer is NULL when that
+  input was not supplied (it is then read from its file, or the default is used).*/
+typedef struct species_input{
+        const double *initial;    //starting abundance, an R array [x][y][size class of the species]; replaces _ts.txt
+        R_xlen_t initial_len;     //length of initial (checked against x*y*number of size classes of the species)
+        const double *rep;        //egg density through time (rep_method 1), an R array [x][y][layer]; replaces _rep_ts.txt
+        const int *rep_layer;     //0-based layer at each model time point (0, tstep, 2*tstep, ...)
+        int rep_nlayer;           //number of layers
+        int rep_nblock;           //length of rep_layer
+        R_xlen_t rep_len;         //length of rep (checked against x*y*layers)
+        const double *refuge;     //refuge density (pelagic), an R array [x][y][size class of the grid]; replaces _refuge.txt
+        R_xlen_t refuge_len;      //length of refuge (checked against x*y*mnum)
+        double refuge_min_a;      //floor on availability used with refuge (replaces the REFUGE_MIN_A environment variable)
+        const double *pref_ben;   //benthic feeding preference in each cell (pelagic), an R matrix [x][y]; replaces _cellpar.txt
+        R_xlen_t pref_ben_len;    //length of pref_ben (checked against x*y)
+        } SPECIES_INPUT;
+
 /*Fishing effort allocated among cells by gravity (opt-in, supplied from R). The fishing mortality set for each
   species (from an array or a file) is taken as the rate at evenly spread effort; in cell (k,l) it is multiplied
   by ncell*share(k,l), where share is proportional to
@@ -71,6 +88,13 @@ typedef struct array_inputs{
         FISHING_ARRAY *fish_pel;   //one entry per pelagic species (NULL = none supplied for any species)
         FISHING_ARRAY *fish_ben;   //one entry per benthic species
         const GRAVITY_INPUT *gravity;  //effort allocated among cells by gravity (NULL = off)
+
+        SPECIES_INPUT *sp_pel;     //other inputs of each pelagic species (NULL = none supplied for any species)
+        SPECIES_INPUT *sp_ben;     //other inputs of each benthic species
+        const double *pla_initial; //starting plankton abundance, an R array [x][y][plankton size class] (NULL = file or default)
+        R_xlen_t pla_initial_len;
+        const double *det_initial; //starting detritus biomass, an R matrix [x][y] (NULL = file or default)
+        R_xlen_t det_initial_len;
         } ARRAY_INPUTS;
 
 /*Model output handed back to R as arrays (opt-in). The arrays live in R memory (elements of the list
@@ -118,6 +142,7 @@ typedef struct run_info{
         const ARRAY_INPUTS *arr; //inputs supplied from R as arrays (NULL or have_forcing=0 -> forcing comes from the file, if any)
         int frc_step;          //timesteps of array forcing applied so far
         int fish_block;        //number of times fishing mortality has been set (indexes the time point of array fishing)
+        int rep_block;         //number of times reproduction has been set (indexes the time point of array reproduction)
         double **fish_share;   //gravity: multiplier ncell*share on fishing mortality in each cell (NULL = gravity off)
         double **share_u_pel;  //gravity: abundance of each pelagic species at the latest update, [species][m + mnum*(x + xnum*y)] (NULL when the shares are recalculated every timestep)
         double **share_u_ben;  //gravity: the same for each benthic species
@@ -282,6 +307,7 @@ typedef struct pelagic_info{
         int ts_flag;
         int fishing_flag;      //flag for fishing; 0-off, 1-on
         const FISHING_ARRAY *fish_arr;   //fishing mortality supplied from R as an array (NULL = read the fishing file)
+        const SPECIES_INPUT *in;         //other inputs supplied from R as arrays (NULL = none; each is then read from its file)
         
         double ***u_values;        //number densities for each time step (outputted as file)
         double ***g_values;        //growth rates for each time step (outputted as file)
@@ -361,6 +387,7 @@ typedef struct benthic_info{
         int ts_flag;           //timeseries of distributions supplied; 0-no , 1-yes
         int fishing_flag;      //flag for fishing; 0-off, 1-on
         const FISHING_ARRAY *fish_arr;   //fishing mortality supplied from R as an array (NULL = read the fishing file)
+        const SPECIES_INPUT *in;         //other inputs supplied from R as arrays (NULL = none; each is then read from its file)
         
         double ***u_values;        //number densities for each time step (outputted as file)
         double ***g_values;        //growth rates for each time step (outputted as file)
