@@ -242,7 +242,11 @@ tiny<-1e-7
   
   
   #Check initial input files exist
-  if((plankton.in@initial_flag==1 || plankton.in@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",plankton.in@filename,"_ts.txt",sep=""))) stop("A required Plankton initial/ts file does not exist")
+  #(a plankton time series held in memory as intercept/slope arrays needs no file)
+  if(length(plankton.in@ts_arrays)==0 && (plankton.in@initial_flag==1 || plankton.in@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",plankton.in@filename,"_ts.txt",sep=""))){
+    stop("A required Plankton initial/ts file does not exist. Write one with Setup.ts(), or, for intercept/slope arrays, ",
+         "assign the result: pl <- Setup.ts(pl, run, grid, intercept = , slope = )")
+  }
   
   for(i in 1:length(pelagic.in)){
     if((pelagic.in[[i]]@initial_flag==1 || pelagic.in[[i]]@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",pelagic.in[[i]]@filename,"_ts.txt",sep=""))) stop("A required Pelagic initial/ts file does not exist")
@@ -296,6 +300,14 @@ tiny<-1e-7
 # Call C code #
 #-------------#
 
+  # Inputs passed to C as arrays instead of text files (NULL = none)
+  inputs <- NULL
+  if(length(plankton.in@ts_arrays)!=0){
+    ta <- plankton.in@ts_arrays
+    inputs <- list(plankton_intercept=ta$intercept, plankton_slope=ta$slope,
+                   plankton_layer=as.integer(ta$layer-1L), plankton_nlayer=as.integer(dim(ta$intercept)[3]))
+  }
+
   x <- .Call(
     C_SizeSpectrum, 
     as.integer(run.params), 
@@ -305,7 +317,8 @@ tiny<-1e-7
     as.double(ben.params), 
     as.double(det.params), 
     as.character(names.params), 
-    as.integer(flags.params)
+    as.integer(flags.params),
+    inputs
   )
 
 #-----------------------------------------------------------------#

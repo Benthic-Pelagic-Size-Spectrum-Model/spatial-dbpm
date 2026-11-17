@@ -43,3 +43,60 @@ mass_index <- function(mass, target) {
     stop("size ", target, " does not align with the mass grid", call. = FALSE)
   i
 }
+
+#' Attach an in-memory plankton time series to a plankton object (internal)
+#'
+#' Validates intercept/slope arrays and the time-point-to-layer mapping and
+#' stores them in the `ts_arrays` slot. Used by [Setup.ts()].
+#'
+#' @param species A plankton parameter object with `ts_flag = TRUE`.
+#' @param grid.in A [grid.params] object.
+#' @param intercept,slope Arrays `[x, y, layer]`.
+#' @param layer,time See [Setup.ts()].
+#' @return The plankton object with `ts_arrays` filled.
+#' @keywords internal
+#' @noRd
+plankton_ts_arrays <- function(species, grid.in, intercept, slope, layer = NULL, time = NULL) {
+  if (species@speciestype != "plankton")
+    stop("intercept and slope arrays are currently supported for plankton only")
+  if (!isTRUE(species@ts_flag))
+    stop("intercept and slope arrays supply a time series: create the plankton with ts_flag = TRUE")
+  if (is.null(intercept) || is.null(slope)) stop("both intercept and slope must be given")
+  nx <- length(grid_seq(grid.in@xmin, grid.in@xmax, grid.in@xstep))
+  ny <- length(grid_seq(grid.in@ymin, grid.in@ymax, grid.in@ystep))
+  trange <- seq(0, grid.in@tmax, grid.in@tstep)
+  nb <- length(trange)
+  as3 <- function(a, nm) {
+    if (!is.numeric(a)) stop(nm, " must be numeric")
+    if (is.null(dim(a))) a <- array(a, c(1L, 1L, length(a)))                       # 0-D: one value per layer
+    else if (length(dim(a)) == 2L) a <- array(a, c(dim(a)[1], 1L, dim(a)[2]))      # 1-D: [x, layer]
+    if (length(dim(a)) != 3L || dim(a)[1] != nx || dim(a)[2] != ny)
+      stop(sprintf("%s must have dimensions [x = %d, y = %d, layers]; got [%s]", nm, nx, ny, paste(dim(a), collapse = ", ")))
+    if (any(!is.finite(a))) stop(nm, " must not contain NA, NaN or Inf")
+    storage.mode(a) <- "double"
+    a
+  }
+  intercept <- as3(intercept, "intercept"); slope <- as3(slope, "slope")
+  if (!identical(dim(intercept), dim(slope))) stop("intercept and slope must have the same dimensions")
+  if (any(intercept < 0))
+    stop("intercept must be non-negative: it is the abundance density at m = 0, not its logarithm")
+  nl <- dim(intercept)[3]
+  if (!is.null(layer) && !is.null(time)) stop("give only one of layer or time")
+  if (!is.null(time)) {
+    if (length(time) != nl || is.unsorted(time, strictly = TRUE)) stop("time must give one strictly increasing start time per layer")
+    if (time[1] > 0) stop("time[1] must be at or before the start of the run (0)")
+    # a time point that coincides with a layer start (to within rounding) takes that layer
+    layer <- findInterval(trange + grid.in@tstep * 1e-6, time)
+  }
+  if (is.null(layer)) {
+    if (nl == nb) layer <- seq_len(nb)
+    else if (nl == 1L) layer <- rep(1L, nb)
+    else stop(sprintf(paste0("the arrays have %d layers but the run has %d time points (0 to tmax by tstep): ",
+                             "give `layer` (the layer each time point uses) or `time` (the start time of each layer)"), nl, nb))
+  }
+  if (length(layer) != nb) stop(sprintf("layer must have one entry per time point (%d), got %d", nb, length(layer)))
+  if (any(!is.finite(layer)) || any(layer != round(layer)) || any(layer < 1) || any(layer > nl))
+    stop(sprintf("layer must be whole numbers between 1 and the number of layers (%d)", nl))
+  species@ts_arrays <- list(intercept = intercept, slope = slope, layer = as.integer(layer))
+  species
+}

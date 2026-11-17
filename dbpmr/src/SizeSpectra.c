@@ -91,6 +91,17 @@ typedef struct grid_info{
         } GRID;
 
 /*Contains all info regarding the plankton dynamics*/
+/*Inputs handed over from R as arrays instead of <run>/Input text files (opt-in; NULL pointers = not supplied).
+  Plankton: the spectrum in cell (k,l) for a given layer is u(m) = a*exp(b*m), with a = pla_int and b = pla_slp.*/
+typedef struct array_inputs{
+        const double *pla_int; //plankton intercept a, an R array [x][y][layer] (column-major): index k + x*(l + y*layer)
+        const double *pla_slp; //plankton slope b, same layout
+        const int *pla_layer;  //0-based layer used by each time block (block 0 = initial state, then one per timestep)
+        int pla_nlayer;        //number of layers in the arrays
+        int pla_nblock;        //length of pla_layer
+        R_xlen_t pla_len;      //length of pla_int / pla_slp (checked against x*y*layers once the grid is known)
+        } ARRAY_INPUTS;
+
 typedef struct plankton_info{
         
         char *filename;
@@ -105,6 +116,8 @@ typedef struct plankton_info{
         
         int initial_flag;
         int ts_flag;
+        const ARRAY_INPUTS *arr; //plankton series supplied from R as arrays (NULL = read the _ts file)
+        int ts_block;          //next time block to load from the arrays
         
         double ***u_values;
         double ***g_values;    //for futureproofing
@@ -359,7 +372,7 @@ typedef struct vectors{
 /*Setup Functions*/
 void setup_run(RUN *, int *, char *);
 void setup_grid(GRID *, double *);
-void setup_plankton(RUN *, GRID *, PLANKTON *, double *, char *, int, int);           //sets up plankton values
+void setup_plankton(RUN *, GRID *, PLANKTON *, double *, char *, int, int, const ARRAY_INPUTS *);           //sets up plankton values
 void setup_pelagic(RUN *, GRID *, PELAGIC *, double *, char *, int, int, int, int);   //sets up pelagic values
 void setup_benthic(RUN *, GRID *, BENTHIC *, double *, char *, int, int, int, int);   //sets up benthic values
 void setup_detritus(RUN *, GRID *, DETRITUS *, double *, char *, int, int);           //sets up detritus values
@@ -443,7 +456,40 @@ void *safe_malloc(size_t, int, char *);           //Wrappered function for memor
 FILE *safe_fopen(char *, char *, int, char *);    //Wrappered function for file opening
 
 /*Protype of the internal size-spectrum function (no interface with R)*/
-static void SizeSpectrum_internals(int *, double *, double *, double *, double *, double *, char **, int *);
+static void SizeSpectrum_internals(int *, double *, double *, double *, double *, double *, char **, int *, const ARRAY_INPUTS *);
+
+/*Element of an R list by name (R_NilValue if absent)*/
+static SEXP get_list_element(SEXP list, const char *name)
+{
+        SEXP names = getAttrib(list, R_NamesSymbol);
+        int i;
+        if (names == R_NilValue) return R_NilValue;
+        for (i = 0; i < LENGTH(list); i++) {
+                if (strcmp(CHAR(STRING_ELT(names, i)), name) == 0) return VECTOR_ELT(list, i);
+        }
+        return R_NilValue;
+}
+
+/*Fill the plankton spectrum of every cell from the R arrays for the next time block, then advance the block.
+  Past the last block the final one is reused. Size classes outside the plankton range stay at zero.*/
+static void plankton_from_arrays(GRID *grid, PLANKTON *plankton)
+{
+        const ARRAY_INPUTS *arr = plankton->arr;
+        int i, k, l;
+        int x = grid->xnum, y = grid->ynum;
+        int block = plankton->ts_block < arr->pla_nblock ? plankton->ts_block : arr->pla_nblock - 1;
+        R_xlen_t layer = arr->pla_layer[block];
+        for (k = 0; k < x; k++) {
+                for (l = 0; l < y; l++) {
+                        R_xlen_t idx = (R_xlen_t)k + (R_xlen_t)x * ((R_xlen_t)l + (R_xlen_t)y * layer);
+                        double a = arr->pla_int[idx], b = arr->pla_slp[idx];
+                        for (i = plankton->iplamin; i < (plankton->iplamax + 1); i++) {
+                                plankton->u_values[i][k][l] = a * exp(b * grid->m_values[i]);
+                        }
+                }
+        }
+        plankton->ts_block++;
+}
 
 // This is the new R interface. SizeSpectrum() is now a wrapper function that
 // takes the objects from R (.Call()). SizeSpectrum() checks the SEXP objects from
@@ -460,7 +506,8 @@ SEXP SizeSpectrum(
         SEXP benthic_params_r, 
         SEXP detritus_params_r, 
         SEXP names_params_r, 
-        SEXP flags_params_r
+        SEXP flags_params_r,
+        SEXP inputs_r
 ) {
         // Ensure that all of the SEXP objects are of the correct type after
         // passing in from R.
@@ -535,6 +582,38 @@ SEXP SizeSpectrum(
                 names_params[i] = (char *) CHAR(STRING_ELT(names_params_r, i));
         }
         
+        // Optional inputs passed as R arrays instead of text files (inputs_r is NULL or a named list).
+        // Currently: the plankton series as intercept/slope arrays [x, y, layer] plus, for each time
+        // block, the (0-based) layer it uses. The arrays stay owned by R for the duration of the call.
+        ARRAY_INPUTS arr;
+        arr.pla_int = NULL; arr.pla_slp = NULL; arr.pla_layer = NULL;
+        arr.pla_nlayer = 0; arr.pla_nblock = 0; arr.pla_len = 0;
+        if (inputs_r != R_NilValue) {
+                if (!isNewList(inputs_r)) {
+                        error("inputs_r must be NULL or a list");
+                }
+                SEXP pint = get_list_element(inputs_r, "plankton_intercept");
+                SEXP pslp = get_list_element(inputs_r, "plankton_slope");
+                SEXP play = get_list_element(inputs_r, "plankton_layer");
+                SEXP pnl  = get_list_element(inputs_r, "plankton_nlayer");
+                if (pint != R_NilValue || pslp != R_NilValue || play != R_NilValue || pnl != R_NilValue) {
+                        if (!isReal(pint) || !isReal(pslp) || !isInteger(play) || !isInteger(pnl) || LENGTH(pnl) != 1) {
+                                error("plankton arrays: intercept and slope must be numeric, layer and nlayer integer");
+                        }
+                        int nlayer = INTEGER(pnl)[0];
+                        if (nlayer < 1 || LENGTH(play) < 1 || XLENGTH(pint) != XLENGTH(pslp) || XLENGTH(pint) < nlayer) {
+                                error("plankton arrays: inconsistent lengths");
+                        }
+                        for (i = 0; i < LENGTH(play); i++) {
+                                if (INTEGER(play)[i] < 0 || INTEGER(play)[i] >= nlayer) {
+                                        error("plankton arrays: layer index out of range at time block %d", i + 1);
+                                }
+                        }
+                        arr.pla_int = REAL(pint); arr.pla_slp = REAL(pslp); arr.pla_layer = INTEGER(play);
+                        arr.pla_nlayer = nlayer; arr.pla_nblock = LENGTH(play); arr.pla_len = XLENGTH(pint);
+                }
+        }
+
         SizeSpectrum_internals(
                 run_params,
                 grid_params,
@@ -543,7 +622,8 @@ SEXP SizeSpectrum(
                 ben_params,
                 det_params,
                 names_params,
-                flags_params
+                flags_params,
+                &arr
         );
         return(R_NilValue);
 }
@@ -552,7 +632,7 @@ SEXP SizeSpectrum(
 // This is the internal function that does the work of the program called by R //
 //-----------------------------------------------------------------------------//
 
-static void SizeSpectrum_internals(int *run_params, double *grid_params, double *pla_params, double *pel_params, double *ben_params, double * det_params, char **names_params, int *flags_params)
+static void SizeSpectrum_internals(int *run_params, double *grid_params, double *pla_params, double *pel_params, double *ben_params, double * det_params, char **names_params, int *flags_params, const ARRAY_INPUTS *arr)
 // run_params is an array of run parameters
 // grid_params is an array of grid discretisation values
 // pla_params is plankton params
@@ -587,7 +667,7 @@ static void SizeSpectrum_internals(int *run_params, double *grid_params, double 
     }
     
     /*Setup plankton*/
-    setup_plankton(&run, &grid, community.plankton, pla_params, names_params[1], flags_params[0], flags_params[1]); 
+    setup_plankton(&run, &grid, community.plankton, pla_params, names_params[1], flags_params[0], flags_params[1], arr); 
     
     /*Setup pelagic*/
     temp_pel_params=setup_pelagic_params(run.no_pelagic, pel_params);
@@ -755,7 +835,7 @@ double **setup_benthic_params(int no_benthic, double *ben_params)
     return(temp_params);
 }
 
-void setup_plankton(RUN *run, GRID *grid, PLANKTON *plankton, double *pla_params, char *filename, int initial_flag, int ts_flag)
+void setup_plankton(RUN *run, GRID *grid, PLANKTON *plankton, double *pla_params, char *filename, int initial_flag, int ts_flag, const ARRAY_INPUTS *arr)
 {
      /*Declare plankton name*/
      plankton->filename=filename;
@@ -823,7 +903,20 @@ void setup_plankton(RUN *run, GRID *grid, PLANKTON *plankton, double *pla_params
           
      /*Setup initial values for u(m,0,x,y)*/
      /*Use user defined values*/
-     if(plankton->initial_flag==1 || plankton->ts_flag==1){
+     /*Plankton series supplied from R as intercept/slope arrays: no _ts file is opened or read*/
+     plankton->arr=NULL;
+     plankton->ts_block=0;
+     if(arr!=NULL && arr->pla_int!=NULL){
+             if(plankton->ts_flag!=1){
+                     error("plankton arrays were supplied but the plankton ts_flag is not set\n");
+             }
+             if(arr->pla_len!=(R_xlen_t)x*(R_xlen_t)y*(R_xlen_t)arr->pla_nlayer){
+                     error("plankton arrays hold %ld values; expected x*y*layers = %d*%d*%d\n",(long)arr->pla_len,x,y,arr->pla_nlayer);
+             }
+             plankton->arr=arr;
+             plankton_from_arrays(grid, plankton);
+     }
+     else if(plankton->initial_flag==1 || plankton->ts_flag==1){
              /*Create plankton input filename*/
              snprintf(plankton->fname_ts, sizeof(plankton->fname_ts),"%s/Input/%s_%s.txt",run->filename,plankton->filename,"ts");
              plankton->fptr_ts=safe_fopen(plankton->fname_ts,"r",__LINE__,__FILE__);
@@ -1965,7 +2058,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      }
      
      /*Close ts files*/
-     if(community->plankton->ts_flag==1){
+     if(community->plankton->ts_flag==1 && community->plankton->arr==NULL){
              fclose(community->plankton->fptr_ts);
      }
      if(run->forcing_flag==1){
@@ -2796,7 +2889,11 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                      }
              }
      }
-     if(community->plankton->ts_flag==1){
+     if(community->plankton->ts_flag==1 && community->plankton->arr!=NULL){
+             /*Next time block from the R arrays*/
+             plankton_from_arrays(grid, community->plankton);
+     }
+     else if(community->plankton->ts_flag==1){
              int MAX_LEN=grid->mnum*15; //this is the upper bound for the row length in characters
              char *input;               //input string to store line as string
              input=(char *)safe_malloc(MAX_LEN*sizeof(char),__LINE__,__FILE__); 
