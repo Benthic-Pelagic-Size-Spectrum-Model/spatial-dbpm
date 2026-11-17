@@ -37,6 +37,28 @@ typedef struct array_inputs{
         int frc_nblock;        //length of frc_layer
         } ARRAY_INPUTS;
 
+/*Model output handed back to R as arrays (opt-in). The arrays live in R memory (elements of the list
+  returned by .Call) and are filled at the same times, cells and size classes as the text result files:
+  abundance arrays are [x][y][size][time] (column-major): index kk + nxo*(ll + nyo*(ii + nmo*it)).*/
+typedef struct output_arrays{
+        int mode;              //0 = text files only (default), 1 = text files and arrays, 2 = arrays only
+        int nxo,nyo,nmo,nto;   //number of output cells in x and y, output size classes and output times
+        int xstride,ystride;   //every xstride-th / ystride-th cell is output (xoutstep/xstep, youtstep/ystep)
+        int *mi;               //grid index of each output size class
+        int it;                //next output time slot
+        double *t,*x,*y,*m;    //coordinate vectors
+        int want_g,want_mu,want_pred,want_fish,want_catch;   //also return growth, total mortality, predation mortality, fishing mortality, catch
+        double *pla;           //plankton abundance
+        double **pel;          //abundance of each pelagic species
+        double **ben;          //abundance of each benthic species
+        double *det;           //detritus biomass [x][y][time]
+        double **pel_g,**pel_mu,**pel_fish;   //growth rate, total mortality and fishing mortality of each pelagic species (NULL if not wanted)
+        double ***pel_pred;    //pel_pred[s][p]: predation mortality on pelagic species s from pelagic species p
+        double **ben_g,**ben_mu,**ben_pred,**ben_fish;   //the same for each benthic species (predation from all pelagic species)
+        double **pel_catch,**ben_catch;   //catch rate density of each species: fishing mortality * abundance * body mass (per unit ln mass)
+        SEXP list;             //the R list holding all of the above
+        } OUTPUT_ARRAYS;
+
 typedef struct run_info{
         
         char *filename;        //root filename for runs
@@ -59,6 +81,7 @@ typedef struct run_info{
         FILE *fptr_forcing;    //forcing time-series file ptr
         const ARRAY_INPUTS *arr; //inputs supplied from R as arrays (NULL or have_forcing=0 -> forcing comes from the file, if any)
         int frc_step;          //timesteps of array forcing applied so far
+        OUTPUT_ARRAYS *out;    //output returned to R as arrays (NULL or mode 0 -> text files only)
         int forcing_ncol;      //number of columns in each data row
         int col_pel_tempeff;   //column index of each channel (-1 if absent)
         int col_ben_tempeff;
@@ -483,7 +506,7 @@ void *safe_malloc(size_t, int, char *);           //Wrappered function for memor
 FILE *safe_fopen(char *, char *, int, char *);    //Wrappered function for file opening
 
 /*Protype of the internal size-spectrum function (no interface with R)*/
-static void SizeSpectrum_internals(int *, double *, double *, double *, double *, double *, char **, int *, const ARRAY_INPUTS *);
+static void SizeSpectrum_internals(int *, double *, double *, double *, double *, double *, char **, int *, const ARRAY_INPUTS *, OUTPUT_ARRAYS *);
 
 /*Element of an R list by name (R_NilValue if absent)*/
 static SEXP get_list_element(SEXP list, const char *name)
@@ -536,6 +559,139 @@ static int forcing_from_arrays(RUN *run, GRID *grid, int k, int l, double *vals)
         return N_FRC;
 }
 
+/*Allocate one array of len values per species as element `pos` of an R list (which must be protected),
+  and return C pointers to their data*/
+static double **species_arrays(SEXP parent, int pos, int nspecies, R_xlen_t len)
+{
+        int s;
+        SEXP l = allocVector(VECSXP, nspecies);
+        SET_VECTOR_ELT(parent, pos, l);
+        double **ptr = (double **) R_alloc(nspecies, sizeof(double *));
+        for (s = 0; s < nspecies; s++) {
+                SEXP v = allocVector(REALSXP, len);
+                SET_VECTOR_ELT(l, s, v);
+                ptr[s] = REAL(v);
+        }
+        return ptr;
+}
+
+/*Allocate the arrays returned to R. Sizes follow the text output: every (xoutstep/xstep)-th and
+  (youtstep/ystep)-th cell, every (moutstep/mstep)-th size class plus the last one, and every output time
+  in [toutmin,toutmax]. The list is left PROTECTed; the .Call wrapper unprotects it when returning it.*/
+static void setup_output_arrays(RUN *run, GRID *grid, OUTPUT_ARRAYS *out)
+{
+        int i, j, k, s, n = run->no_pelagic, c = run->no_benthic;
+        int m = grid->mnum, x = grid->xnum, y = grid->ynum, t = grid->tnum;
+        int mstride = (int)rint(grid->moutstep / grid->mstep);
+        int ostep = (int)rint(grid->toutstep / grid->tstep);
+        out->xstride = (int)rint(grid->xoutstep / grid->xstep);
+        out->ystride = (int)rint(grid->youtstep / grid->ystep);
+        if (mstride < 1) mstride = 1;
+        if (ostep < 1) ostep = 1;
+        if (out->xstride < 1) out->xstride = 1;
+        if (out->ystride < 1) out->ystride = 1;
+        out->nxo = (x - 1) / out->xstride + 1;
+        out->nyo = (y - 1) / out->ystride + 1;
+        out->nmo = 0;
+        for (i = 0; i < (m - 1); i += mstride) out->nmo++;
+        out->nmo++;                                            /*the last size class is always output*/
+        out->mi = (int *) R_alloc(out->nmo, sizeof(int));
+        k = 0;
+        for (i = 0; i < (m - 1); i += mstride) out->mi[k++] = i;
+        out->mi[k] = m - 1;
+        out->nto = (grid->toutmin == 0) ? 1 : 0;
+        for (j = 1; j < t; j++) {
+                if (grid->t_values[j] >= grid->toutmin && grid->t_values[j] <= grid->toutmax && j % ostep == 0) out->nto++;
+        }
+        out->it = 0;
+
+        R_xlen_t ncell = (R_xlen_t)out->nxo * out->nyo;
+        R_xlen_t nfull = ncell * out->nmo * out->nto;
+        const char *names[] = {"t", "x", "y", "m", "plankton", "pelagic", "benthic", "detritus",
+                               "pelagic_growth", "pelagic_mortality", "pelagic_predation", "pelagic_fishing",
+                               "benthic_growth", "benthic_mortality", "benthic_predation", "benthic_fishing",
+                               "pelagic_catch", "benthic_catch", ""};
+        SEXP list = PROTECT(mkNamed(VECSXP, names));
+        out->list = list;
+        SEXP v;
+        v = allocVector(REALSXP, out->nto); SET_VECTOR_ELT(list, 0, v); out->t = REAL(v);
+        v = allocVector(REALSXP, out->nxo); SET_VECTOR_ELT(list, 1, v); out->x = REAL(v);
+        v = allocVector(REALSXP, out->nyo); SET_VECTOR_ELT(list, 2, v); out->y = REAL(v);
+        v = allocVector(REALSXP, out->nmo); SET_VECTOR_ELT(list, 3, v); out->m = REAL(v);
+        for (k = 0; k < out->nxo; k++) out->x[k] = grid->x_values[k * out->xstride];
+        for (k = 0; k < out->nyo; k++) out->y[k] = grid->y_values[k * out->ystride];
+        for (k = 0; k < out->nmo; k++) out->m[k] = grid->m_values[out->mi[k]];
+        for (k = 0; k < out->nto; k++) out->t[k] = NA_REAL;
+        v = allocVector(REALSXP, nfull); SET_VECTOR_ELT(list, 4, v); out->pla = REAL(v);
+        out->pel = species_arrays(list, 5, n, nfull);
+        out->pel_g    = out->want_g    ? species_arrays(list, 8, n, nfull)  : NULL;
+        out->pel_mu   = out->want_mu   ? species_arrays(list, 9, n, nfull)  : NULL;
+        out->pel_fish = out->want_fish ? species_arrays(list, 11, n, nfull) : NULL;
+        out->pel_catch = out->want_catch ? species_arrays(list, 16, n, nfull) : NULL;
+        out->pel_pred = NULL;
+        if (out->want_pred) {
+                /*one list per prey species, holding one array per pelagic predator species*/
+                SEXP pred = allocVector(VECSXP, n); SET_VECTOR_ELT(list, 10, pred);
+                out->pel_pred = (double ***) R_alloc(n, sizeof(double **));
+                for (s = 0; s < n; s++) out->pel_pred[s] = species_arrays(pred, s, n, nfull);
+        }
+        out->ben = NULL; out->det = NULL;
+        out->ben_g = NULL; out->ben_mu = NULL; out->ben_pred = NULL; out->ben_fish = NULL; out->ben_catch = NULL;
+        if (c != 0) {
+                out->ben = species_arrays(list, 6, c, nfull);
+                v = allocVector(REALSXP, ncell * out->nto); SET_VECTOR_ELT(list, 7, v); out->det = REAL(v);
+                if (out->want_g)    out->ben_g    = species_arrays(list, 12, c, nfull);
+                if (out->want_mu)   out->ben_mu   = species_arrays(list, 13, c, nfull);
+                if (out->want_pred) out->ben_pred = species_arrays(list, 14, c, nfull);
+                if (out->want_fish) out->ben_fish = species_arrays(list, 15, c, nfull);
+                if (out->want_catch) out->ben_catch = species_arrays(list, 17, c, nfull);
+        }
+}
+
+/*Copy the current state into the next output time slot of the arrays returned to R*/
+static void capture_output(RUN *run, GRID *grid, COMMUNITY *community, int time)
+{
+        OUTPUT_ARRAYS *o = run->out;
+        int ii, kk, ll, s, p;
+        if (o == NULL || o->mode == 0 || o->it >= o->nto) return;
+        o->t[o->it] = grid->t_values[time];
+        for (kk = 0; kk < o->nxo; kk++) {
+                int k = kk * o->xstride;
+                for (ll = 0; ll < o->nyo; ll++) {
+                        int l = ll * o->ystride;
+                        for (ii = 0; ii < o->nmo; ii++) {
+                                int i = o->mi[ii];
+                                R_xlen_t idx = (R_xlen_t)kk + (R_xlen_t)o->nxo * ((R_xlen_t)ll + (R_xlen_t)o->nyo * ((R_xlen_t)ii + (R_xlen_t)o->nmo * o->it));
+                                o->pla[idx] = community->plankton->u_values[i][k][l];
+                                for (s = 0; s < run->no_pelagic; s++) {
+                                        PELAGIC *pe = &community->pelagic[s];
+                                        o->pel[s][idx] = pe->u_values[i][k][l];
+                                        if (o->pel_g != NULL)    o->pel_g[s][idx]    = pe->g_values[i][k][l];
+                                        if (o->pel_mu != NULL)   o->pel_mu[s][idx]   = pe->mu_values[i][k][l];
+                                        if (o->pel_fish != NULL) o->pel_fish[s][idx] = pe->mu_fish_values[i][k][l];
+                                        if (o->pel_catch != NULL) o->pel_catch[s][idx] = pe->mu_fish_values[i][k][l] * pe->u_values[i][k][l] * exp(grid->m_values[i]);
+                                        if (o->pel_pred != NULL) {
+                                                for (p = 0; p < run->no_pelagic; p++) o->pel_pred[s][p][idx] = pe->mu_pred_values[p][i][k][l];
+                                        }
+                                }
+                                for (s = 0; s < run->no_benthic; s++) {
+                                        BENTHIC *be = &community->benthic[s];
+                                        o->ben[s][idx] = be->u_values[i][k][l];
+                                        if (o->ben_g != NULL)    o->ben_g[s][idx]    = be->g_values[i][k][l];
+                                        if (o->ben_mu != NULL)   o->ben_mu[s][idx]   = be->mu_values[i][k][l];
+                                        if (o->ben_pred != NULL) o->ben_pred[s][idx] = be->mu_pred_values[i][k][l];
+                                        if (o->ben_fish != NULL) o->ben_fish[s][idx] = be->mu_fish_values[i][k][l];
+                                        if (o->ben_catch != NULL) o->ben_catch[s][idx] = be->mu_fish_values[i][k][l] * be->u_values[i][k][l] * exp(grid->m_values[i]);
+                                }
+                        }
+                        if (o->det != NULL) {
+                                o->det[(R_xlen_t)kk + (R_xlen_t)o->nxo * ((R_xlen_t)ll + (R_xlen_t)o->nyo * o->it)] = community->detritus->w_values[k][l];
+                        }
+                }
+        }
+        o->it++;
+}
+
 // This is the new R interface. SizeSpectrum() is now a wrapper function that
 // takes the objects from R (.Call()). SizeSpectrum() checks the SEXP objects from
 // R are the correct SXPtypes, sets C pointers to the R data, and then runs the
@@ -552,7 +708,8 @@ SEXP SizeSpectrum(
         SEXP detritus_params_r, 
         SEXP names_params_r, 
         SEXP flags_params_r,
-        SEXP inputs_r
+        SEXP inputs_r,
+        SEXP output_r
 ) {
         // Ensure that all of the SEXP objects are of the correct type after
         // passing in from R.
@@ -627,6 +784,21 @@ SEXP SizeSpectrum(
                 names_params[i] = (char *) CHAR(STRING_ELT(names_params_r, i));
         }
         
+        // Output: c(mode, growth, mortality, predation, fishing, catch). mode: 0 = text files only (returns
+        // NULL), 1 = text files and arrays, 2 = arrays only. The other five are 0/1 flags for the optional
+        // variables returned alongside abundance.
+        if (!isInteger(output_r) || LENGTH(output_r) != 6 || INTEGER(output_r)[0] < 0 || INTEGER(output_r)[0] > 2) {
+                error("output_r must be 6 integers: mode (0 files, 1 files and arrays, 2 arrays) and five 0/1 variable flags");
+        }
+        OUTPUT_ARRAYS out;
+        out.mode = INTEGER(output_r)[0];
+        out.want_g = INTEGER(output_r)[1] != 0;
+        out.want_mu = INTEGER(output_r)[2] != 0;
+        out.want_pred = INTEGER(output_r)[3] != 0;
+        out.want_fish = INTEGER(output_r)[4] != 0;
+        out.want_catch = INTEGER(output_r)[5] != 0;
+        out.list = R_NilValue;
+
         // Optional inputs passed as R arrays instead of text files (inputs_r is NULL or a named list).
         // Currently: the plankton series as intercept/slope arrays [x, y, layer] plus, for each time
         // block, the (0-based) layer it uses. The arrays stay owned by R for the duration of the call.
@@ -705,8 +877,13 @@ SEXP SizeSpectrum(
                 det_params,
                 names_params,
                 flags_params,
-                &arr
+                &arr,
+                &out
         );
+        if (out.mode != 0) {
+                UNPROTECT(1);   // the list protected in setup_output_arrays()
+                return(out.list);
+        }
         return(R_NilValue);
 }
 
@@ -714,7 +891,7 @@ SEXP SizeSpectrum(
 // This is the internal function that does the work of the program called by R //
 //-----------------------------------------------------------------------------//
 
-static void SizeSpectrum_internals(int *run_params, double *grid_params, double *pla_params, double *pel_params, double *ben_params, double * det_params, char **names_params, int *flags_params, const ARRAY_INPUTS *arr)
+static void SizeSpectrum_internals(int *run_params, double *grid_params, double *pla_params, double *pel_params, double *ben_params, double * det_params, char **names_params, int *flags_params, const ARRAY_INPUTS *arr, OUTPUT_ARRAYS *out)
 // run_params is an array of run parameters
 // grid_params is an array of grid discretisation values
 // pla_params is plankton params
@@ -738,6 +915,7 @@ static void SizeSpectrum_internals(int *run_params, double *grid_params, double 
     setup_run(&run, run_params, names_params[0]);
     run.arr=arr;          //inputs supplied from R as arrays (may hold none)
     run.frc_step=0;
+    run.out=out;          //output returned to R as arrays (mode 0 = none)
     
     /*Setup grid*/
     setup_grid(&grid, grid_params);
@@ -785,6 +963,11 @@ static void SizeSpectrum_internals(int *run_params, double *grid_params, double 
     
     setup_matrix(grid.xnum, &xmatrix);
     setup_matrix(grid.ynum, &ymatrix);
+
+    /*Arrays returned to R (allocated now that the grid and the number of species are known)*/
+    if(out!=NULL && out->mode!=0){
+            setup_output_arrays(&run, &grid, out);
+    }
 
     /*Perform all finite differencing*/
     calculate_results(&run, &grid, &community, pelmatrix, benmatrix, &xmatrix, &ymatrix);
@@ -1975,15 +2158,19 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      calculate_reproduction(run, grid, community);
 
      /*Print run info and starting output values*/
-     /*plankton*/
+     int write_files=(run->out==NULL || run->out->mode!=2);   /*arrays-only output skips the per-timestep text files*/
      if(grid->toutmin == 0){
+             capture_output(run, grid, community, 0);
+     }
+     /*plankton*/
+     if(write_files && grid->toutmin == 0){
              print_timestep_plankton(grid, community->plankton, 0);
              print_plankton_summary(grid, community->plankton, 0);
      }
 
      /*Pelagic*/
      for(s=0 ; s<n ; s++){
-             if(grid->toutmin == 0){
+             if(write_files && grid->toutmin == 0){
                      print_timestep_pelagic(run, grid, &(community->pelagic[s]), 0);
                      print_pelagic_summary(grid, &(community->pelagic[s]), 0);
              }
@@ -1992,13 +2179,13 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      if(run->no_benthic!=0){
              /*Benthic*/
              for(b=0 ; b<c ; b++){
-                     if(grid->toutmin == 0){
+                     if(write_files && grid->toutmin == 0){
                              print_timestep_benthic(grid, &(community->benthic[b]), 0);
                              print_benthic_summary(grid, &(community->benthic[b]), 0);
                      }
              }
              /*Detritus*/
-             if(grid->toutmin == 0){
+             if(write_files && grid->toutmin == 0){
                      print_detritus_summary(grid, community->detritus, 0);
              }
      }
@@ -2147,6 +2334,9 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
              /*Print current timestep values to files*/
              if(grid->t_values[j]>=grid->toutmin && grid->t_values[j]<=grid->toutmax){
                      if(j%((int)rint(grid->toutstep/grid->tstep))==0){
+                             capture_output(run, grid, community, j);
+                     }
+                     if(write_files && j%((int)rint(grid->toutstep/grid->tstep))==0){
                              
                              print_timestep_plankton(grid, community->plankton,j);
                              print_plankton_summary(grid, community->plankton, j);
@@ -2166,13 +2356,15 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      }
      
      /*Print final detailed timestep*/
-     print_detailed_plankton(grid, community->plankton, t-1);
-     for(s=0 ; s<n ; s++){
-             print_detailed_pelagic(run, grid, &(community->pelagic[s]), t-1);
-     }
-     if(run->no_benthic!=0){
-             for(b=0 ; b<c  ;b++){
-                     print_detailed_benthic(grid, &(community->benthic[b]),t-1);
+     if(write_files){
+             print_detailed_plankton(grid, community->plankton, t-1);
+             for(s=0 ; s<n ; s++){
+                     print_detailed_pelagic(run, grid, &(community->pelagic[s]), t-1);
+             }
+             if(run->no_benthic!=0){
+                     for(b=0 ; b<c  ;b++){
+                             print_detailed_benthic(grid, &(community->benthic[b]),t-1);
+                     }
              }
      }
 
