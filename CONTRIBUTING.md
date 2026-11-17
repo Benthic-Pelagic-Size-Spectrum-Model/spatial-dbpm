@@ -28,7 +28,9 @@ pushes to `main`, for anyone.
 
 ## Expectations for engine changes
 
-- The C engine is `dbpmr/src/SizeSpectra.c`. Changes there get careful maintainer review.
+- The C engine is in `dbpmr/src/`: `SizeSpectra.c` (R entry point, time loop and size solver) and the files it
+  draws on (`setup.c`, `biology.c`, `movement.c`, `fishing.c`, `file_outputs.c`, `memory_inputs.c`,
+  `memory_outputs.c`, `common.c`). Changes there get careful maintainer review.
 - Add or update **tests** (`dbpmr/tests/testthat/`) for any behavioural change.
 - **Preserve the 0-D baseline:** a `spatial_dim = 0` run must stay bit-identical unless
   the change is deliberately to that path. New engine toggles default to off / identity.
