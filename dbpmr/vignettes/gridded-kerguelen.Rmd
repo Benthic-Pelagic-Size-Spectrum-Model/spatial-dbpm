@@ -139,9 +139,11 @@ run_cell <- function(depth, cint, cslp, ctex, ctob, cexp, nyr, state = NULL) {
 ```
 
 Let's spin a handful of cells (a north–south transect) to equilibrium and look at
-the pelagic and benthic biomass they support:
+the pelagic and benthic biomass they support. Each cell runs a 25-year transient,
+so (like the calibration in §5) the code is shown but not executed when the package
+is checked — the region result below is the shipped output of exactly this loop:
 
-```{r}
+```{r eval = FALSE}
 sel <- cells[order(cells$lat), ][round(seq(1, nrow(cells), length.out = 5)), ]
 demo <- lapply(seq_len(nrow(sel)), function(i) {
   co <- which(round(cells$lon) == round(sel$lon[i]) & round(cells$lat) == round(sel$lat[i]))[1]
