@@ -71,7 +71,7 @@ test_that("Setup.ts validates intercept/slope arrays", {
   pl <- Setup.Plankton(run, filename = "plankton", ts_flag = TRUE)
   ok <- array(0.01, c(3, 2, 12)); sl <- array(-1, c(3, 2, 12)); lay <- mon(seq(0, 1, 1/48))
   out <- Setup.ts(pl, run, grid, intercept = ok, slope = sl, layer = lay)
-  expect_s4_class(out, "plankton.params"); expect_equal(dim(out@ts_arrays$intercept), c(3L, 2L, 12L))
+  expect_s4_class(out, "plankton.params"); expect_equal(dim(out@arrays$ts$intercept), c(3L, 2L, 12L))
   expect_error(Setup.ts(pl, run, grid, intercept = array(0.01, c(2, 3, 12)), slope = sl, layer = lay), "x = 3, y = 2")
   expect_error(Setup.ts(pl, run, grid, intercept = ok, slope = sl), "12 layers but the run has 49 time points")
   expect_error(Setup.ts(pl, run, grid, intercept = ok, slope = sl, layer = c(lay[-1], 13)), "between 1 and the number of layers")

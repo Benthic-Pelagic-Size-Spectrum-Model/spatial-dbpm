@@ -5,15 +5,25 @@
 #' function of time/space or read from a CSV data file. Exactly one of `func` or
 #' `dataname` must be given.
 #'
+#' The values can instead be held in memory, with `eggs`. No file is written and
+#' the function returns the species object carrying the array, which must be
+#' assigned and passed on to [SizeSpectrum()]:
+#' `pe <- Setup.Rep(pe, run, grid, eggs = e, time = 0:49)`.
+#'
 #' @param species A pelagic or benthic parameter object.
 #' @param run.in A [run.params] object.
 #' @param grid.in A [grid.params] object.
 #' @param func A function of `(t, x, y)` returning reproduction values.
 #' @param dataname Path to a CSV file of reproduction values (first line is the
 #'   file type).
+#' @param eggs Reproduction values held in memory: a single number, a vector with
+#'   one value per layer, a matrix `[x, y]` or an array `[x, y, layer]`.
+#' @param layer,time Used with `eggs`: which layer each model time point uses,
+#'   as for [Setup.fishing()].
 #'
-#' @return Invisibly `NULL`; called for the side effect of writing the input
-#'   file under the run's `Input` directory.
+#' @return Invisibly `NULL` when writing the input file under the run's `Input`
+#'   directory. When `eggs` is given, invisibly the species object with the array
+#'   attached (assign it).
 #' @note This function is only needed for species with `rep_method = 1`, which
 #'   require a reproduction time series. The package does not ship these input
 #'   data; the user must generate them here (from `func` or `dataname`) before
@@ -21,13 +31,22 @@
 #' @seealso [Setup.ts()], [Setup.fishing()]
 #' @export
 `Setup.Rep`<-
-function(species, run.in, grid.in, func, dataname){
+function(species, run.in, grid.in, func, dataname, eggs, layer, time){
 #func is a function of the variables m, x, y, and z
 #dataname is a filename containing either a vector of intercepts, two vectors of intercepts and slopes or a full matrix of ts values
 
 #Input checking stuff
 if(species@speciestype=='plankton' || species@speciestype=='detritus') stop ("Reproduction can only be applied to pelagic or benthic systems")
 if(species@rep_method!=1) stop ("Reproduction values are not to be specified since rep_method!=1")
+
+#Reproduction values held in memory as an array: nothing is written
+if(!missing(eggs)){
+  if(!missing(func) || !missing(dataname)) stop("eggs cannot be combined with func or dataname")
+  a <- xyl_array(eggs, "eggs", grid.in)
+  species@arrays$reproduction <- list(values = a, layer = layer_index(grid.in, dim(a)[3], if(missing(layer)) NULL else layer, if(missing(time)) NULL else time))
+  return(invisible(species))
+}
+if(!missing(layer) || !missing(time)) stop("layer and time are only used with eggs")
 
 if(missing(func) && missing(dataname)) stop("A function or data for the reproduction values must be given")
 if(!missing(func) && !missing(dataname)) stop("Only one of a function or data for the reproduction values must be given")

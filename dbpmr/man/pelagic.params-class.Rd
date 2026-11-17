@@ -10,3 +10,12 @@ An S4 object holding the physiological, feeding-preference, reproduction and
 fishing parameters for a pelagic predator species. Usually created with
 \code{\link[=Setup.Pelagic]{Setup.Pelagic()}}.
 }
+\details{
+The \code{arrays} slot is a list of the inputs of this species that are held in memory
+instead of being written to text files: \code{initial}
+(starting abundance, \code{\link[=Setup.ts]{Setup.ts()}}), \code{fishing} (\code{\link[=Setup.fishing]{Setup.fishing()}}),
+\code{reproduction} (\code{\link[=Setup.Rep]{Setup.Rep()}}), \code{refuge} (\code{\link[=Setup.Refuge]{Setup.Refuge()}}) and \code{pref_ben}
+(per-cell benthic preference, \code{\link[=Setup.CellParams]{Setup.CellParams()}}). It is empty when none
+has been supplied. The functions that fill it return the object, which must
+be assigned.
+}

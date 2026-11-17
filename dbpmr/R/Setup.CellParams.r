@@ -17,6 +17,10 @@
 #' not called the scalar parameter is used in every cell and results are
 #' unchanged.
 #'
+#' With `file = FALSE` the values are held in memory: no file is written and the
+#' function returns the species object, which must be assigned and passed on to
+#' [SizeSpectrum()]: `pe <- Setup.CellParams(pe, run, grid, pref_ben = p, file = FALSE)`.
+#'
 #' @param species A pelagic species parameter object (from [Setup.Pelagic()]).
 #' @param run.in A [run.params] object.
 #' @param grid.in A [grid.params] object.
@@ -25,8 +29,12 @@
 #'   position; for a 1-D or 0-D run it has a single column), or a function of
 #'   `(x, y)` returning the value at that grid position. Values must be finite and
 #'   non-negative.
+#' @param file `TRUE` (the default) writes the values to their input file.
+#'   `FALSE` holds them in memory and returns the species object.
 #'
-#' @return Invisibly, the `x` by `y` matrix that was written; called for the side
+#' @return With `file = FALSE`, invisibly the species object with the values
+#'   attached (assign it). With `file = TRUE`,
+#'   invisibly the `x` by `y` matrix that was written; called for the side
 #'   effect of writing `<run>/Input/<species>_cellpar.txt` (a header line naming
 #'   the columns, then one row per cell with x as the outer and y as the inner
 #'   index, the same cell order as [Setup.ts()] and per-cell forcing).
@@ -43,7 +51,7 @@
 #' }
 #' @export
 `Setup.CellParams` <-
-function(species, run.in, grid.in, pref_ben){
+function(species, run.in, grid.in, pref_ben, file = TRUE){
   if(species@speciestype != "pelagic")
     stop("Setup.CellParams currently applies to a pelagic species only")
   if(missing(pref_ben)) stop("pref_ben must be given")
@@ -60,6 +68,11 @@ function(species, run.in, grid.in, pref_ben){
                    nx, ny, nrow(pb), ncol(pb)))
   }
   if(any(!is.finite(pb)) || any(pb < 0)) stop("pref_ben values must be finite and non-negative")
+  if(!isTRUE(file)){
+    storage.mode(pb) <- "double"
+    species@arrays$pref_ben <- pb
+    return(invisible(species))
+  }
   dir.create(file.path(run.in@filename, "Input"), showWarnings = FALSE, recursive = TRUE)
   # one row per cell, x outer / y inner
   writeLines(c("pref_ben", formatC(as.vector(t(pb)), format = "g", digits = 17)),

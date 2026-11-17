@@ -211,6 +211,23 @@ void setup_plankton(RUN *run, GRID *grid, PLANKTON *plankton, double *pla_params
              plankton->arr=arr;
              plankton_from_arrays(grid, plankton);
      }
+     else if(arr!=NULL && arr->pla_initial!=NULL){
+             /*Starting plankton abundance supplied from R as an array [x][y][plankton size class]: no _ts file is read*/
+             int np=plankton->iplamax-plankton->iplamin+1;
+             if(plankton->initial_flag!=1 || plankton->ts_flag==1){
+                     error("a starting plankton array was supplied but the plankton initial_flag is not set (or ts_flag is)\n");
+             }
+             if(arr->pla_initial_len!=(R_xlen_t)x*(R_xlen_t)y*(R_xlen_t)np){
+                     error("the starting plankton array holds %ld values; expected x*y*size classes = %d*%d*%d\n",(long)arr->pla_initial_len,x,y,np);
+             }
+             for(i=0 ; i<np ; i++){
+                     for(k=0 ; k<x ; k++){
+                             for(l=0 ; l<y ; l++){
+                                     plankton->u_values[plankton->iplamin+i][k][l]=arr->pla_initial[(R_xlen_t)k+(R_xlen_t)x*((R_xlen_t)l+(R_xlen_t)y*(R_xlen_t)i)];
+                             }
+                     }
+             }
+     }
      else if(plankton->initial_flag==1 || plankton->ts_flag==1){
              /*Create plankton input filename*/
              snprintf(plankton->fname_ts, sizeof(plankton->fname_ts),"%s/Input/%s_%s.txt",run->filename,plankton->filename,"ts");
@@ -508,7 +525,24 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
      }
           
      /*Setup initial values for u(m,0,x,y)*/
-     if(pelagic->initial_flag==1){
+     if(pelagic->in!=NULL && pelagic->in->initial!=NULL){
+             /*Starting abundance supplied from R as an array [x][y][size class of the species]: no _ts file is read*/
+             int ns=pelagic->ipelmax-pelagic->ipelmin+1;
+             if(pelagic->initial_flag!=1 || pelagic->ts_flag==1){
+                     error("a starting array was supplied for %s but its initial_flag is not set (or ts_flag is)\n",pelagic->filename);
+             }
+             if(pelagic->in->initial_len!=(R_xlen_t)x*(R_xlen_t)y*(R_xlen_t)ns){
+                     error("the starting array of %s holds %ld values; expected x*y*size classes = %d*%d*%d\n",pelagic->filename,(long)pelagic->in->initial_len,x,y,ns);
+             }
+             for(i=0 ; i<ns ; i++){
+                     for(k=0 ; k<x ; k++){
+                             for(l=0 ; l<y ; l++){
+                                     pelagic->u_values[pelagic->ipelmin+i][k][l]=pelagic->in->initial[(R_xlen_t)k+(R_xlen_t)x*((R_xlen_t)l+(R_xlen_t)y*(R_xlen_t)i)];
+                             }
+                     }
+             }
+     }
+     else if(pelagic->initial_flag==1){
              int MAX_LEN=grid->mnum*15; //this is the upper bound for the row length in characters
              char *input;               //input string to store line as string
              input=(char *)safe_malloc(MAX_LEN*sizeof(char),__LINE__,__FILE__); 
@@ -578,7 +612,13 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
                              }
                      }
              }
-             if(pelagic->rep_method==1){
+             if(pelagic->rep_method==1 && pelagic->in!=NULL && pelagic->in->rep!=NULL){
+                     /*Egg density supplied from R as an array [x][y][layer]: no _rep_ts file is opened*/
+                     if(pelagic->in->rep_len!=(R_xlen_t)x*(R_xlen_t)y*(R_xlen_t)pelagic->in->rep_nlayer){
+                             error("the reproduction array of %s holds %ld values; expected x*y*layers = %d*%d*%d\n",pelagic->filename,(long)pelagic->in->rep_len,x,y,pelagic->in->rep_nlayer);
+                     }
+             }
+             else if(pelagic->rep_method==1){
                      /*Create pelagic fishing input filename*/
                      snprintf(pelagic->fname_rep_ts, sizeof(pelagic->fname_rep_ts),"%s/Input/%s_%s.txt",run->filename,pelagic->filename,"rep_ts");
                      pelagic->fptr_rep_ts=safe_fopen(pelagic->fname_rep_ts,"r",__LINE__,__FILE__);
@@ -600,7 +640,19 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
      pelagic->refuge_on = 0;
      pelagic->refuge_min_a = 0.0;
      { char *e = getenv("REFUGE_MIN_A"); if(e) pelagic->refuge_min_a = atof(e); }
-     {
+     if(pelagic->in!=NULL && pelagic->in->refuge!=NULL){
+             /*Refuge density supplied from R as an array [x][y][size class of the grid], so it can differ between
+               cells: no _refuge file is read and the floor comes with the array, not from the environment*/
+             R_xlen_t j, len=(R_xlen_t)x*(R_xlen_t)y*(R_xlen_t)grid->mnum;
+             if(pelagic->in->refuge_len!=len){
+                     error("the refuge array of %s holds %ld values; expected x*y*size classes = %d*%d*%d\n",pelagic->filename,(long)pelagic->in->refuge_len,x,y,grid->mnum);
+             }
+             pelagic->refuge_min_a=pelagic->in->refuge_min_a;
+             for(j=0 ; j<len ; j++){
+                     if(pelagic->in->refuge[j]>0){ pelagic->refuge_on = 1; break; }   /*only activate when a positive refuge is supplied*/
+             }
+     }
+     else{
              char rfn[256];
              snprintf(rfn, sizeof(rfn), "%s/Input/%s_refuge.txt", run->filename, pelagic->filename);
              FILE *rf = fopen(rfn, "r");
@@ -621,7 +673,20 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
         static (read once). Absent file or column -> pref_ben_c stays NULL -> the scalar pref_ben is
         used in every cell -> bit-identical to standard dbpmr. */
      pelagic->pref_ben_c = NULL;
-     {
+     if(pelagic->in!=NULL && pelagic->in->pref_ben!=NULL){
+             /*Per-cell benthic feeding preference supplied from R as a matrix [x][y]: no _cellpar file is read*/
+             if(pelagic->in->pref_ben_len!=(R_xlen_t)x*(R_xlen_t)y){
+                     error("the per-cell pref_ben of %s holds %ld values; expected x*y = %d*%d\n",pelagic->filename,(long)pelagic->in->pref_ben_len,x,y);
+             }
+             pelagic->pref_ben_c=(double **)safe_malloc(x*sizeof(double *),__LINE__,__FILE__);
+             for(k=0 ; k<x ; k++){
+                     pelagic->pref_ben_c[k]=(double *)safe_malloc(y*sizeof(double),__LINE__,__FILE__);
+                     for(l=0 ; l<y ; l++){
+                             pelagic->pref_ben_c[k][l]=pelagic->in->pref_ben[(R_xlen_t)k+(R_xlen_t)x*(R_xlen_t)l];
+                     }
+             }
+     }
+     else{
              char cfn[256];
              snprintf(cfn, sizeof(cfn), "%s/Input/%s_cellpar.txt", run->filename, pelagic->filename);
              FILE *cf = fopen(cfn, "r");
@@ -822,7 +887,24 @@ void setup_benthic(RUN *run, GRID *grid, BENTHIC *benthic, double *ben_params, c
      }
           
      /*Setup initial values for u(m,0,x,y)*/
-     if(benthic->initial_flag==1){
+     if(benthic->in!=NULL && benthic->in->initial!=NULL){
+             /*Starting abundance supplied from R as an array [x][y][size class of the species]: no _ts file is read*/
+             int ns=benthic->ibenmax-benthic->ibenmin+1;
+             if(benthic->initial_flag!=1 || benthic->ts_flag==1){
+                     error("a starting array was supplied for %s but its initial_flag is not set (or ts_flag is)\n",benthic->filename);
+             }
+             if(benthic->in->initial_len!=(R_xlen_t)x*(R_xlen_t)y*(R_xlen_t)ns){
+                     error("the starting array of %s holds %ld values; expected x*y*size classes = %d*%d*%d\n",benthic->filename,(long)benthic->in->initial_len,x,y,ns);
+             }
+             for(i=0 ; i<ns ; i++){
+                     for(k=0 ; k<x ; k++){
+                             for(l=0 ; l<y ; l++){
+                                     benthic->u_values[benthic->ibenmin+i][k][l]=benthic->in->initial[(R_xlen_t)k+(R_xlen_t)x*((R_xlen_t)l+(R_xlen_t)y*(R_xlen_t)i)];
+                             }
+                     }
+             }
+     }
+     else if(benthic->initial_flag==1){
              int MAX_LEN=grid->mnum*15; //this is the upper bound for the row length in characters
              char *input;               //input string to store line as string
              input=(char *)safe_malloc(MAX_LEN*sizeof(char),__LINE__,__FILE__); 
@@ -892,7 +974,13 @@ void setup_benthic(RUN *run, GRID *grid, BENTHIC *benthic, double *ben_params, c
                              }
                      }
              }
-             if(benthic->rep_method==1){
+             if(benthic->rep_method==1 && benthic->in!=NULL && benthic->in->rep!=NULL){
+                     /*Egg density supplied from R as an array [x][y][layer]: no _rep_ts file is opened*/
+                     if(benthic->in->rep_len!=(R_xlen_t)x*(R_xlen_t)y*(R_xlen_t)benthic->in->rep_nlayer){
+                             error("the reproduction array of %s holds %ld values; expected x*y*layers = %d*%d*%d\n",benthic->filename,(long)benthic->in->rep_len,x,y,benthic->in->rep_nlayer);
+                     }
+             }
+             else if(benthic->rep_method==1){
                      /*Create benthic fishing input filename*/
                      snprintf(benthic->fname_rep_ts, sizeof(benthic->fname_rep_ts),"%s/Input/%s_%s.txt",run->filename,benthic->filename,"rep_ts");
                      benthic->fptr_rep_ts=safe_fopen(benthic->fname_rep_ts,"r",__LINE__,__FILE__);
@@ -949,7 +1037,21 @@ void setup_detritus(RUN *run, GRID *grid, DETRITUS *detritus, double *det_params
           
      /*Setup initial values for w(0,x,y)*/
      /*Use user defined values*/
-     if(detritus->initial_flag==1){
+     if(run->arr!=NULL && run->arr->det_initial!=NULL){
+             /*Starting detritus biomass supplied from R as a matrix [x][y]: no _ts file is read*/
+             if(detritus->initial_flag!=1 || detritus->ts_flag==1){
+                     error("a starting detritus matrix was supplied but the detritus initial_flag is not set (or ts_flag is)\n");
+             }
+             if(run->arr->det_initial_len!=(R_xlen_t)x*(R_xlen_t)y){
+                     error("the starting detritus matrix holds %ld values; expected x*y = %d*%d\n",(long)run->arr->det_initial_len,x,y);
+             }
+             for(k=0 ; k<x ; k++){
+                     for(l=0 ; l<y ; l++){
+                             detritus->w_values[k][l]=run->arr->det_initial[(R_xlen_t)k+(R_xlen_t)x*(R_xlen_t)l];
+                     }
+             }
+     }
+     else if(detritus->initial_flag==1){
              int MAX_LEN=15; //this is the upper bound for the row length in characters
              char *input;               //input string to store line as string
              input=(char *)safe_malloc(MAX_LEN*sizeof(char),__LINE__,__FILE__); 

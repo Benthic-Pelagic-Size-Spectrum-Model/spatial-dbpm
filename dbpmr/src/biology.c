@@ -25,10 +25,12 @@ void calculate_g_and_mu(RUN *run, GRID *grid, COMMUNITY *community)
      for(s=0 ; s<n ; s++){
              if(!community->pelagic[s].refuge_on) continue;
              double minA=community->pelagic[s].refuge_min_a;
+             const double *rfc=(community->pelagic[s].in!=NULL) ? community->pelagic[s].in->refuge : NULL;   /*refuge per cell, [x][y][m]*/
              for(i=0 ; i<grid->mnum ; i++){
                      double rf=community->pelagic[s].refuge_values[i];
                      for(k=0 ; k<x ; k++){
                              for(l=0 ; l<y ; l++){
+                                     if(rfc!=NULL) rf=rfc[(R_xlen_t)k+(R_xlen_t)x*((R_xlen_t)l+(R_xlen_t)y*(R_xlen_t)i)];
                                      double comp=community->pelagic[s].u_values[i][k][l];
                                      double a=(rf>0 && comp>0) ? 1.0-rf/comp : 1.0;
                                      if(a<minA) a=minA; if(a>1.0) a=1.0; if(a<0.0) a=0.0;
@@ -414,8 +416,18 @@ void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
      
      /*Pelagic Reproduction*/
      for(s=0 ; s<n ; s++){
+             //egg values supplied from R as an array [x][y][layer]: the layer of the current time point
+             if(community->pelagic[s].rep_method==1 && community->pelagic[s].in!=NULL && community->pelagic[s].in->rep!=NULL){
+                     const SPECIES_INPUT *in=community->pelagic[s].in;
+                     R_xlen_t layer=in->rep_layer[run->rep_block < in->rep_nblock ? run->rep_block : in->rep_nblock-1];
+                     for(k=0 ; k<x ; k++){
+                             for(l=0 ; l<y ; l++){
+                                     community->pelagic[s].reproduction[k][l]=in->rep[(R_xlen_t)k+(R_xlen_t)x*((R_xlen_t)l+(R_xlen_t)y*layer)];
+                             }
+                     }
+             }
              //read in egg values from file
-             if(community->pelagic[s].rep_method==1){
+             else if(community->pelagic[s].rep_method==1){
                      int MAX_LEN=15; //this is the upper bound for the row length in characters
                      char *input;               //input string to store line as string
                      input=(char *)safe_malloc(MAX_LEN*sizeof(char),__LINE__,__FILE__); 
@@ -488,8 +500,18 @@ void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
      /*Benthic Reproduction*/
      if(run->no_benthic!=0){
              for(b=0 ; b<c ; b++){
+                     //egg values supplied from R as an array [x][y][layer]: the layer of the current time point
+                     if(community->benthic[b].rep_method==1 && community->benthic[b].in!=NULL && community->benthic[b].in->rep!=NULL){
+                             const SPECIES_INPUT *in=community->benthic[b].in;
+                             R_xlen_t layer=in->rep_layer[run->rep_block < in->rep_nblock ? run->rep_block : in->rep_nblock-1];
+                             for(k=0 ; k<x ; k++){
+                                     for(l=0 ; l<y ; l++){
+                                             community->benthic[b].reproduction[k][l]=in->rep[(R_xlen_t)k+(R_xlen_t)x*((R_xlen_t)l+(R_xlen_t)y*layer)];
+                                     }
+                             }
+                     }
                      //read in egg values from file
-                     if(community->benthic[b].rep_method==1){
+                     else if(community->benthic[b].rep_method==1){
                              int MAX_LEN=15; //this is the upper bound for the row length in characters
                              char *input;               //input string to store line as string
                              input=(char *)safe_malloc(MAX_LEN*sizeof(char),__LINE__,__FILE__); 
@@ -537,4 +559,6 @@ void calculate_reproduction(RUN *run, GRID *grid, COMMUNITY *community)
                      }
              }
      }
+
+     run->rep_block++;   /*one call per model time point (the first is the initial state)*/
 }
