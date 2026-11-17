@@ -4,7 +4,14 @@
 \alias{Setup.Forcing}
 \title{Supply environmental forcing as arrays}
 \usage{
-Setup.Forcing(run.in, grid.in, ..., layer = NULL, time = NULL)
+Setup.Forcing(
+  run.in,
+  grid.in,
+  ...,
+  layer = NULL,
+  time = NULL,
+  temp_on_mort = NULL
+)
 }
 \arguments{
 \item{run.in}{A \link{run.params} object.}
@@ -19,6 +26,11 @@ time point, or when no channel varies in time.}
 
 \item{time}{Instead of \code{layer}: the start time (in model years) of each
 layer; each time point uses the latest layer that has started.}
+
+\item{temp_on_mort}{Whether the temperature multipliers also scale background
+mortality (\code{TRUE}) or act on feeding only (\code{FALSE}). The default, \code{NULL},
+takes the choice from the \code{TEMP_ON_MORT} environment variable (\code{TRUE} if
+that is not set), as before this argument existed.}
 }
 \value{
 An object of class \code{dbpmr_forcing} to pass to \code{\link[=SizeSpectrum]{SizeSpectrum()}} as
@@ -35,8 +47,7 @@ Channels are given as named arguments. The recognised names are those of the
 forcing file:
 \itemize{
 \item \code{pel_tempeff}, \code{ben_tempeff}: temperature multipliers on pelagic and benthic
-feeding (and on background mortality unless the \code{TEMP_ON_MORT} environment
-variable is \code{0});
+feeding, and on background mortality unless \code{temp_on_mort} is \code{FALSE};
 \item \code{sinking_rate}: fraction of surface-origin detritus reaching the sea floor;
 \item \code{depth}: water-column depth (m);
 \item \code{export_attn}, \code{export_gamma}, \code{export_magg}: size-dependent export;

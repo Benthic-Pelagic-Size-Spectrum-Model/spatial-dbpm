@@ -15,7 +15,8 @@ Setup.ts(
   slope,
   layer,
   time,
-  initial
+  initial,
+  series
 )
 }
 \arguments{
@@ -40,11 +41,11 @@ body mass; \code{intercept} is the abundance density at \code{m = 0}, not its
 logarithm). For a 1-D run a matrix \verb{[x, layer]} and for a 0-D run a vector
 with one value per layer are also accepted.}
 
-\item{layer}{Used with \code{intercept}/\code{slope}: for each model time point
+\item{layer}{Used with \code{intercept}/\code{slope} or \code{series}: for each model time point
 (\code{seq(0, tmax, tstep)}) the layer it uses, as whole numbers from 1. May be
 omitted when there is one layer per time point, or a single layer.}
 
-\item{time}{Used with \code{intercept}/\code{slope} instead of \code{layer}: the start time
+\item{time}{Used with \code{intercept}/\code{slope} or \code{series} instead of \code{layer}: the start time
 (in model years) of each layer; each time point uses the latest layer that
 has started.}
 
@@ -54,11 +55,18 @@ abundance density in each size class of that species
 (\code{seq(mmin, mmax, by = mstep)}), as a vector (the same in every cell) or an
 array \verb{[x, y, size class]}. For the detritus: the biomass, as a single
 number or a matrix \verb{[x, y]}.}
+
+\item{series}{Values forced through time, held in memory (\code{ts_flag = TRUE}).
+For the plankton or a pelagic or benthic species: the abundance density as
+an array \verb{[x, y, size class, layer]}, or a matrix \verb{[size class, layer]}
+applied to every cell. For the detritus: the biomass as a single number, one
+value per layer, a matrix \verb{[x, y]} or an array \verb{[x, y, layer]}. \code{layer} or
+\code{time} says which layer each model time point uses.}
 }
 \value{
 Invisibly \code{NULL} when writing an input file under the run's \code{Input}
-directory. When \code{intercept} and \code{slope}, or \code{initial}, are given, invisibly
-the object with the arrays attached (assign it).
+directory. When \code{intercept} and \code{slope}, \code{initial} or \code{series} are given,
+invisibly the object with the arrays attached (assign it).
 }
 \description{
 Generates the \verb{_ts.txt} input file used to seed a species' initial size
@@ -77,6 +85,10 @@ Starting values can also be held in memory, with \code{initial}, for the plankto
 a pelagic or benthic species, or the detritus. Again no file is written and
 the returned object must be assigned:
 \code{pe <- Setup.ts(pe, run, grid, initial = u0)}.
+
+A group whose values are forced through time (\code{ts_flag = TRUE}) can be given
+its whole series in memory with \code{series}, in the same way:
+\code{be <- Setup.ts(be, run, grid, series = u, time = 0:49)}.
 
 For an initial condition (\code{ts_flag = FALSE}) the supplied \code{mat} /
 data may have either a single row, applied uniformly to every spatial cell,

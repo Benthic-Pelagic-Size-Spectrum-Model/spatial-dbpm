@@ -42,7 +42,8 @@ Setup.Pelagic(
   initial_flag = FALSE,
   ts_flag = FALSE,
   fishing_flag = FALSE,
-  filename
+  filename,
+  imm_frac = NA
 )
 }
 \arguments{
@@ -119,6 +120,13 @@ initial-condition, time-series and fishing input files are supplied.}
 
 \item{filename}{Character string naming the species (and its output
 directory). Required.}
+
+\item{imm_frac}{Recruitment floor, for \code{rep_method} 2 or 3: in each cell,
+recruitment is not allowed to fall below this fraction of the highest
+recruitment that cell reached before the floor first applied. It stands for
+larvae arriving from outside the modelled region. \code{0} switches it off. The
+default, \code{NA}, takes the value from the \code{PEL_IMM_FRAC} environment variable
+(off if that is not set), as before this argument existed.}
 }
 \value{
 A \link{pelagic.params} object.

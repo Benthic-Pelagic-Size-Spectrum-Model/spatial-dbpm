@@ -14,6 +14,11 @@
 #' `<group>_predation` for a benthic one. Detritus biomass, when present, is
 #' written as `detritus` with dimensions `[x, y, time]`.
 #'
+#' The parameters of the run (`output$parameters`) are saved as global
+#' attributes named `run.<name>`, `grid.<name>`, `<group>.<name>`,
+#' `forcing.<name>` and `environment.<name>`, so the file records how it was
+#' produced.
+#'
 #' By default `x` and `y` are the model grid coordinates. Supply `x` and `y`
 #' (and `xname`, `yname`, `xunits`, `yunits`) to label the cells differently,
 #' for example with longitude and latitude when the model grid is in metres.
@@ -74,6 +79,19 @@ function(output, file, x = output$x, y = output$y, xname = "x", yname = "y",
   if(!is.null(output$detritus)) ncdf4::ncvar_put(nc, vars$detritus, output$detritus)
   ncdf4::ncatt_put(nc, 0, "title", "dbpmr model output")
   ncdf4::ncatt_put(nc, 0, "source", paste("dbpmr", as.character(utils::packageVersion("dbpmr"))))
+  # the parameters of the run, as global attributes
+  pars <- output$parameters
+  flat <- c(if(!is.null(pars$run)) list(run = pars$run), if(!is.null(pars$grid)) list(grid = pars$grid), pars$groups)
+  for(g in names(flat)) for(nm in names(flat[[g]])){
+    v <- flat[[g]][[nm]]
+    if(length(v) == 0) next
+    if(is.logical(v)) v <- as.integer(v)
+    ncdf4::ncatt_put(nc, 0, paste(g, nm, sep = "."), if(is.numeric(v) && length(v) == 1) v else paste(v, collapse = ", "))
+  }
+  if(length(pars$forcing$channels)) ncdf4::ncatt_put(nc, 0, "forcing.in_memory", paste(pars$forcing$channels, collapse = ", "))
+  if(!is.null(pars$forcing$temp_on_mort)) ncdf4::ncatt_put(nc, 0, "forcing.temp_on_mort", as.integer(pars$forcing$temp_on_mort))
+  for(nm in names(pars$environment)) ncdf4::ncatt_put(nc, 0, paste0("environment.", nm), pars$environment[[nm]])
+  if(!is.null(pars$gravity)) ncdf4::ncatt_put(nc, 0, "gravity.update", pars$gravity$update)
   invisible(file)
 }
 
@@ -84,5 +102,6 @@ print.dbpmr_output <- function(x, ...){
   cat("  groups:", paste(names(x$abundance), collapse = ", "), "\n")
   cat("  variables [x, y, m, t]:", paste(intersect(c("abundance", "growth", "mortality", "predation", "fishing", "catch"), names(x)), collapse = ", "), "\n")
   if(!is.null(x$detritus)) cat("  detritus [x, y, t]\n")
+  if(!is.null(x$parameters)) cat("  parameters: run, grid,", paste(names(x$parameters$groups), collapse = ", "), "\n")
   invisible(x)
 }

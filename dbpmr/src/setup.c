@@ -19,15 +19,18 @@ void setup_run(RUN *run, int *run_params, char *filename)
      /*Create summary output filenames*/
      snprintf(run->fname_summ, sizeof(run->fname_summ),"%s/%s.txt",run->filename,"parameters");
      
-     /*Open output files*/
-     run->fptr_summ=safe_fopen(run->fname_summ,"w",__LINE__,__FILE__);
+     /*Text output files (not created when the output goes to R as arrays only)*/
+     if(run_writes_files(run)){
+             /*Open output files*/
+             run->fptr_summ=safe_fopen(run->fname_summ,"w",__LINE__,__FILE__);
      
-     fprintf(run->fptr_summ,"filetype:      %s\n","parameters");
-     fprintf(run->fptr_summ,"speciestype:   %s\n","NA");
-     fprintf(run->fptr_summ,"\n");
+             fprintf(run->fptr_summ,"filetype:      %s\n","parameters");
+             fprintf(run->fptr_summ,"speciestype:   %s\n","NA");
+             fprintf(run->fptr_summ,"\n");
      
-     /*Close ouput files*/
-     fclose(run->fptr_summ);
+             /*Close ouput files*/
+             fclose(run->fptr_summ);
+     }
 
 }
 
@@ -155,24 +158,27 @@ void setup_plankton(RUN *run, GRID *grid, PLANKTON *plankton, double *pla_params
      snprintf(plankton->fname_r, sizeof(plankton->fname_r),"%s/%s/%s.txt",run->filename,plankton->filename,"results");
      snprintf(plankton->fname_summ, sizeof(plankton->fname_summ),"%s/%s/%s.txt",run->filename,plankton->filename,"summary");
      
-     /*Open output files*/
-     plankton->fptr_r=safe_fopen(plankton->fname_r,"w",__LINE__,__FILE__);
-     plankton->fptr_summ=safe_fopen(plankton->fname_summ,"w",__LINE__,__FILE__);
+     /*Text output files (not created when the output goes to R as arrays only)*/
+     if(run_writes_files(run)){
+             /*Open output files*/
+             plankton->fptr_r=safe_fopen(plankton->fname_r,"w",__LINE__,__FILE__);
+             plankton->fptr_summ=safe_fopen(plankton->fname_summ,"w",__LINE__,__FILE__);
      
-     /*Initialise output files*/
-     fprintf(plankton->fptr_r,"filetype:      %s\n","results");
-     fprintf(plankton->fptr_r,"speciestype:   %s\n","plankton");
-     fprintf(plankton->fptr_r,"\n");
-     print_mass_header(grid, plankton->fptr_r);
+             /*Initialise output files*/
+             fprintf(plankton->fptr_r,"filetype:      %s\n","results");
+             fprintf(plankton->fptr_r,"speciestype:   %s\n","plankton");
+             fprintf(plankton->fptr_r,"\n");
+             print_mass_header(grid, plankton->fptr_r);
      
-     fprintf(plankton->fptr_summ,"filetype:      %s\n","summary");
-     fprintf(plankton->fptr_summ,"speciestype:   %s\n","plankton");
-     fprintf(plankton->fptr_summ,"\n");
-     print_plankton_header(plankton->fptr_summ);
+             fprintf(plankton->fptr_summ,"filetype:      %s\n","summary");
+             fprintf(plankton->fptr_summ,"speciestype:   %s\n","plankton");
+             fprintf(plankton->fptr_summ,"\n");
+             print_plankton_header(plankton->fptr_summ);
      
-     /*Close ouput files*/
-     fclose(plankton->fptr_r);
-     fclose(plankton->fptr_summ);
+             /*Close ouput files*/
+             fclose(plankton->fptr_r);
+             fclose(plankton->fptr_summ);
+     }
      
      /*Setup And Initialise Plankton Abundance Arrays*/
      int i,k,l;
@@ -211,19 +217,24 @@ void setup_plankton(RUN *run, GRID *grid, PLANKTON *plankton, double *pla_params
              plankton->arr=arr;
              plankton_from_arrays(grid, plankton);
      }
-     else if(arr!=NULL && arr->pla_initial!=NULL){
+     else if(plankton->in!=NULL && plankton->in->series!=NULL){
+             /*Plankton abundance forced through time from an R array [x][y][plankton size class][layer]: no _ts file is read*/
+             series_check(plankton->in, plankton->filename, plankton->ts_flag, x, y, plankton->iplamax-plankton->iplamin+1);
+             series_to_u(plankton->in, 0, x, y, plankton->iplamin, plankton->iplamax-plankton->iplamin+1, plankton->u_values);
+     }
+     else if(plankton->in!=NULL && plankton->in->initial!=NULL){
              /*Starting plankton abundance supplied from R as an array [x][y][plankton size class]: no _ts file is read*/
              int np=plankton->iplamax-plankton->iplamin+1;
              if(plankton->initial_flag!=1 || plankton->ts_flag==1){
                      error("a starting plankton array was supplied but the plankton initial_flag is not set (or ts_flag is)\n");
              }
-             if(arr->pla_initial_len!=(R_xlen_t)x*(R_xlen_t)y*(R_xlen_t)np){
-                     error("the starting plankton array holds %ld values; expected x*y*size classes = %d*%d*%d\n",(long)arr->pla_initial_len,x,y,np);
+             if(plankton->in->initial_len!=(R_xlen_t)x*(R_xlen_t)y*(R_xlen_t)np){
+                     error("the starting plankton array holds %ld values; expected x*y*size classes = %d*%d*%d\n",(long)plankton->in->initial_len,x,y,np);
              }
              for(i=0 ; i<np ; i++){
                      for(k=0 ; k<x ; k++){
                              for(l=0 ; l<y ; l++){
-                                     plankton->u_values[plankton->iplamin+i][k][l]=arr->pla_initial[(R_xlen_t)k+(R_xlen_t)x*((R_xlen_t)l+(R_xlen_t)y*(R_xlen_t)i)];
+                                     plankton->u_values[plankton->iplamin+i][k][l]=plankton->in->initial[(R_xlen_t)k+(R_xlen_t)x*((R_xlen_t)l+(R_xlen_t)y*(R_xlen_t)i)];
                              }
                      }
              }
@@ -347,6 +358,7 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
      /*Pelagic Species Flags and Methods*/
      pelagic->rep_method=rep_method;
      {char *e=getenv("PEL_IMM_FRAC"); pelagic->imm_frac = e ? atof(e) : 0.0; pelagic->rec0 = 0.0; pelagic->rec0_frozen = 0;}
+     if(pelagic->in!=NULL && pelagic->in->has_imm_frac) pelagic->imm_frac=pelagic->in->imm_frac;   /*given as a parameter of the species: overrides the environment*/
      pelagic->initial_flag=initial_flag;
      pelagic->ts_flag=ts_flag;
      pelagic->fishing_flag=fishing_flag;
@@ -367,59 +379,62 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
      snprintf(pelagic->fname_fish, sizeof(pelagic->fname_fish),"%s/%s/%s.txt",run->filename,pelagic->filename,"fishing");
      snprintf(pelagic->fname_summ, sizeof(pelagic->fname_summ),"%s/%s/%s.txt",run->filename,pelagic->filename,"summary");
      
-     /*Open output files*/
-     pelagic->fptr_r=safe_fopen(pelagic->fname_r,"w",__LINE__,__FILE__);
-     pelagic->fptr_g=safe_fopen(pelagic->fname_g,"w",__LINE__,__FILE__);
-     pelagic->fptr_m=safe_fopen(pelagic->fname_m,"w",__LINE__,__FILE__);
-     pelagic->fptr_pred=(FILE **)safe_malloc(n*sizeof(FILE *),__LINE__,__FILE__);
-     for(s=0 ; s<n ; s++){
-             pelagic->fptr_pred[s]=safe_fopen(pelagic->fname_pred[s],"w",__LINE__,__FILE__);
-     }
-     pelagic->fptr_fish=safe_fopen(pelagic->fname_fish,"w",__LINE__,__FILE__);
-     pelagic->fptr_summ=safe_fopen(pelagic->fname_summ,"w",__LINE__,__FILE__);
+     /*Text output files (not created when the output goes to R as arrays only)*/
+     if(run_writes_files(run)){
+             /*Open output files*/
+             pelagic->fptr_r=safe_fopen(pelagic->fname_r,"w",__LINE__,__FILE__);
+             pelagic->fptr_g=safe_fopen(pelagic->fname_g,"w",__LINE__,__FILE__);
+             pelagic->fptr_m=safe_fopen(pelagic->fname_m,"w",__LINE__,__FILE__);
+             pelagic->fptr_pred=(FILE **)safe_malloc(n*sizeof(FILE *),__LINE__,__FILE__);
+             for(s=0 ; s<n ; s++){
+                     pelagic->fptr_pred[s]=safe_fopen(pelagic->fname_pred[s],"w",__LINE__,__FILE__);
+             }
+             pelagic->fptr_fish=safe_fopen(pelagic->fname_fish,"w",__LINE__,__FILE__);
+             pelagic->fptr_summ=safe_fopen(pelagic->fname_summ,"w",__LINE__,__FILE__);
 
-     /*Initialise output files*/
-     fprintf(pelagic->fptr_r,"filetype:      %s\n","results");
-     fprintf(pelagic->fptr_r,"speciestype:   %s\n","pelagic");
-     fprintf(pelagic->fptr_r,"\n");
-     print_mass_header(grid, pelagic->fptr_r);
+             /*Initialise output files*/
+             fprintf(pelagic->fptr_r,"filetype:      %s\n","results");
+             fprintf(pelagic->fptr_r,"speciestype:   %s\n","pelagic");
+             fprintf(pelagic->fptr_r,"\n");
+             print_mass_header(grid, pelagic->fptr_r);
      
-     fprintf(pelagic->fptr_g,"filetype:      %s\n","growth");
-     fprintf(pelagic->fptr_g,"speciestype:   %s\n","pelagic");
-     fprintf(pelagic->fptr_g,"\n");
-     print_mass_header(grid, pelagic->fptr_g);
+             fprintf(pelagic->fptr_g,"filetype:      %s\n","growth");
+             fprintf(pelagic->fptr_g,"speciestype:   %s\n","pelagic");
+             fprintf(pelagic->fptr_g,"\n");
+             print_mass_header(grid, pelagic->fptr_g);
      
-     fprintf(pelagic->fptr_m,"filetype:      %s\n","mortality");
-     fprintf(pelagic->fptr_m,"speciestype:   %s\n","pelagic");
-     fprintf(pelagic->fptr_m,"\n");
-     print_mass_header(grid, pelagic->fptr_m);
+             fprintf(pelagic->fptr_m,"filetype:      %s\n","mortality");
+             fprintf(pelagic->fptr_m,"speciestype:   %s\n","pelagic");
+             fprintf(pelagic->fptr_m,"\n");
+             print_mass_header(grid, pelagic->fptr_m);
      
-     for(s=0 ; s<n ; s++){
-             fprintf(pelagic->fptr_pred[s],"filetype:      %s\n","predation");
-             fprintf(pelagic->fptr_pred[s],"speciestype:   %s\n","pelagic");
-             fprintf(pelagic->fptr_pred[s],"\n");
-             print_mass_header(grid, pelagic->fptr_pred[s]);
+             for(s=0 ; s<n ; s++){
+                     fprintf(pelagic->fptr_pred[s],"filetype:      %s\n","predation");
+                     fprintf(pelagic->fptr_pred[s],"speciestype:   %s\n","pelagic");
+                     fprintf(pelagic->fptr_pred[s],"\n");
+                     print_mass_header(grid, pelagic->fptr_pred[s]);
+             }
+     
+             fprintf(pelagic->fptr_fish,"filetype:      %s\n","fishing");
+             fprintf(pelagic->fptr_fish,"speciestype:   %s\n","pelagic");
+             fprintf(pelagic->fptr_fish,"\n");
+             print_mass_header(grid, pelagic->fptr_fish);
+     
+             fprintf(pelagic->fptr_summ,"filetype:      %s\n","summary");
+             fprintf(pelagic->fptr_summ,"speciestype:   %s\n","pelagic");
+             fprintf(pelagic->fptr_summ,"\n");
+             print_pelagic_header(pelagic->fptr_summ);
+     
+             /*Close output files*/
+             fclose(pelagic->fptr_r);
+             fclose(pelagic->fptr_g);
+             fclose(pelagic->fptr_m);
+             for(s=0 ; s<n ; s++){
+                     fclose(pelagic->fptr_pred[s]);
+             }
+             fclose(pelagic->fptr_fish);
+             fclose(pelagic->fptr_summ);
      }
-     
-     fprintf(pelagic->fptr_fish,"filetype:      %s\n","fishing");
-     fprintf(pelagic->fptr_fish,"speciestype:   %s\n","pelagic");
-     fprintf(pelagic->fptr_fish,"\n");
-     print_mass_header(grid, pelagic->fptr_fish);
-     
-     fprintf(pelagic->fptr_summ,"filetype:      %s\n","summary");
-     fprintf(pelagic->fptr_summ,"speciestype:   %s\n","pelagic");
-     fprintf(pelagic->fptr_summ,"\n");
-     print_pelagic_header(pelagic->fptr_summ);
-     
-     /*Close output files*/
-     fclose(pelagic->fptr_r);
-     fclose(pelagic->fptr_g);
-     fclose(pelagic->fptr_m);
-     for(s=0 ; s<n ; s++){
-             fclose(pelagic->fptr_pred[s]);
-     }
-     fclose(pelagic->fptr_fish);
-     fclose(pelagic->fptr_summ);
      
      /*Setup Species Abundance Arrays*/
      int i,k,l;
@@ -525,7 +540,12 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
      }
           
      /*Setup initial values for u(m,0,x,y)*/
-     if(pelagic->in!=NULL && pelagic->in->initial!=NULL){
+     if(pelagic->in!=NULL && pelagic->in->series!=NULL){
+             /*Abundance forced through time from an R array [x][y][size class of the species][layer]: no _ts file is read*/
+             series_check(pelagic->in, pelagic->filename, pelagic->ts_flag, x, y, pelagic->ipelmax-pelagic->ipelmin+1);
+             series_to_u(pelagic->in, 0, x, y, pelagic->ipelmin, pelagic->ipelmax-pelagic->ipelmin+1, pelagic->u_values);
+     }
+     else if(pelagic->in!=NULL && pelagic->in->initial!=NULL){
              /*Starting abundance supplied from R as an array [x][y][size class of the species]: no _ts file is read*/
              int ns=pelagic->ipelmax-pelagic->ipelmin+1;
              if(pelagic->initial_flag!=1 || pelagic->ts_flag==1){
@@ -778,52 +798,55 @@ void setup_benthic(RUN *run, GRID *grid, BENTHIC *benthic, double *ben_params, c
      snprintf(benthic->fname_fish, sizeof(benthic->fname_fish),"%s/%s/%s.txt",run->filename,benthic->filename,"fishing");
      snprintf(benthic->fname_summ, sizeof(benthic->fname_summ),"%s/%s/%s.txt",run->filename,benthic->filename,"summary");
      
-     /*Open output files*/
-     benthic->fptr_r=safe_fopen(benthic->fname_r,"w",__LINE__,__FILE__);
-     benthic->fptr_g=safe_fopen(benthic->fname_g,"w",__LINE__,__FILE__);
-     benthic->fptr_m=safe_fopen(benthic->fname_m,"w",__LINE__,__FILE__);
-     benthic->fptr_pred=safe_fopen(benthic->fname_pred,"w",__LINE__,__FILE__);
-     benthic->fptr_fish=safe_fopen(benthic->fname_fish,"w",__LINE__,__FILE__);
-     benthic->fptr_summ=safe_fopen(benthic->fname_summ,"w",__LINE__,__FILE__);
+     /*Text output files (not created when the output goes to R as arrays only)*/
+     if(run_writes_files(run)){
+             /*Open output files*/
+             benthic->fptr_r=safe_fopen(benthic->fname_r,"w",__LINE__,__FILE__);
+             benthic->fptr_g=safe_fopen(benthic->fname_g,"w",__LINE__,__FILE__);
+             benthic->fptr_m=safe_fopen(benthic->fname_m,"w",__LINE__,__FILE__);
+             benthic->fptr_pred=safe_fopen(benthic->fname_pred,"w",__LINE__,__FILE__);
+             benthic->fptr_fish=safe_fopen(benthic->fname_fish,"w",__LINE__,__FILE__);
+             benthic->fptr_summ=safe_fopen(benthic->fname_summ,"w",__LINE__,__FILE__);
 
-     /*Initialise output files*/
-     fprintf(benthic->fptr_r,"filetype:      %s\n","results");
-     fprintf(benthic->fptr_r,"speciestype:   %s\n","benthic");
-     fprintf(benthic->fptr_r,"\n");
-     print_mass_header(grid, benthic->fptr_r);
+             /*Initialise output files*/
+             fprintf(benthic->fptr_r,"filetype:      %s\n","results");
+             fprintf(benthic->fptr_r,"speciestype:   %s\n","benthic");
+             fprintf(benthic->fptr_r,"\n");
+             print_mass_header(grid, benthic->fptr_r);
      
-     fprintf(benthic->fptr_g,"filetype:      %s\n","growth");
-     fprintf(benthic->fptr_g,"speciestype:   %s\n","benthic");
-     fprintf(benthic->fptr_g,"\n");
-     print_mass_header(grid, benthic->fptr_g);
+             fprintf(benthic->fptr_g,"filetype:      %s\n","growth");
+             fprintf(benthic->fptr_g,"speciestype:   %s\n","benthic");
+             fprintf(benthic->fptr_g,"\n");
+             print_mass_header(grid, benthic->fptr_g);
      
-     fprintf(benthic->fptr_m,"filetype:      %s\n","mortality");
-     fprintf(benthic->fptr_m,"speciestype:   %s\n","benthic");
-     fprintf(benthic->fptr_m,"\n");
-     print_mass_header(grid, benthic->fptr_m);
+             fprintf(benthic->fptr_m,"filetype:      %s\n","mortality");
+             fprintf(benthic->fptr_m,"speciestype:   %s\n","benthic");
+             fprintf(benthic->fptr_m,"\n");
+             print_mass_header(grid, benthic->fptr_m);
      
-     fprintf(benthic->fptr_pred,"filetype:      %s\n","predation");
-     fprintf(benthic->fptr_pred,"speciestype:   %s\n","benthic");
-     fprintf(benthic->fptr_pred,"\n");
-     print_mass_header(grid, benthic->fptr_pred);
+             fprintf(benthic->fptr_pred,"filetype:      %s\n","predation");
+             fprintf(benthic->fptr_pred,"speciestype:   %s\n","benthic");
+             fprintf(benthic->fptr_pred,"\n");
+             print_mass_header(grid, benthic->fptr_pred);
      
-     fprintf(benthic->fptr_fish,"filetype:      %s\n","fishing");
-     fprintf(benthic->fptr_fish,"speciestype:   %s\n","benthic");
-     fprintf(benthic->fptr_fish,"\n");
-     print_mass_header(grid, benthic->fptr_fish);
+             fprintf(benthic->fptr_fish,"filetype:      %s\n","fishing");
+             fprintf(benthic->fptr_fish,"speciestype:   %s\n","benthic");
+             fprintf(benthic->fptr_fish,"\n");
+             print_mass_header(grid, benthic->fptr_fish);
      
-     fprintf(benthic->fptr_summ,"filetype:      %s\n","summary");
-     fprintf(benthic->fptr_summ,"speciestype:   %s\n","benthic");
-     fprintf(benthic->fptr_summ,"\n");
-     print_benthic_header(benthic->fptr_summ);
+             fprintf(benthic->fptr_summ,"filetype:      %s\n","summary");
+             fprintf(benthic->fptr_summ,"speciestype:   %s\n","benthic");
+             fprintf(benthic->fptr_summ,"\n");
+             print_benthic_header(benthic->fptr_summ);
      
-     /*Close output files*/
-     fclose(benthic->fptr_r);
-     fclose(benthic->fptr_g);
-     fclose(benthic->fptr_m);
-     fclose(benthic->fptr_pred);
-     fclose(benthic->fptr_fish);
-     fclose(benthic->fptr_summ);
+             /*Close output files*/
+             fclose(benthic->fptr_r);
+             fclose(benthic->fptr_g);
+             fclose(benthic->fptr_m);
+             fclose(benthic->fptr_pred);
+             fclose(benthic->fptr_fish);
+             fclose(benthic->fptr_summ);
+     }
      
      /*Setup Species Abundance Arrays*/
      int i,k,l;
@@ -887,7 +910,12 @@ void setup_benthic(RUN *run, GRID *grid, BENTHIC *benthic, double *ben_params, c
      }
           
      /*Setup initial values for u(m,0,x,y)*/
-     if(benthic->in!=NULL && benthic->in->initial!=NULL){
+     if(benthic->in!=NULL && benthic->in->series!=NULL){
+             /*Abundance forced through time from an R array [x][y][size class of the species][layer]: no _ts file is read*/
+             series_check(benthic->in, benthic->filename, benthic->ts_flag, x, y, benthic->ibenmax-benthic->ibenmin+1);
+             series_to_u(benthic->in, 0, x, y, benthic->ibenmin, benthic->ibenmax-benthic->ibenmin+1, benthic->u_values);
+     }
+     else if(benthic->in!=NULL && benthic->in->initial!=NULL){
              /*Starting abundance supplied from R as an array [x][y][size class of the species]: no _ts file is read*/
              int ns=benthic->ibenmax-benthic->ibenmin+1;
              if(benthic->initial_flag!=1 || benthic->ts_flag==1){
@@ -1004,16 +1032,19 @@ void setup_detritus(RUN *run, GRID *grid, DETRITUS *detritus, double *det_params
      /*Create detritus output filenames*/
      snprintf(detritus->fname_summ, sizeof(detritus->fname_summ),"%s/%s/%s.txt",run->filename,detritus->filename,"summary");
      
-     /*Open output files*/
-     detritus->fptr_summ=safe_fopen(detritus->fname_summ,"w",__LINE__,__FILE__);
+     /*Text output files (not created when the output goes to R as arrays only)*/
+     if(run_writes_files(run)){
+             /*Open output files*/
+             detritus->fptr_summ=safe_fopen(detritus->fname_summ,"w",__LINE__,__FILE__);
      
-     fprintf(detritus->fptr_summ,"filetype:      %s\n","summary");
-     fprintf(detritus->fptr_summ,"speciestype:   %s\n","detritus");
-     fprintf(detritus->fptr_summ,"\n");
-     print_detritus_header(detritus->fptr_summ);
+             fprintf(detritus->fptr_summ,"filetype:      %s\n","summary");
+             fprintf(detritus->fptr_summ,"speciestype:   %s\n","detritus");
+             fprintf(detritus->fptr_summ,"\n");
+             print_detritus_header(detritus->fptr_summ);
      
-     /*Close output files*/
-     fclose(detritus->fptr_summ);
+             /*Close output files*/
+             fclose(detritus->fptr_summ);
+     }
      
      /*Setup And Initialise detritus Abundance Arrays*/
      int k,l;
@@ -1037,17 +1068,22 @@ void setup_detritus(RUN *run, GRID *grid, DETRITUS *detritus, double *det_params
           
      /*Setup initial values for w(0,x,y)*/
      /*Use user defined values*/
-     if(run->arr!=NULL && run->arr->det_initial!=NULL){
+     if(detritus->in!=NULL && detritus->in->series!=NULL){
+             /*Detritus biomass forced through time from an R array [x][y][layer]: no _ts file is read*/
+             series_check(detritus->in, detritus->filename, detritus->ts_flag, x, y, 1);
+             series_to_w(detritus->in, 0, x, y, detritus->w_values);
+     }
+     else if(detritus->in!=NULL && detritus->in->initial!=NULL){
              /*Starting detritus biomass supplied from R as a matrix [x][y]: no _ts file is read*/
              if(detritus->initial_flag!=1 || detritus->ts_flag==1){
                      error("a starting detritus matrix was supplied but the detritus initial_flag is not set (or ts_flag is)\n");
              }
-             if(run->arr->det_initial_len!=(R_xlen_t)x*(R_xlen_t)y){
-                     error("the starting detritus matrix holds %ld values; expected x*y = %d*%d\n",(long)run->arr->det_initial_len,x,y);
+             if(detritus->in->initial_len!=(R_xlen_t)x*(R_xlen_t)y){
+                     error("the starting detritus matrix holds %ld values; expected x*y = %d*%d\n",(long)detritus->in->initial_len,x,y);
              }
              for(k=0 ; k<x ; k++){
                      for(l=0 ; l<y ; l++){
-                             detritus->w_values[k][l]=run->arr->det_initial[(R_xlen_t)k+(R_xlen_t)x*(R_xlen_t)l];
+                             detritus->w_values[k][l]=detritus->in->initial[(R_xlen_t)k+(R_xlen_t)x*(R_xlen_t)l];
                      }
              }
      }

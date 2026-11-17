@@ -38,7 +38,7 @@ test_that("output arrays hold exactly what the text result files hold", {
   wd <- tempfile("out"); dir.create(wd); old <- setwd(wd); on.exit(setwd(old), add = TRUE)
   out <- run_out("both")
   expect_s3_class(out, "dbpmr_output")
-  expect_named(out, c("t", "x", "y", "m", "abundance", "growth", "mortality", "predation", "fishing", "catch", "detritus"))
+  expect_named(out, c("t", "x", "y", "m", "abundance", "growth", "mortality", "predation", "fishing", "catch", "detritus", "parameters"))
   expect_named(out$abundance, c("plankton", "fish", "benthos")); expect_named(out$growth, c("fish", "benthos"))
   expect_equal(dim(out$abundance$plankton), c(5L, 2L, 181L, 5L))
   expect_equal(out$t, seq(0, 2, 0.5)); expect_equal(out$x, 0:4); expect_equal(out$y, 0:1)
@@ -77,29 +77,36 @@ test_that("catch summed over size is the total catch rate of summary.txt", {
   expect_equal(as.vector(aperm(tot, c(2, 1, 3))), sm[, 9], tolerance = 1e-12)
 })
 
-test_that("output = 'arrays' returns the same arrays and writes no per-timestep text output", {
+test_that("output = 'arrays' returns the same arrays and writes no output files", {
   wd <- tempfile("out"); dir.create(wd); old <- setwd(wd); on.exit(setwd(old), add = TRUE)
   both <- run_out("both"); unlink("R", recursive = TRUE)
   arr <- run_out("arrays")
   expect_null(attr(arr, "files"))
   attr(both, "files") <- NULL
   expect_identical(arr, both)
-  for (f in c("results", "growth", "mortality", "predation0", "fishing"))
-    expect_length(readLines(file.path("R", "fish", paste0(f, ".txt"))), 5)     # header only
+  expect_length(list.files("R", recursive = TRUE, pattern = "^(results|growth|mortality|predation0?|fishing|summary|parameters)\\.txt$"), 0)
+  expect_false(dir.exists(file.path("R", "fish")))                             # the empty group folders are removed
+  expect_true(file.exists(file.path("R", "Input", "fish_fishing_ts.txt")))     # the input file the run was given is untouched
+  # the record that parameters.txt would hold comes back with the output
+  expect_named(arr$parameters, c("run", "grid", "groups", "forcing", "gravity", "environment"))
+  expect_named(arr$parameters$groups, c("plankton", "fish", "benthos", "detritus"))
+  expect_equal(arr$parameters$groups$fish$mmax, 6 * log(10)); expect_true(arr$parameters$groups$fish$fishing_flag)
+  expect_equal(arr$parameters$grid$tstep, 1/48); expect_equal(arr$parameters$run$spatial_dim, 2L)
+  expect_output(print(arr), "parameters: run, grid, plankton, fish, benthos, detritus")
 })
 
 test_that("variables limits what is returned; abundance always is", {
   wd <- tempfile("out"); dir.create(wd); old <- setwd(wd); on.exit(setwd(old), add = TRUE)
   full <- run_out("arrays"); unlink("R", recursive = TRUE)
   ab <- run_out("arrays", variables = "abundance")
-  expect_named(ab, c("t", "x", "y", "m", "abundance", "detritus"))
+  expect_named(ab, c("t", "x", "y", "m", "abundance", "detritus", "parameters"))
   expect_identical(ab$abundance, full$abundance)
   unlink("R", recursive = TRUE)
   gf <- run_out("arrays", variables = c("growth", "fishing"))
-  expect_named(gf, c("t", "x", "y", "m", "abundance", "growth", "fishing", "detritus"))
+  expect_named(gf, c("t", "x", "y", "m", "abundance", "growth", "fishing", "detritus", "parameters"))
   unlink("R", recursive = TRUE)
   ca <- run_out("arrays", variables = "catch")
-  expect_named(ca, c("t", "x", "y", "m", "abundance", "catch", "detritus")); expect_identical(ca$catch, full$catch)
+  expect_named(ca, c("t", "x", "y", "m", "abundance", "catch", "detritus", "parameters")); expect_identical(ca$catch, full$catch)
   expect_identical(gf$fishing, full$fishing)
   unlink("R", recursive = TRUE)
   expect_error(run_out("arrays", variables = "biomass"), "should be one of")
@@ -142,6 +149,10 @@ test_that("Write.NetCDF round-trips the output arrays", {
   expect_equal(get("fish_fishing"), out$fishing$fish, ignore_attr = TRUE)
   expect_equal(get("fish_catch"), out$catch$fish, ignore_attr = TRUE)
   expect_equal(get("detritus"), out$detritus, ignore_attr = TRUE)
+  # the parameters of the run are saved as global attributes
+  att <- function(nm) ncdf4::ncatt_get(nc, 0, nm)$value
+  expect_equal(att("fish.mmax"), 6 * log(10)); expect_equal(att("grid.tstep"), 1/48); expect_equal(att("fish.fishing_flag"), 1L)
+  expect_equal(att("run.filename"), "R"); expect_equal(att("benthos.speciestype"), "benthic")
   expect_error(Write.NetCDF(list(1), "x.nc"), "SizeSpectrum")
   expect_error(Write.NetCDF(out, "x.nc", x = 1:2), "one per output cell")
 })

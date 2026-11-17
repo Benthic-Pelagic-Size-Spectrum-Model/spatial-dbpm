@@ -215,3 +215,42 @@ initial_array <- function(species, grid.in, initial) {
   species@arrays$initial <- a
   species
 }
+
+#' Attach an in-memory forced series to a group object (internal)
+#'
+#' Validates values forced through time (plankton, pelagic or benthic species:
+#' abundance as `[x, y, size class, layer]`, or `[size class, layer]` applied to
+#' every cell; detritus: biomass as a number, one value per layer, `[x, y]` or
+#' `[x, y, layer]`) and the time-point-to-layer mapping, and stores them as
+#' `series` in the `arrays` slot. Used by [Setup.ts()].
+#'
+#' @param species A parameter object with `ts_flag = TRUE`.
+#' @param grid.in A [grid.params] object.
+#' @param series,layer,time See [Setup.ts()].
+#' @return The object with `arrays$series` filled.
+#' @keywords internal
+#' @noRd
+series_array <- function(species, grid.in, series, layer = NULL, time = NULL) {
+  if (!isTRUE(species@ts_flag)) stop("series supplies values through time: create ", species@filename, " with ts_flag = TRUE")
+  if (!is.null(species@arrays$ts)) stop(species@filename, " already has a series given as intercept and slope; use one or the other")
+  if (species@speciestype == "detritus") {
+    a <- xyl_array(series, "series", grid.in)
+  } else {
+    nx <- length(grid_seq(grid.in@xmin, grid.in@xmax, grid.in@xstep))
+    ny <- length(grid_seq(grid.in@ymin, grid.in@ymax, grid.in@ystep))
+    ns <- length(grid_seq(species@mmin, species@mmax, grid.in@mstep))
+    if (!is.numeric(series)) stop("series must be numeric")
+    if (any(!is.finite(series))) stop("series must not contain NA, NaN or Inf")
+    if (any(series < 0)) stop("series must be non-negative")
+    d <- dim(series)
+    a <- if (length(d) == 2L && d[1] == ns) array(rep(as.numeric(series), each = nx * ny), c(nx, ny, ns, d[2]))   # the same in every cell
+         else if (length(d) == 4L && d[1] == nx && d[2] == ny && d[3] == ns) series
+         else stop(sprintf("series must be an array [x = %d, y = %d, size classes of %s = %d, layers] or a matrix [%d, layers]; got [%s]",
+                           nx, ny, species@filename, ns, ns, paste(if (is.null(d)) length(series) else d, collapse = ", ")))
+    storage.mode(a) <- "double"
+  }
+  nl <- dim(a)[length(dim(a))]
+  species@arrays$series <- list(values = a, layer = layer_index(grid.in, nl, layer, time))
+  species
+}
+

@@ -8,8 +8,9 @@ static FISHING_ARRAY *read_fishing_arrays(SEXP inputs, const char *name, int nsp
 
 /*Other array inputs for the nsp species of one type, from element `name` of the inputs list: a list with one
   entry per species, each NULL or a list that may hold initial (numeric [x, y, size class]), rep (numeric
-  [x, y, layer]) with rep_layer and rep_nlayer, refuge (numeric [x, y, size class]) with refuge_min_a, and
-  pref_ben (numeric [x, y]).*/
+  [x, y, layer]) with rep_layer and rep_nlayer, refuge (numeric [x, y, size class]) with refuge_min_a,
+  pref_ben (numeric [x, y]) and series (numeric [x, y, size class, layer]) with series_layer and series_nlayer.
+  Also used, with one entry, for the plankton and the detritus.*/
 static SPECIES_INPUT *read_species_inputs(SEXP inputs, const char *name, int nsp);
 
 /*Element of an R list by name (R_NilValue if absent)*/
@@ -62,9 +63,11 @@ static SPECIES_INPUT *read_species_inputs(SEXP inputs, const char *name, int nsp
         for (s = 0; s < nsp; s++) {
                 SEXP el = VECTOR_ELT(lst, s);
                 si[s].initial = NULL; si[s].initial_len = 0;
+                si[s].series = NULL; si[s].series_layer = NULL; si[s].series_nlayer = 0; si[s].series_nblock = 0; si[s].series_len = 0;
                 si[s].rep = NULL; si[s].rep_layer = NULL; si[s].rep_nlayer = 0; si[s].rep_nblock = 0; si[s].rep_len = 0;
                 si[s].refuge = NULL; si[s].refuge_len = 0; si[s].refuge_min_a = 0.0;
                 si[s].pref_ben = NULL; si[s].pref_ben_len = 0;
+                si[s].has_imm_frac = 0; si[s].imm_frac = 0.0;
                 if (el == R_NilValue) continue;
                 SEXP v;
                 if ((v = get_list_element(el, "initial")) != R_NilValue) {
@@ -84,10 +87,27 @@ static SPECIES_INPUT *read_species_inputs(SEXP inputs, const char *name, int nsp
                         si[s].rep = REAL(v); si[s].rep_layer = INTEGER(layer); si[s].rep_nlayer = nlayer;
                         si[s].rep_nblock = LENGTH(layer); si[s].rep_len = XLENGTH(v);
                 }
+                if ((v = get_list_element(el, "series")) != R_NilValue) {
+                        SEXP layer = get_list_element(el, "series_layer"), nl = get_list_element(el, "series_nlayer");
+                        if (!isReal(v) || !isInteger(layer) || !isInteger(nl) || LENGTH(nl) != 1) {
+                                error("%s[[%d]]: series must be numeric, series_layer and series_nlayer integer", name, s + 1);
+                        }
+                        int nlayer = INTEGER(nl)[0];
+                        if (nlayer < 1 || LENGTH(layer) < 1 || XLENGTH(v) < nlayer) error("%s[[%d]]: inconsistent lengths in series", name, s + 1);
+                        for (j = 0; j < LENGTH(layer); j++) {
+                                if (INTEGER(layer)[j] < 0 || INTEGER(layer)[j] >= nlayer) error("%s[[%d]]: series layer index out of range at time point %d", name, s + 1, j + 1);
+                        }
+                        si[s].series = REAL(v); si[s].series_layer = INTEGER(layer); si[s].series_nlayer = nlayer;
+                        si[s].series_nblock = LENGTH(layer); si[s].series_len = XLENGTH(v);
+                }
                 if ((v = get_list_element(el, "refuge")) != R_NilValue) {
                         SEXP ma = get_list_element(el, "refuge_min_a");
                         if (!isReal(v) || !isReal(ma) || LENGTH(ma) != 1) error("%s[[%d]]: refuge and refuge_min_a must be numeric", name, s + 1);
                         si[s].refuge = REAL(v); si[s].refuge_len = XLENGTH(v); si[s].refuge_min_a = REAL(ma)[0];
+                }
+                if ((v = get_list_element(el, "imm_frac")) != R_NilValue) {
+                        if (!isReal(v) || LENGTH(v) != 1) error("%s[[%d]]: imm_frac must be a single number", name, s + 1);
+                        si[s].has_imm_frac = 1; si[s].imm_frac = REAL(v)[0];
                 }
                 if ((v = get_list_element(el, "pref_ben")) != R_NilValue) {
                         if (!isReal(v)) error("%s[[%d]]: pref_ben must be numeric", name, s + 1);
@@ -214,7 +234,8 @@ SEXP SizeSpectrum(
         arr.fish_pel = NULL; arr.fish_ben = NULL;
         arr.gravity = NULL;
         arr.sp_pel = NULL; arr.sp_ben = NULL;
-        arr.pla_initial = NULL; arr.pla_initial_len = 0; arr.det_initial = NULL; arr.det_initial_len = 0;
+        arr.sp_pla = NULL; arr.sp_det = NULL;
+        arr.temp_on_mort = -1;
         for (i = 0; i < N_FRC; i++) { arr.frc[i] = NULL; arr.frc_nlayer[i] = 0; arr.frc_len[i] = 0; }
         if (inputs_r != R_NilValue) {
                 if (!isNewList(inputs_r)) {
@@ -283,15 +304,13 @@ SEXP SizeSpectrum(
                 // Other inputs as arrays: starting abundance, reproduction, refuge and per-cell parameters.
                 arr.sp_pel = read_species_inputs(inputs_r, "species_pelagic", npel);
                 arr.sp_ben = read_species_inputs(inputs_r, "species_benthic", nben);
-                SEXP pin = get_list_element(inputs_r, "plankton_initial"), din = get_list_element(inputs_r, "detritus_initial");
-                if (pin != R_NilValue) {
-                        if (!isReal(pin)) error("plankton_initial must be numeric");
-                        arr.pla_initial = REAL(pin); arr.pla_initial_len = XLENGTH(pin);
+                SEXP tom_r = get_list_element(inputs_r, "forcing_temp_on_mort");
+                if (tom_r != R_NilValue) {
+                        if (!isInteger(tom_r) || LENGTH(tom_r) != 1) error("forcing_temp_on_mort must be a single integer");
+                        arr.temp_on_mort = INTEGER(tom_r)[0] != 0;
                 }
-                if (din != R_NilValue) {
-                        if (!isReal(din)) error("detritus_initial must be numeric");
-                        arr.det_initial = REAL(din); arr.det_initial_len = XLENGTH(din);
-                }
+                arr.sp_pla = read_species_inputs(inputs_r, "species_plankton", 1);
+                arr.sp_det = read_species_inputs(inputs_r, "species_detritus", 1);
 
                 // Effort allocated among cells by gravity.
                 SEXP gv_r = get_list_element(inputs_r, "gravity");
@@ -353,12 +372,13 @@ static void SizeSpectrum_internals(int *run_params, double *grid_params, double 
     double **temp_ben_params;
         
     /*Setup run*/
-    setup_run(&run, run_params, names_params[0]);
     run.arr=arr;          //inputs supplied from R as arrays (may hold none)
+    run.out=out;          //output returned to R as arrays (mode 0 = none); set first: it decides whether text files are created
+    setup_run(&run, run_params, names_params[0]);
     run.frc_step=0;
     run.fish_block=0;
     run.rep_block=0;
-    run.out=out;          //output returned to R as arrays (mode 0 = none)
+    run.ts_step=0;
     
     /*Setup grid*/
     setup_grid(&grid, grid_params);
@@ -401,6 +421,7 @@ static void SizeSpectrum_internals(int *run_params, double *grid_params, double 
     }
     
     /*Setup plankton*/
+    community.plankton->in=(arr!=NULL && arr->sp_pla!=NULL) ? &arr->sp_pla[0] : NULL;
     setup_plankton(&run, &grid, community.plankton, pla_params, names_params[1], flags_params[0], flags_params[1], arr); 
     
     /*Setup pelagic*/
@@ -421,6 +442,7 @@ static void SizeSpectrum_internals(int *run_params, double *grid_params, double 
             }
     
             /*Setup detritus*/
+            community.detritus->in=(arr!=NULL && arr->sp_det!=NULL) ? &arr->sp_det[0] : NULL;
             setup_detritus(&run, &grid, community.detritus, det_params, names_params[run.no_pelagic+run.no_benthic+2], flags_params[2+4*(run.no_pelagic+run.no_benthic)], flags_params[3+4*(run.no_pelagic+run.no_benthic)]);
     }
    
@@ -501,6 +523,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      run->pel_tempeff_c=NULL; run->ben_tempeff_c=NULL; run->sinking_rate_c=NULL;
      run->depth_c=NULL; run->export_attn_c=NULL; run->export_gamma_c=NULL; run->export_magg_c=NULL;
      { char *e=getenv("TEMP_ON_MORT"); run->temp_on_mort = e ? atoi(e) : 1; }
+     if(run->arr!=NULL && run->arr->temp_on_mort>=0) run->temp_on_mort=run->arr->temp_on_mort;   /*given with the forcing: overrides the environment*/
      if(run->arr!=NULL && run->arr->have_forcing){
              /*Forcing channels supplied from R as arrays: forcing_ts.txt is not opened. A channel that is
                present gets its own position as column index, so everything keyed on col_* works unchanged.*/
@@ -678,22 +701,24 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
              }
      }
      
-     /*Parameter File*/
-     run->fptr_summ=safe_fopen(run->fname_summ,"a",__LINE__,__FILE__);
+     /*Parameter File (not written when the output goes to R as arrays only)*/
+     if(write_files){
+             run->fptr_summ=safe_fopen(run->fname_summ,"a",__LINE__,__FILE__);
      
-     print_run(run, run->fptr_summ);
-     print_grid(grid, run->fptr_summ);
-     print_plankton(community->plankton, run->fptr_summ);
-     for(s=0 ; s<n ; s++){
-             print_pelagic(&(community->pelagic[s]),run->fptr_summ);
-     }
-     if(run->no_benthic!=0){
-             for(b=0 ; b<c ; b++){
-                     print_benthic(&(community->benthic[b]),run->fptr_summ);
+             print_run(run, run->fptr_summ);
+             print_grid(grid, run->fptr_summ);
+             print_plankton(community->plankton, run->fptr_summ);
+             for(s=0 ; s<n ; s++){
+                     print_pelagic(&(community->pelagic[s]),run->fptr_summ);
              }
-             print_detritus(community->detritus, run->fptr_summ);
+             if(run->no_benthic!=0){
+                     for(b=0 ; b<c ; b++){
+                             print_benthic(&(community->benthic[b]),run->fptr_summ);
+                     }
+                     print_detritus(community->detritus, run->fptr_summ);
+             }
+             fclose(run->fptr_summ);
      }
-     fclose(run->fptr_summ);
 
      /*Time Stepping Loop*/
      for(j=1 ; j<t ; j++){
@@ -895,7 +920,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      }
      
      /*Close ts files*/
-     if(community->plankton->ts_flag==1 && community->plankton->arr==NULL){
+     if(community->plankton->ts_flag==1 && community->plankton->arr==NULL && !(community->plankton->in!=NULL && community->plankton->in->series!=NULL)){
              fclose(community->plankton->fptr_ts);
      }
      if(run->forcing_flag==1 && run->fptr_forcing!=NULL){
@@ -908,17 +933,17 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
              }
      }
      for(s=0 ; s<n ; s++){
-             if(community->pelagic[s].ts_flag==1){
+             if(community->pelagic[s].ts_flag==1 && !(community->pelagic[s].in!=NULL && community->pelagic[s].in->series!=NULL)){
                      fclose(community->pelagic[s].fptr_ts);
              }
      }
      if(run->no_benthic!=0){
              for(b=0 ; b<c ; b++){
-                     if(community->benthic[b].ts_flag==1){
+                     if(community->benthic[b].ts_flag==1 && !(community->benthic[b].in!=NULL && community->benthic[b].in->series!=NULL)){
                              fclose(community->benthic[b].fptr_ts);
                      }
              }
-             if(community->detritus->ts_flag==1){
+             if(community->detritus->ts_flag==1 && !(community->detritus->in!=NULL && community->detritus->in->series!=NULL)){
                      fclose(community->detritus->fptr_ts);
              }
      }
@@ -970,6 +995,7 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
      
      dm=grid->mstep;
      dt=grid->tstep;
+     run->ts_step++;      /*the model time point this step advances to*/
      
      x=grid->xnum;
      y=grid->ynum;
@@ -1046,13 +1072,13 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                      if(run->col_export_magg>=0 && run->col_export_magg<nv) run->export_magg=vals[run->col_export_magg];
                      if(run->col_gravity>=0 && run->col_gravity<nv) run->gravity=vals[run->col_gravity];
              }
-             /* TEMP_ON_MORT (env, default 1): whether temperature scales background mortality.
+             /* temp_on_mort (given with the forcing, else the TEMP_ON_MORT environment variable, default 1):
+                whether temperature scales background mortality.
                 =0 -> temperature drives FEEDING only; mu_0 held at base. Rationale: the model does
                 not resolve metabolic maintenance costs (respiration) or their temperature response,
                 so mu_0*tempeff is a lone, unbalanced "cost of warmth"; feeding has a clean
-                encounter-rate justification, mortality does not. Read once. */
-             static int tom = -1;
-             if(tom < 0){ char *e = getenv("TEMP_ON_MORT"); tom = e ? atoi(e) : 1; }
+                encounter-rate justification, mortality does not. Set once per run in the forcing set-up. */
+             int tom = run->temp_on_mort;
              for(s=0 ; s<n ; s++){
                      community->pelagic[s].A    = community->pelagic[s].A_base    * run->pel_tempeff;
                      community->pelagic[s].mu_0 = tom ? community->pelagic[s].mu_0_base * run->pel_tempeff
@@ -1095,6 +1121,10 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
      if(community->plankton->ts_flag==1 && community->plankton->arr!=NULL){
              /*Next time block from the R arrays*/
              plankton_from_arrays(grid, community->plankton);
+     }
+     else if(community->plankton->ts_flag==1 && community->plankton->in!=NULL && community->plankton->in->series!=NULL){
+             /*Next time point of the forced series held in memory*/
+             series_to_u(community->plankton->in, run->ts_step, x, y, community->plankton->iplamin, community->plankton->iplamax-community->plankton->iplamin+1, community->plankton->u_values);
      }
      else if(community->plankton->ts_flag==1){
              int MAX_LEN=grid->mnum*15; //this is the upper bound for the row length in characters
@@ -1143,7 +1173,11 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                              }
                      }
              }
-             if(community->pelagic[s].ts_flag==1){
+             if(community->pelagic[s].ts_flag==1 && community->pelagic[s].in!=NULL && community->pelagic[s].in->series!=NULL){
+                     /*Next time point of the forced series held in memory*/
+                     series_to_u(community->pelagic[s].in, run->ts_step, x, y, community->pelagic[s].ipelmin, community->pelagic[s].ipelmax-community->pelagic[s].ipelmin+1, community->pelagic[s].u_values);
+             }
+             else if(community->pelagic[s].ts_flag==1){
                      int MAX_LEN=grid->mnum*15; //this is the upper bound for the row length in characters
                      char *input;               //input string to store line as string
                      input=(char *)safe_malloc(MAX_LEN*sizeof(char),__LINE__,__FILE__); 
@@ -1192,7 +1226,11 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                                      }
                              }
                      }
-                     if(community->benthic[b].ts_flag==1){
+                     if(community->benthic[b].ts_flag==1 && community->benthic[b].in!=NULL && community->benthic[b].in->series!=NULL){
+                             /*Next time point of the forced series held in memory*/
+                             series_to_u(community->benthic[b].in, run->ts_step, x, y, community->benthic[b].ibenmin, community->benthic[b].ibenmax-community->benthic[b].ibenmin+1, community->benthic[b].u_values);
+                     }
+                     else if(community->benthic[b].ts_flag==1){
                              int MAX_LEN=grid->mnum*15; //this is the upper bound for the row length in characters
                              char *input;               //input string to store line as string
                              input=(char *)safe_malloc(MAX_LEN*sizeof(char),__LINE__,__FILE__); 
@@ -1280,7 +1318,11 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                              }
                      }
              }
-             if(community->detritus->ts_flag==1){
+             if(community->detritus->ts_flag==1 && community->detritus->in!=NULL && community->detritus->in->series!=NULL){
+                     /*Next time point of the forced series held in memory*/
+                     series_to_w(community->detritus->in, run->ts_step, x, y, community->detritus->w_values);
+             }
+             else if(community->detritus->ts_flag==1){
                      int MAX_LEN=grid->mnum*15; //this is the upper bound for the row length in characters
                      char *input;               //input string to store line as string
                      input=(char *)safe_malloc(MAX_LEN*sizeof(char),__LINE__,__FILE__); 

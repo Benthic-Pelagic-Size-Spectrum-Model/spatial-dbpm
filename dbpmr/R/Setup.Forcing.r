@@ -10,8 +10,7 @@
 #' forcing file:
 #'
 #' * `pel_tempeff`, `ben_tempeff`: temperature multipliers on pelagic and benthic
-#'   feeding (and on background mortality unless the `TEMP_ON_MORT` environment
-#'   variable is `0`);
+#'   feeding, and on background mortality unless `temp_on_mort` is `FALSE`;
 #' * `sinking_rate`: fraction of surface-origin detritus reaching the sea floor;
 #' * `depth`: water-column depth (m);
 #' * `export_attn`, `export_gamma`, `export_magg`: size-dependent export;
@@ -38,6 +37,10 @@
 #'   time point, or when no channel varies in time.
 #' @param time Instead of `layer`: the start time (in model years) of each
 #'   layer; each time point uses the latest layer that has started.
+#' @param temp_on_mort Whether the temperature multipliers also scale background
+#'   mortality (`TRUE`) or act on feeding only (`FALSE`). The default, `NULL`,
+#'   takes the choice from the `TEMP_ON_MORT` environment variable (`TRUE` if
+#'   that is not set), as before this argument existed.
 #'
 #' @return An object of class `dbpmr_forcing` to pass to [SizeSpectrum()] as
 #'   `forcing`.
@@ -56,11 +59,13 @@
 #' }
 #' @export
 `Setup.Forcing` <-
-function(run.in, grid.in, ..., layer = NULL, time = NULL){
+function(run.in, grid.in, ..., layer = NULL, time = NULL, temp_on_mort = NULL){
   chan <- list(...)
   known <- c("pel_tempeff", "ben_tempeff", "sinking_rate", "depth", "residence_time",
              "export_attn", "export_gamma", "export_magg", "gravity")
   if(length(chan) == 0) stop("at least one forcing channel must be given")
+  if(!is.null(temp_on_mort) && !(is.logical(temp_on_mort) && length(temp_on_mort) == 1L && !is.na(temp_on_mort)))
+    stop("temp_on_mort must be TRUE, FALSE or NULL")
   if(is.null(names(chan)) || any(names(chan) == "") || anyDuplicated(names(chan)))
     stop("forcing channels must be given as uniquely named arguments")
   bad <- setdiff(names(chan), known)
@@ -104,7 +109,7 @@ function(run.in, grid.in, ..., layer = NULL, time = NULL){
     a <- arrs[[nm]]
     if(any(apply(a, 3, function(z) diff(range(z))) != 0)) stop(nm, " must be the same in every cell")
   }
-  structure(list(channels = arrs, layer = lay), class = "dbpmr_forcing")
+  structure(list(channels = arrs, layer = lay, temp_on_mort = temp_on_mort), class = "dbpmr_forcing")
 }
 
 #' @export
@@ -116,5 +121,6 @@ print.dbpmr_forcing <- function(x, ...){
     cat(sprintf("  %-15s %s, range %.4g to %.4g\n", nm,
                 if(dim(a)[3] == 1) "constant in time" else sprintf("%d layers", dim(a)[3]), min(a), max(a)))
   }
+  if(!is.null(x$temp_on_mort)) cat(sprintf("  temperature %s background mortality\n", if(x$temp_on_mort) "scales" else "does not scale"))
   invisible(x)
 }

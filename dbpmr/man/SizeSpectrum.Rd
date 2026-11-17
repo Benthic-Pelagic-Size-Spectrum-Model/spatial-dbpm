@@ -39,7 +39,9 @@ pelagic species).}
 
 \item{output}{Where the model output goes. \code{"files"} (the default) writes the
 text result files under the run directory. \code{"arrays"} returns the output to
-R as arrays and writes no per-timestep text output. \code{"both"} does both.}
+R as arrays and writes no files at all; the record of the run's parameters
+that \code{parameters.txt} would hold comes back in the output object. \code{"both"}
+does both.}
 
 \item{variables}{Used with \code{output = "arrays"} or \code{"both"}: which variables
 to return. Abundance is always returned; \code{"growth"}, \code{"mortality"},
@@ -77,7 +79,14 @@ time, not a total over the interval between outputs. (In a run without
 movement the total equals the \code{fishing} column of the species'
 \code{summary.txt}; with movement that column is computed before the
 movement step and differs slightly.);
-\item \code{detritus}: detritus biomass as \verb{[x, y, t]} (when the run has benthos).
+\item \code{detritus}: detritus biomass as \verb{[x, y, t]} (when the run has benthos);
+\item \code{parameters}: the parameters of the run, as a list with \code{run}, \code{grid},
+\code{groups} (one entry per group, named by its file name, holding its
+parameter values and, in \code{in_memory}, the names of the inputs it was given
+in memory), \code{forcing} (the forcing channels supplied in memory and
+\code{temp_on_mort}), \code{gravity}, and \code{environment} (the settings that were
+taken from environment variables). \code{\link[=Write.NetCDF]{Write.NetCDF()}} saves it with the
+file.
 }
 
 The values are those the text files would hold (\code{results.txt},
