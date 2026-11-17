@@ -13,13 +13,16 @@
 #'   `run.in@no_benthic == 0`.
 #' @param detritus.in A [detritus.params] object. Optional when
 #'   `run.in@no_benthic == 0`.
+#' @param forcing Optional environmental forcing held in memory, from
+#'   [Setup.Forcing()]. When given, it replaces the `forcing_ts.txt` input file
+#'   (it is an error to supply both).
 #'
 #' @return A character vector of the paths and species filenames produced by the
 #'   run, suitable for passing to [Read.In()].
 #' @seealso [Read.In()], [Setup.Run()]
 #' @export
 `SizeSpectrum` <-
-function(run.in, grid.in, plankton.in, pelagic.in, benthic.in, detritus.in){
+function(run.in, grid.in, plankton.in, pelagic.in, benthic.in, detritus.in, forcing = NULL){
 
 #run.in is an object of class of run.params (2 strings and 6 integers relating to the entire run process)
 
@@ -242,7 +245,11 @@ tiny<-1e-7
   
   
   #Check initial input files exist
-  if((plankton.in@initial_flag==1 || plankton.in@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",plankton.in@filename,"_ts.txt",sep=""))) stop("A required Plankton initial/ts file does not exist")
+  #(a plankton time series held in memory as intercept/slope arrays needs no file)
+  if(length(plankton.in@ts_arrays)==0 && (plankton.in@initial_flag==1 || plankton.in@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",plankton.in@filename,"_ts.txt",sep=""))){
+    stop("A required Plankton initial/ts file does not exist. Write one with Setup.ts(), or, for intercept/slope arrays, ",
+         "assign the result: pl <- Setup.ts(pl, run, grid, intercept = , slope = )")
+  }
   
   for(i in 1:length(pelagic.in)){
     if((pelagic.in[[i]]@initial_flag==1 || pelagic.in[[i]]@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",pelagic.in[[i]]@filename,"_ts.txt",sep=""))) stop("A required Pelagic initial/ts file does not exist")
@@ -296,6 +303,31 @@ tiny<-1e-7
 # Call C code #
 #-------------#
 
+  # Inputs passed to C as arrays instead of text files (NULL = none)
+  inputs <- NULL
+  if(length(plankton.in@ts_arrays)!=0){
+    ta <- plankton.in@ts_arrays
+    inputs <- list(plankton_intercept=ta$intercept, plankton_slope=ta$slope,
+                   plankton_layer=as.integer(ta$layer-1L), plankton_nlayer=as.integer(dim(ta$intercept)[3]))
+  }
+  if(!is.null(forcing)){
+    if(!inherits(forcing, "dbpmr_forcing")) stop("forcing must be created with Setup.Forcing()")
+    if(file.exists(file.path(run.in@filename, "Input", "forcing_ts.txt")))
+      stop("Both forcing arrays and the file ", file.path(run.in@filename, "Input", "forcing_ts.txt"),
+           " were supplied; use one or the other")
+    fgrid <- c(length(grid_seq(grid.in@xmin, grid.in@xmax, grid.in@xstep)), length(grid_seq(grid.in@ymin, grid.in@ymax, grid.in@ystep)))
+    if(!identical(as.integer(dim(forcing$channels[[1]])[1:2]), as.integer(fgrid)) ||
+       length(forcing$layer)!=length(seq(0, grid.in@tmax, grid.in@tstep)))
+      stop("forcing was built for a different grid; rebuild it with Setup.Forcing() using this grid")
+    fnames <- c("pel_tempeff", "ben_tempeff", "sinking_rate", "depth", "residence_time",
+                "export_attn", "export_gamma", "export_magg", "gravity")
+    fin <- forcing$channels
+    names(fin) <- paste0("forcing_", names(fin))
+    fnl <- vapply(fnames, function(nm) if(is.null(forcing$channels[[nm]])) 0L else dim(forcing$channels[[nm]])[3], integer(1))
+    if(is.null(inputs)) inputs <- list()
+    inputs <- c(inputs, fin, list(forcing_layer=as.integer(forcing$layer-1L), forcing_nlayer=as.integer(fnl)))
+  }
+
   x <- .Call(
     C_SizeSpectrum, 
     as.integer(run.params), 
@@ -305,7 +337,8 @@ tiny<-1e-7
     as.double(ben.params), 
     as.double(det.params), 
     as.character(names.params), 
-    as.integer(flags.params)
+    as.integer(flags.params),
+    inputs
   )
 
 #-----------------------------------------------------------------#

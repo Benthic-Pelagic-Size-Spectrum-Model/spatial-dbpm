@@ -42,16 +42,22 @@
 #' An S4 object holding the size range and spectrum parameters for the plankton
 #' resource. Usually created with [Setup.Plankton()].
 #'
+#' The `ts_arrays` slot holds a plankton time series supplied in memory as
+#' intercept and slope arrays (see [Setup.ts()]); it is an empty list when the
+#' series comes from an input file or is not used.
+#'
 #' @aliases plankton.params
 #' @export
   setClass("plankton.params",representation(filename="character", speciestype="character",
                                             mmin="numeric", mmax="numeric",
                                             u_0="numeric", lambda="numeric", mu_0="numeric", beta="numeric",
-                                            initial_flag="logical", ts_flag="logical"),
+                                            initial_flag="logical", ts_flag="logical",
+                                            ts_arrays="list"),
                         prototype(filename="plankton", speciestype="plankton",
                                   mmin=-12*log(10), mmax=-3*log(10),
                                   u_0=0.01, lambda=-1, mu_0=0.2, beta=-0.25,
-                                  initial_flag=FALSE, ts_flag=FALSE))
+                                  initial_flag=FALSE, ts_flag=FALSE,
+                                  ts_arrays=list()))
   
 #' Pelagic species parameters
 #'
