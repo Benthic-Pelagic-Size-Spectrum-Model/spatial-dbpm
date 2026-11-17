@@ -95,8 +95,14 @@ and benthic prey.}
 
 \item{trunc}{Truncation of the feeding kernel.}
 
-\item{prey, pred, comp}{Density-dependence coefficients for prey, predator and
-competition effects.}
+\item{prey, pred, comp}{Movement coefficients for spatial runs: \code{prey} moves
+biomass up the gradient in growth rate (prey-seeking), \code{pred} moves it down
+the gradient in mortality (predator-avoidance) and \code{comp} is diffusion.
+Predator-avoidance needs diffusion: because predation mortality rises with
+local biomass, avoidance on its own acts as backward diffusion and a smooth
+field develops a grid-scale checkerboard that grows over time. A warning is
+given for a spatial run with \code{pred > 0} and \code{comp <= 0}; keep \code{comp} at
+least as large as \code{pred}.}
 
 \item{gamma_prey, gamma_pred, gamma_comp}{Mass-scaling exponents for the prey,
 predator and competition effects.}
