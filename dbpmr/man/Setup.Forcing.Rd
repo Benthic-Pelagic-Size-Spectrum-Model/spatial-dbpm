@@ -71,5 +71,5 @@ fo <- Setup.Forcing(run, grid, pel_tempeff = temp, ben_tempeff = 1,
 }
 }
 \seealso{
-\code{\link[=SizeSpectrum]{SizeSpectrum()}}, \code{\link[=Setup.ts]{Setup.ts()}}
+\code{\link[=SizeSpectrum]{SizeSpectrum()}}, \code{\link[=Setup.ts]{Setup.ts()}}, \code{\link[=Setup.CellParams]{Setup.CellParams()}}
 }

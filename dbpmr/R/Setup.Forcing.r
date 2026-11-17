@@ -41,7 +41,7 @@
 #'
 #' @return An object of class `dbpmr_forcing` to pass to [SizeSpectrum()] as
 #'   `forcing`.
-#' @seealso [SizeSpectrum()], [Setup.ts()]
+#' @seealso [SizeSpectrum()], [Setup.ts()], [Setup.CellParams()]
 #' @examples
 #' \dontrun{
 #' run  <- Setup.Run("R", 1, 1, spatial_dim = 2, coupled_flag = TRUE, diff_method = 1)

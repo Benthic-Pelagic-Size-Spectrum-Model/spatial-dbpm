@@ -190,6 +190,7 @@ typedef struct pelagic_info{
         double pref_pla;       //attack rate for plankton
         double pref_pel;       //attack rate for pelagic
         double pref_ben;       //attack rate for benthic
+        double **pref_ben_c;   //optional PER-CELL benthic preference [x][y] (from <run>/Input/<name>_cellpar.txt); NULL = use the scalar pref_ben everywhere
         
         double q_0;            //optimum predator prey mass ratio
         double sig;            //standard deviation of feeding kernel
@@ -370,6 +371,13 @@ typedef struct species_answer_info{
         DETRITUS *detritus;
         
         } COMMUNITY;
+
+/*Benthic feeding preference of a pelagic species in cell (k,l): the per-cell value when a
+  <name>_cellpar.txt was supplied, otherwise the scalar parameter (standard dbpmr).*/
+static inline double pel_pref_ben(const PELAGIC *p, int k, int l)
+{
+        return p->pref_ben_c ? p->pref_ben_c[k][l] : p->pref_ben;
+}
         
 /*Structure for use in implicit upwind method*/
 typedef struct vectors{
@@ -1387,6 +1395,57 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
                      }
                      fclose(rf);
                      if(cnt>0) pelagic->refuge_on = 1;   /*only activate when a positive refuge is supplied*/
+             }
+     }
+
+     /* --- Per-cell model parameters (opt-in) ---
+        Optional <run>/Input/<name>_cellpar.txt: a header line naming the columns, then one row per
+        spatial cell (x*y rows, x-outer y-inner - the plankton _ts / per-cell forcing convention).
+        Recognised column: pref_ben (benthic feeding preference, e.g. depth-dependent). The values are
+        static (read once). Absent file or column -> pref_ben_c stays NULL -> the scalar pref_ben is
+        used in every cell -> bit-identical to standard dbpmr. */
+     pelagic->pref_ben_c = NULL;
+     {
+             char cfn[256];
+             snprintf(cfn, sizeof(cfn), "%s/Input/%s_cellpar.txt", run->filename, pelagic->filename);
+             FILE *cf = fopen(cfn, "r");
+             if(cf){
+                     char cline[1024];
+                     int col_pb=-1;
+                     if(fgets(cline,sizeof(cline),cf)!=NULL){
+                             int col=0;
+                             char *name=strtok(cline,", \t\r\n");
+                             while(name!=NULL){
+                                     if(strcmp(name,"pref_ben")==0) col_pb=col;
+                                     col++;
+                                     name=strtok(NULL,", \t\r\n");
+                             }
+                     }
+                     if(col_pb>=0){
+                             int xx=grid->xnum, yy=grid->ynum, kk, ll;
+                             pelagic->pref_ben_c=(double **)safe_malloc(xx*sizeof(double *),__LINE__,__FILE__);
+                             for(kk=0 ; kk<xx ; kk++){
+                                     pelagic->pref_ben_c[kk]=(double *)safe_malloc(yy*sizeof(double),__LINE__,__FILE__);
+                             }
+                             for(kk=0 ; kk<xx ; kk++){
+                                     for(ll=0 ; ll<yy ; ll++){
+                                             double cvals[64];
+                                             int nv=0;
+                                             if(fgets(cline,sizeof(cline),cf)==NULL){
+                                                     fclose(cf);
+                                                     error("%s: expected %d rows (one per cell, x-outer y-inner), found %d\n",cfn,xx*yy,(kk*yy)+ll);
+                                             }
+                                             char *tok=strtok(cline,", \t\r\n");
+                                             while(tok!=NULL && nv<64){ cvals[nv++]=atof(tok); tok=strtok(NULL,", \t\r\n"); }
+                                             if(col_pb>=nv){
+                                                     fclose(cf);
+                                                     error("%s: row %d has no value for column pref_ben\n",cfn,(kk*yy)+ll+1);
+                                             }
+                                             pelagic->pref_ben_c[kk][ll]=cvals[col_pb];
+                                     }
+                             }
+                     }
+                     fclose(cf);
              }
      }
 }
@@ -3703,7 +3762,7 @@ double ben_biomass(int species, int size, int xspace, int yspace, RUN *run, GRID
                                }
                        }
                }
-               ans*=community->pelagic[species].pref_ben*community->pelagic[species].A*exp(community->pelagic[species].alpha*grid->m_values[size]);
+               ans*=pel_pref_ben(&community->pelagic[species],xspace,yspace)*community->pelagic[species].A*exp(community->pelagic[species].alpha*grid->m_values[size]);
        }
        
        return ans;
@@ -3894,7 +3953,7 @@ double mu_ben_pred(int species, int size, int xspace, int yspace, RUN *run, GRID
        if(run->coupled_flag==1){
                for(s=0 ; s<run->no_pelagic ; s++){
                        for(i=size ; i<(community->pelagic[s].ipelmax+1) ; i++){
-                                  ans=ans+(exp(community->pelagic[s].alpha*grid->m_values[i]))*community->pelagic[s].phi_values[i-size]*(community->pelagic[s].u_values[i][xspace][yspace])*community->pelagic[s].A*community->pelagic[s].pref_ben*grid->mstep;
+                                  ans=ans+(exp(community->pelagic[s].alpha*grid->m_values[i]))*community->pelagic[s].phi_values[i-size]*(community->pelagic[s].u_values[i][xspace][yspace])*community->pelagic[s].A*pel_pref_ben(&community->pelagic[s],xspace,yspace)*grid->mstep;
                        }
                }
        }
@@ -4306,6 +4365,12 @@ void free_mem(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, MAT
                      free(community->pelagic[s].a_refuge);
                      free(community->pelagic[s].phi_values);
                      free(community->pelagic[s].refuge_values);
+                     if(community->pelagic[s].pref_ben_c){
+                             for(k=0 ; k<x ; k++){
+                                     free(community->pelagic[s].pref_ben_c[k]);
+                             }
+                             free(community->pelagic[s].pref_ben_c);
+                     }
                      free(temp_pel_params[s]);
                      
                      free(community->pelagic[s].fname_pred);
