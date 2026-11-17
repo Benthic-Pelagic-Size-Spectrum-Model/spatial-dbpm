@@ -23,8 +23,19 @@ pelagic species).}
 \code{run.in@no_benthic == 0}.}
 }
 \value{
-A character vector of the paths and species filenames produced by the
-run, suitable for passing to \code{\link[=Read.In]{Read.In()}}.
+With \code{output = "files"}, a character vector of the paths and species
+filenames produced by the run, suitable for passing to \code{\link[=Read.In]{Read.In()}}.
+
+With \code{output = "arrays"} or \code{"both"}, an object of class \code{dbpmr_output}: a
+list with the output coordinates \code{t} (years), \code{x}, \code{y} and \code{m} (natural-log
+body mass), the abundance density of each group as arrays with dimensions
+\verb{[x, y, m, t]} (\code{plankton}, and the named lists \code{pelagic} and \code{benthic},
+one array per species), and \code{detritus} biomass as \verb{[x, y, t]}. Values are
+those the text files would hold: the same output times, cells and size
+classes (set by \code{toutstep}, \code{xoutstep}, \code{youtstep} and \code{moutstep} in
+\code{\link[=Setup.Grid]{Setup.Grid()}}), with zeros outside a group's size range. With \code{"both"} the
+character vector described above is attached as the attribute \code{"files"}.
+See \code{\link[=Write.NetCDF]{Write.NetCDF()}} to save the object.
 }
 \description{
 Validates the supplied parameter objects, assembles the transfer vectors and
@@ -32,5 +43,5 @@ calls the underlying C engine to integrate the dynamic benthic-pelagic size
 spectrum. Output text files are written under the run directory.
 }
 \seealso{
-\code{\link[=Read.In]{Read.In()}}, \code{\link[=Setup.Run]{Setup.Run()}}
+\code{\link[=Read.In]{Read.In()}}, \code{\link[=Write.NetCDF]{Write.NetCDF()}}, \code{\link[=Setup.Run]{Setup.Run()}}
 }
