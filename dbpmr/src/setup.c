@@ -556,8 +556,13 @@ void setup_pelagic(RUN *run, GRID *grid, PELAGIC *pelagic, double *pel_params, c
              }
      }
      
-     /*Open pelagic fishing file*/
-     if(pelagic->fishing_flag==1){
+     /*Open pelagic fishing file (not needed when fishing mortality was supplied from R as an array)*/
+     if(pelagic->fishing_flag==1 && pelagic->fish_arr!=NULL){
+             if(pelagic->fish_arr->len!=(R_xlen_t)grid->xnum*(R_xlen_t)grid->ynum*(R_xlen_t)pelagic->fish_arr->nlayer){
+                     error("fishing array of %s holds %ld values; expected x*y*layers = %d*%d*%d\n",pelagic->filename,(long)pelagic->fish_arr->len,grid->xnum,grid->ynum,pelagic->fish_arr->nlayer);
+             }
+     }
+     else if(pelagic->fishing_flag==1){
              /*Create pelagic fishing input filename*/
              snprintf(pelagic->fname_fish_ts, sizeof(pelagic->fname_fish_ts),"%s/Input/%s_%s.txt",run->filename,pelagic->filename,"fishing_ts");
              pelagic->fptr_fish_ts=safe_fopen(pelagic->fname_fish_ts,"r",__LINE__,__FILE__);
@@ -865,8 +870,13 @@ void setup_benthic(RUN *run, GRID *grid, BENTHIC *benthic, double *ben_params, c
              }
      }
      
-     /*Setup initial values for fishing mortality*/
-     if(benthic->fishing_flag==1){
+     /*Setup initial values for fishing mortality (no file when it was supplied from R as an array)*/
+     if(benthic->fishing_flag==1 && benthic->fish_arr!=NULL){
+             if(benthic->fish_arr->len!=(R_xlen_t)grid->xnum*(R_xlen_t)grid->ynum*(R_xlen_t)benthic->fish_arr->nlayer){
+                     error("fishing array of %s holds %ld values; expected x*y*layers = %d*%d*%d\n",benthic->filename,(long)benthic->fish_arr->len,grid->xnum,grid->ynum,benthic->fish_arr->nlayer);
+             }
+     }
+     else if(benthic->fishing_flag==1){
              /*Create benthic fishing input filename*/
              snprintf(benthic->fname_fish_ts, sizeof(benthic->fname_fish_ts),"%s/Input/%s_%s.txt",run->filename,benthic->filename,"fishing_ts");
              benthic->fptr_fish_ts=safe_fopen(benthic->fname_fish_ts,"r",__LINE__,__FILE__);

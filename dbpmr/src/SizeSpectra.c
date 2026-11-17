@@ -1,6 +1,11 @@
 #include "SizeSpectra.h"
 
 
+/*Fishing mortality arrays for the nsp species of one type, from element `name` of the inputs list: a list
+  with one entry per species, each NULL (fishing read from file, or not fished) or a list holding rate
+  (numeric [x, y, layer]), layer (0-based layer at each time point), nlayer and range (lo, hi).*/
+static FISHING_ARRAY *read_fishing_arrays(SEXP inputs, const char *name, int nsp);
+
 /*Element of an R list by name (R_NilValue if absent)*/
 static SEXP get_list_element(SEXP list, const char *name)
 {
@@ -11,6 +16,34 @@ static SEXP get_list_element(SEXP list, const char *name)
                 if (strcmp(CHAR(STRING_ELT(names, i)), name) == 0) return VECTOR_ELT(list, i);
         }
         return R_NilValue;
+}
+
+static FISHING_ARRAY *read_fishing_arrays(SEXP inputs, const char *name, int nsp)
+{
+        SEXP lst = get_list_element(inputs, name);
+        int s, j;
+        if (lst == R_NilValue || nsp < 1) return NULL;
+        if (!isNewList(lst) || LENGTH(lst) != nsp) error("%s must be a list with one entry per species", name);
+        FISHING_ARRAY *fa = (FISHING_ARRAY *) R_alloc(nsp, sizeof(FISHING_ARRAY));
+        for (s = 0; s < nsp; s++) {
+                SEXP el = VECTOR_ELT(lst, s);
+                fa[s].rate = NULL; fa[s].layer = NULL; fa[s].nlayer = 0; fa[s].nblock = 0; fa[s].len = 0;
+                fa[s].lo = R_NegInf; fa[s].hi = R_PosInf;
+                if (el == R_NilValue) continue;
+                SEXP rate = get_list_element(el, "rate"), layer = get_list_element(el, "layer");
+                SEXP nl = get_list_element(el, "nlayer"), range = get_list_element(el, "range");
+                if (!isReal(rate) || !isInteger(layer) || !isInteger(nl) || LENGTH(nl) != 1 || !isReal(range) || LENGTH(range) != 2) {
+                        error("%s[[%d]]: rate and range must be numeric, layer and nlayer integer", name, s + 1);
+                }
+                int nlayer = INTEGER(nl)[0];
+                if (nlayer < 1 || LENGTH(layer) < 1 || XLENGTH(rate) < nlayer) error("%s[[%d]]: inconsistent lengths", name, s + 1);
+                for (j = 0; j < LENGTH(layer); j++) {
+                        if (INTEGER(layer)[j] < 0 || INTEGER(layer)[j] >= nlayer) error("%s[[%d]]: layer index out of range at time point %d", name, s + 1, j + 1);
+                }
+                fa[s].rate = REAL(rate); fa[s].layer = INTEGER(layer); fa[s].nlayer = nlayer; fa[s].nblock = LENGTH(layer);
+                fa[s].len = XLENGTH(rate); fa[s].lo = REAL(range)[0]; fa[s].hi = REAL(range)[1];
+        }
+        return fa;
 }
 
 // This is the new R interface. SizeSpectrum() is now a wrapper function that
@@ -127,6 +160,7 @@ SEXP SizeSpectrum(
         arr.pla_int = NULL; arr.pla_slp = NULL; arr.pla_layer = NULL;
         arr.pla_nlayer = 0; arr.pla_nblock = 0; arr.pla_len = 0;
         arr.have_forcing = 0; arr.frc_layer = NULL; arr.frc_nblock = 0;
+        arr.fish_pel = NULL; arr.fish_ben = NULL;
         for (i = 0; i < N_FRC; i++) { arr.frc[i] = NULL; arr.frc_nlayer[i] = 0; arr.frc_len[i] = 0; }
         if (inputs_r != R_NilValue) {
                 if (!isNewList(inputs_r)) {
@@ -187,6 +221,10 @@ SEXP SizeSpectrum(
                                 arr.have_forcing = 1; arr.frc_layer = INTEGER(flay); arr.frc_nblock = LENGTH(flay);
                         }
                 }
+
+                // Fishing mortality as arrays, per species.
+                arr.fish_pel = read_fishing_arrays(inputs_r, "fishing_pelagic", npel);
+                arr.fish_ben = read_fishing_arrays(inputs_r, "fishing_benthic", nben);
         }
 
         SizeSpectrum_internals(
@@ -236,6 +274,7 @@ static void SizeSpectrum_internals(int *run_params, double *grid_params, double 
     setup_run(&run, run_params, names_params[0]);
     run.arr=arr;          //inputs supplied from R as arrays (may hold none)
     run.frc_step=0;
+    run.fish_block=0;
     run.out=out;          //output returned to R as arrays (mode 0 = none)
     
     /*Setup grid*/
@@ -255,6 +294,7 @@ static void SizeSpectrum_internals(int *run_params, double *grid_params, double 
     /*Setup pelagic*/
     temp_pel_params=setup_pelagic_params(run.no_pelagic, pel_params);
     for(s=0 ; s<run.no_pelagic ; s++){
+            community.pelagic[s].fish_arr=(arr!=NULL && arr->fish_pel!=NULL && arr->fish_pel[s].rate!=NULL) ? &arr->fish_pel[s] : NULL;
             setup_pelagic(&run, &grid, &(community.pelagic[s]), temp_pel_params[s], names_params[s+2], flags_params[4*s+2], flags_params[4*s+3], flags_params[4*s+4], flags_params[4*s+5]);
     }
     
@@ -262,6 +302,7 @@ static void SizeSpectrum_internals(int *run_params, double *grid_params, double 
             /*Setup benthic*/
             temp_ben_params=setup_benthic_params(run.no_benthic, ben_params);
             for(b=0 ; b<run.no_benthic ; b++){
+                    community.benthic[b].fish_arr=(arr!=NULL && arr->fish_ben!=NULL && arr->fish_ben[b].rate!=NULL) ? &arr->fish_ben[b] : NULL;
                     setup_benthic(&run, &grid, &(community.benthic[b]), temp_ben_params[b], names_params[b+run.no_pelagic+2], flags_params[4*b+(2+(4*run.no_pelagic))], flags_params[4*b+(3+(4*run.no_pelagic))], flags_params[4*b+(4+(4*run.no_pelagic))], flags_params[4*b+(5+(4*run.no_pelagic))]);
             }
     
@@ -770,13 +811,13 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      
      /*Close fishing files*/
      for(s=0 ; s<n ; s++){
-             if(community->pelagic[s].fishing_flag==1){
+             if(community->pelagic[s].fishing_flag==1 && community->pelagic[s].fish_arr==NULL){
                      fclose(community->pelagic[s].fptr_fish_ts);
              }
      }
      if(run->no_benthic!=0){
              for(b=0 ; b<c ; b++){
-                     if(community->benthic[b].fishing_flag==1){
+                     if(community->benthic[b].fishing_flag==1 && community->benthic[b].fish_arr==NULL){
                              fclose(community->benthic[b].fptr_fish_ts);
                      }
              }

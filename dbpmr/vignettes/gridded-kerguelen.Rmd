@@ -292,35 +292,42 @@ the arrays it is given. The plankton spectrum goes in as intercept and slope
 arrays (`Setup.ts()`), temperature, export and depth as forcing arrays
 (`Setup.Forcing()`), the depth-dependent benthic feeding preference as a per-cell
 parameter (`Setup.CellParams()`), and the output comes back as arrays
-(`output = "arrays"`).
+(`output = "arrays"`). Fishing is optional and is used in the next section.
 
 ```{r eval = FALSE}
-run_dbpm <- function(int, slp, tex, tob, exp, depth, nyr = 25, prey = 0, pred = 0, comp = 0) {
+run_dbpm <- function(int, slp, tex, tob, exp, depth, nyr = 25, layer = NULL, fishing = NULL,
+                     prey = 0, pred = 0, comp = 0) {
   wd <- tempfile("dbpm"); dir.create(wd); old <- setwd(wd)
   on.exit({ setwd(old); unlink(wd, recursive = TRUE, force = TRUE) }, add = TRUE)
   nx <- nrow(depth); ny <- ncol(depth); as_grid <- nx * ny > 1
   run  <- Setup.Run("R", 1, 1, if (as_grid) 2 else 0, TRUE, 1)
-  grid <- if (as_grid) Setup.Grid(run, tmax = nyr, tstep = 1/48, toutstep = 1,
+  grid <- if (as_grid) Setup.Grid(run, tmax = nyr, tstep = 1/48, toutstep = 0.5,
                                   xmin = 1, xmax = nx, xstep = 1, xoutstep = 1,
                                   ymin = 1, ymax = ny, ystep = 1, youtstep = 1)
-          else Setup.Grid(run, tmax = nyr, tstep = 1/48, toutstep = 1)
-  month <- (floor(seq(0, nyr, 1/48) * 12) %% 12) + 1          # the layer each model time point uses
+          else Setup.Grid(run, tmax = nyr, tstep = 1/48, toutstep = 0.5)
+  # the forcing layer each model time point uses: by default the supplied months repeat every year
+  if (is.null(layer)) layer <- (floor(seq(0, nyr, 1/48) * 12) %% dim(int)[3]) + 1
 
   pl <- Setup.Plankton(run, filename = "plankton", ts_flag = TRUE)
-  pl <- Setup.ts(pl, run, grid, intercept = 10^int / LN10, slope = slp, layer = month)
+  pl <- Setup.ts(pl, run, grid, intercept = 10^int / LN10, slope = slp, layer = layer)
   fo <- Setup.Forcing(run, grid, pel_tempeff = te(tex), ben_tempeff = te(tob),
-                      sinking_rate = pmax(exp, 0), depth = pmin(depth, 200), layer = month)
+                      sinking_rate = pmax(exp, 0), depth = pmin(depth, 200), layer = layer)
+  fished <- !is.null(fishing)
 
   pe <- Setup.Pelagic(run, filename = "fish", mmin = -3*LN10, mmat = 2*LN10, mmax = 6*LN10,
                       alpha = params$metabolic_req_pred, A = 64*ascl, mu_0 = params$natural_mort*mu0s,
                       K_pla = Kp, R_pla = Rp, Ex_pla = Ep, K_pel = Kp, R_pel = Rp, Ex_pel = Ep,
-                      K_ben = Kl, R_ben = Rl, Ex_ben = El, rep_method = 2, fishing_flag = FALSE,
+                      K_ben = Kl, R_ben = Rl, Ex_ben = El, rep_method = 2, fishing_flag = fished,
                       prey = prey, pred = pred, comp = comp, initial_flag = TRUE)
   be <- Setup.Benthic(run, filename = "benthos", mmin = -3*LN10, mmat = 1*LN10, mmax = 4*LN10,
                       alpha = params$metabolic_req_detritivore, A = 6.4*ascl, mu_0 = params$natural_mort*mu0s,
-                      K_det = Kl, R_det = Rl, Ex_det = El, rep_method = 2, fishing_flag = FALSE,
+                      K_det = Kl, R_det = Rl, Ex_det = El, rep_method = 2, fishing_flag = fished,
                       initial_flag = TRUE)
   de <- Setup.Detritus(run, filename = "detritus")
+  if (fished) {                                                             # fishing mortality as [x, y, layer] arrays
+    pe <- Setup.fishing(pe, run, grid, rate = fishing$pel, min_size = fishing$min_size, layer = fishing$layer)
+    be <- Setup.fishing(be, run, grid, rate = fishing$ben, min_size = fishing$min_size, layer = fishing$layer)
+  }
   Setup.CellParams(pe, run, grid, pref_ben = 0.8 * exp(-depth / 1500))      # per-cell benthic preference
   start <- function(sp) {                                                   # the same starting spectrum in every cell
     m <- seq(sp@mmin, sp@mmax, length.out = round((sp@mmax - sp@mmin) / grid@mstep) + 1)
@@ -330,10 +337,19 @@ run_dbpm <- function(int, slp, tex, tob, exp, depth, nyr = 25, prey = 0, pred = 
 
   out <- NULL
   invisible(utils::capture.output(
-    out <- SizeSpectrum(run, grid, pl, pe, be, de, forcing = fo, output = "arrays", variables = "abundance")))
-  w <- exp(out$m) * diff(out$m)[1]; last <- length(out$t)
-  biomass <- function(a) apply(a[, , , last, drop = FALSE], c(1, 2), function(u) sum(u * w))
-  list(BU = biomass(out$abundance$fish) * pmin(depth, 200), BV = biomass(out$abundance$benthos) * 20)
+    out <- SizeSpectrum(run, grid, pl, pe, be, de, forcing = fo, output = "arrays", variables = "catch")))
+  # sum over size classes and convert to per-area: pelagic over the top 200 m, benthic over a 20 m layer.
+  # Abundance is weighted by body mass to give biomass; catch is already in biomass per size class.
+  dm <- diff(out$m)[1]; last <- length(out$t)
+  per_area <- function(a, wt, thick) apply(a, c(1, 2, 4), function(u) sum(u * wt)) * as.vector(thick)   # [x, y, time]
+  res <- list(BU = per_area(out$abundance$fish, exp(out$m) * dm, pmin(depth, 200))[, , last, drop = FALSE][, , 1],
+              BV = per_area(out$abundance$benthos, exp(out$m) * dm, 20)[, , last, drop = FALSE][, , 1])
+  if (fished) {                                                             # catch rate at the middle of each year
+    mid <- abs(out$t %% 1 - 0.5) < 1e-6
+    res$catch <- list(pel = per_area(out$catch$fish, dm, pmin(depth, 200))[, , mid, drop = FALSE],
+                      ben = per_area(out$catch$benthos, dm, 20)[, , mid, drop = FALSE])
+  }
+  res
 }
 ```
 
@@ -380,6 +396,96 @@ down to movement itself. See the *spatial-movement* vignette for how to choose
 those coefficients: they depend on the grid spacing, which for movement should be
 given in distance units rather than the cell indices used here. The output object
 can be saved with `Write.NetCDF()`.
+
+## 7. Fishing on the grid
+
+The calibrated run of section 5 redistributes effort among cells every year with
+a gravity model. A simpler way to fish the grid is to **force** it: the regional
+effort series sets how fishing changes through *time*, and a fixed share of effort
+per cell sets where it falls in *space*. Fishing mortality in a cell and year is
+then
+
+> catchability × regional effort that year × number of cells × that cell's share of effort,
+
+applied to all sizes above the minimum fished size. Here the share per cell is the
+mean share over 2001--2010 from the calibrated run (shipped with the package), and
+the catchabilities and minimum size are those of section 5. The rates go to the
+model as `[x, y, layer]` arrays through `Setup.fishing()`, with one layer for the
+unfished spin-up and one per year.
+
+```{r}
+cal <- readRDS(ex("kerguelen_calib.rds")); fc <- readRDS(ex("kerguelen_fished_cells.rds"))
+share <- depth * NA                                            # share of effort per cell, [lon, lat]
+share[cbind(match(fc$lon, lons), match(fc$lat, lats))] <- fc$eff / sum(fc$eff)
+effort <- cal$Etot[as.character(cal$yrs)]                      # regional effort by year (1 = the peak year)
+spin <- 25; nyear <- length(cal$yrs)
+
+# fishing mortality [lon, lat, layer]: layer 1 is the unfished spin-up, then one layer per year
+frate <- function(q) array(c(share * 0, outer(as.vector(share), q * length(share) * effort)), c(dim(share), nyear + 1))
+tt    <- seq(0, spin + nyear, 1/48)                            # model time points (years)
+fishing <- list(pel = frate(cal$qg[1]), ben = frate(cal$qg[2]), min_size = cal$UWLO * LN10,
+                layer = ifelse(tt < spin, 1, pmin(floor(tt - spin + 1e-9), nyear - 1) + 2))
+# the forcing month used at each time point: the first year repeats during the spin-up, then 1961-2010
+months <- ifelse(tt < spin, (floor(tt * 12 + 1e-9) %% 12) + 1, pmin(floor((tt - spin) * 12 + 1e-9), nmo - 1) + 1)
+round(range(fishing$pel[, , which.max(effort) + 1]), 4)        # pelagic fishing mortality across cells, peak year
+```
+
+The fished run uses the same function as before, once for the whole grid and once
+per cell, now with the full monthly forcing and the fishing arrays:
+
+```{r eval = FALSE}
+fished_grid <- run_dbpm(Aint, Aslp, Atex, Atob, Aexp, depth, nyr = spin + nyear, layer = months, fishing = fishing)
+
+cell <- function(a, k, l) a[k, l, , drop = FALSE]              # one cell, all layers
+fished_cells <- list(pel = array(NA, c(dim(depth), nyear)), ben = array(NA, c(dim(depth), nyear)))
+for (k in seq_along(lons)) for (l in seq_along(lats)) {
+  r <- run_dbpm(cell(Aint, k, l), cell(Aslp, k, l), cell(Atex, k, l), cell(Atob, k, l), cell(Aexp, k, l),
+                depth[k, l, drop = FALSE], nyr = spin + nyear, layer = months,
+                fishing = list(pel = cell(fishing$pel, k, l), ben = cell(fishing$ben, k, l),
+                               min_size = fishing$min_size, layer = fishing$layer))
+  fished_cells$pel[k, l, ] <- r$catch$pel[1, 1, spin + seq_len(nyear)]
+  fished_cells$ben[k, l, ] <- r$catch$ben[1, 1, spin + seq_len(nyear)]
+}
+catch_grid <- lapply(fished_grid$catch, function(a) a[, , spin + seq_len(nyear)])   # [lon, lat, year], g m^-2 yr^-1
+
+# summarise: regional series (cells weighted by area), mean catch per cell for 2001-2010, grid vs single cells
+wt  <- outer(rep(1, length(lons)), cos(lats * pi / 180))
+reg <- function(a) apply(a, 3, function(z) sum(z * wt) / sum(wt))
+rel <- function(g, s) { ok <- s > 1e-12 * max(s); max(abs(g[ok] / s[ok] - 1)) }
+recent <- cal$yrs >= 2001
+fg <- list(lon = lons, lat = lats, year = cal$yrs, pel = reg(catch_grid$pel), ben = reg(catch_grid$ben),
+           cell_pel = apply(catch_grid$pel[, , recent], c(1, 2), mean), cell_ben = apply(catch_grid$ben[, , recent], c(1, 2), mean),
+           agreement = c(pelagic = rel(catch_grid$pel, fished_cells$pel), benthic = rel(catch_grid$ben, fished_cells$ben)))
+```
+
+As for the unfished run, the grid and the single cells agree, and the forced run
+gives a regional catch series and a map of where the catch is taken. The shipped
+result of the chunks above:
+
+```{r fig.height = 4}
+fg <- readRDS(ex("kerguelen_fished_grid.rds"))
+fg$agreement                                                   # largest relative difference, grid vs single cells
+
+par(mfrow = c(1, 3), mar = c(4, 4.2, 3, 1))
+pos <- function(x) pmax(x, 1e-9)
+for (g in c("pel", "ben")) {
+  obs <- cal[[paste0("obs_", g)]]; v <- c(obs, cal[[g]], fg[[g]]); yl <- range(v[v > 0])
+  plot(fg$year, pos(obs), pch = 16, col = "grey40", log = "y", ylim = yl, xlab = "Year",
+       ylab = expression("Catch (g m"^-2*" yr"^-1*")"), main = if (g == "pel") "Pelagic catch" else "Benthic catch")
+  lines(fg$year, pos(cal[[g]]), lwd = 2, col = "#1f78b4"); lines(fg$year, pos(fg[[g]]), lwd = 2, col = "#d95f02")
+  if (g == "pel") legend("bottomright", c("observed", "gravity (section 5)", "forced, fixed share"), pch = c(16, NA, NA),
+                         lty = c(NA, 1, 1), lwd = 2, col = c("grey40", "#1f78b4", "#d95f02"), bty = "n", cex = 0.75)
+}
+image(fg$lon, fg$lat, log10(pos(fg$cell_pel + fg$cell_ben)), col = hcl.colors(64, "YlOrRd", rev = TRUE),
+      xlab = "Longitude", ylab = "Latitude", main = "Catch 2001-2010 (log10)")
+```
+
+The forced run follows the same effort series as the calibrated one but will not
+match it exactly: with a fixed share, effort cannot follow the fish as they are
+depleted, which is what the gravity model does. Because fishing is just an array,
+other spatial patterns are one line away: a uniform share is
+`share[] <- 1 / length(share)`, and a closed area is fishing set to zero in some
+cells, for example `fishing$pel[5:8, 3:5, ] <- 0`.
 
 ## Going further
 
