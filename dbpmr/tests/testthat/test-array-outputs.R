@@ -2,14 +2,15 @@
 # files, and written to NetCDF. The arrays must hold exactly what the text files hold.
 
 # a small 2-D run with movement and fishing; returns whatever SizeSpectrum() returns and leaves the run directory in place
-run_out <- function(output, xoutstep = 1, moutstep = 0.1 * log(10), toutstep = 0.5, ...) {
+run_out <- function(output, xoutstep = 1, moutstep = 0.1 * log(10), toutstep = 0.5, move = TRUE, ...) {
   run  <- Setup.Run("R", 1, 1, spatial_dim = 2, coupled_flag = TRUE, diff_method = 1)
   grid <- Setup.Grid(run, tmax = 2, tstep = 1/48, toutstep = toutstep, moutstep = moutstep,
                      xmin = 0, xmax = 4, xstep = 1, xoutstep = xoutstep, ymin = 0, ymax = 1, ystep = 1, youtstep = 1)
   uni <- function(sp) { m <- dbpmr:::grid_seq(sp@mmin, sp@mmax, grid@mstep); matrix(sp@u_0 * exp(sp@lambda * m), nrow = 1) }
   pl <- Setup.Plankton(run, filename = "plankton", initial_flag = TRUE)
   Setup.ts(pl, run, grid, func = function(m, t, x, y) 0.01 * exp(-m) * (1 + 0.2 * x + 0.1 * y))
-  pe <- Setup.Pelagic(run, filename = "fish", prey = 0.3, comp = 0.2, initial_flag = TRUE, fishing_flag = TRUE)
+  pe <- Setup.Pelagic(run, filename = "fish", prey = if (move) 0.3 else 0, comp = if (move) 0.2 else 0,
+                      initial_flag = TRUE, fishing_flag = TRUE)
   Setup.ts(pe, run, grid, mat = uni(pe))
   Setup.fishing(pe, run, grid, func = function(m, t, x, y) if (m > log(10)) 0.2 * (1 + 0.1 * x) else 0)
   be <- Setup.Benthic(run, filename = "benthos", initial_flag = TRUE); Setup.ts(be, run, grid, mat = uni(be))
@@ -37,7 +38,7 @@ test_that("output arrays hold exactly what the text result files hold", {
   wd <- tempfile("out"); dir.create(wd); old <- setwd(wd); on.exit(setwd(old), add = TRUE)
   out <- run_out("both")
   expect_s3_class(out, "dbpmr_output")
-  expect_named(out, c("t", "x", "y", "m", "abundance", "growth", "mortality", "predation", "fishing", "detritus"))
+  expect_named(out, c("t", "x", "y", "m", "abundance", "growth", "mortality", "predation", "fishing", "catch", "detritus"))
   expect_named(out$abundance, c("plankton", "fish", "benthos")); expect_named(out$growth, c("fish", "benthos"))
   expect_equal(dim(out$abundance$plankton), c(5L, 2L, 181L, 5L))
   expect_equal(out$t, seq(0, 2, 0.5)); expect_equal(out$x, 0:4); expect_equal(out$y, 0:1)
@@ -53,12 +54,27 @@ test_that("output arrays hold exactly what the text result files hold", {
   expect_named(out$predation$fish, "fish")                                     # predation on fish, by predator species
   expect_true(same(out$predation$fish$fish, read_txt("fish", "predation0", 5, 2)$a))
   expect_true(same(out$predation$benthos,   read_txt("benthos", "predation", 5, 2)$a))
+  # catch = fishing mortality x abundance x body mass, at the output time
+  w <- array(rep(exp(out$m), each = 5 * 2), dim(out$fishing$fish))
+  expect_equal(out$catch$fish, out$fishing$fish * out$abundance$fish * w, tolerance = 1e-14)
+  expect_gt(max(out$catch$fish), 0); expect_equal(max(out$catch$benthos), 0)   # only the pelagic species is fished
   # the run exercises every variable and the cell indexing
   expect_gt(max(out$fishing$fish), 0); expect_gt(max(out$predation$benthos), 0); expect_gt(max(out$growth$fish), 0)
   expect_true(any(apply(out$abundance$fish[, , , 5], 3, function(z) diff(range(z))) > 0))
   expect_true(diff(range(out$fishing$fish[, 1, 181, 5])) > 0)                  # fishing was set to vary with x
   d <- do.call(rbind, lapply(readLines(file.path("R", "detritus", "summary.txt"))[-(1:5)], num))
   expect_true(all(abs(as.vector(aperm(out$detritus, c(2, 1, 3))) - d[, 4]) <= 1e-15 + 1e-12 * abs(d[, 4])))   # file rows: time, x, y (y fastest)
+})
+
+test_that("catch summed over size is the total catch rate of summary.txt", {
+  # Without movement. With movement the summary totals are computed before the movement step, so its
+  # "fishing" column lags the abundance that is output; the catch array is consistent with that abundance.
+  wd <- tempfile("out"); dir.create(wd); old <- setwd(wd); on.exit(setwd(old), add = TRUE)
+  out <- run_out("both", move = FALSE)
+  sm <- do.call(rbind, lapply(readLines(file.path("R", "fish", "summary.txt"))[-(1:5)], num))   # rows: time, x, y (y fastest)
+  tot <- apply(out$catch$fish, c(1, 2, 4), sum) * diff(out$m)[1]                               # [x, y, t]
+  expect_gt(min(sm[, 9]), 0)
+  expect_equal(as.vector(aperm(tot, c(2, 1, 3))), sm[, 9], tolerance = 1e-12)
 })
 
 test_that("output = 'arrays' returns the same arrays and writes no per-timestep text output", {
@@ -81,9 +97,12 @@ test_that("variables limits what is returned; abundance always is", {
   unlink("R", recursive = TRUE)
   gf <- run_out("arrays", variables = c("growth", "fishing"))
   expect_named(gf, c("t", "x", "y", "m", "abundance", "growth", "fishing", "detritus"))
+  unlink("R", recursive = TRUE)
+  ca <- run_out("arrays", variables = "catch")
+  expect_named(ca, c("t", "x", "y", "m", "abundance", "catch", "detritus")); expect_identical(ca$catch, full$catch)
   expect_identical(gf$fishing, full$fishing)
   unlink("R", recursive = TRUE)
-  expect_error(run_out("arrays", variables = "catch"), "should be one of")
+  expect_error(run_out("arrays", variables = "biomass"), "should be one of")
 })
 
 test_that("output = 'files' is unchanged and the default", {
@@ -109,7 +128,8 @@ test_that("Write.NetCDF round-trips the output arrays", {
   nc <- ncdf4::nc_open(f); on.exit(ncdf4::nc_close(nc), add = TRUE)
   expect_setequal(names(nc$var), c("plankton_abundance", "fish_abundance", "benthos_abundance",
                                    "fish_growth", "benthos_growth", "fish_mortality", "benthos_mortality",
-                                   "fish_predation_by_fish", "benthos_predation", "fish_fishing", "benthos_fishing", "detritus"))
+                                   "fish_predation_by_fish", "benthos_predation", "fish_fishing", "benthos_fishing",
+                                   "fish_catch", "benthos_catch", "detritus"))
   expect_equal(vapply(nc$var$fish_abundance$dim, `[[`, "", "name"), c("lon", "lat", "size", "time"))
   expect_equal(as.vector(nc$dim$lon$vals), 70 + out$x); expect_equal(as.vector(nc$dim$time$vals), out$t)
   expect_equal(as.vector(nc$dim$size$vals), out$m)
@@ -120,6 +140,7 @@ test_that("Write.NetCDF round-trips the output arrays", {
   expect_equal(get("fish_predation_by_fish"), out$predation$fish$fish, ignore_attr = TRUE)
   expect_equal(get("benthos_predation"), out$predation$benthos, ignore_attr = TRUE)
   expect_equal(get("fish_fishing"), out$fishing$fish, ignore_attr = TRUE)
+  expect_equal(get("fish_catch"), out$catch$fish, ignore_attr = TRUE)
   expect_equal(get("detritus"), out$detritus, ignore_attr = TRUE)
   expect_error(Write.NetCDF(list(1), "x.nc"), "SizeSpectrum")
   expect_error(Write.NetCDF(out, "x.nc", x = 1:2), "one per output cell")

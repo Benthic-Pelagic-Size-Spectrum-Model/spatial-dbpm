@@ -47,7 +47,7 @@ typedef struct output_arrays{
         int *mi;               //grid index of each output size class
         int it;                //next output time slot
         double *t,*x,*y,*m;    //coordinate vectors
-        int want_g,want_mu,want_pred,want_fish;   //also return growth, total mortality, predation mortality, fishing mortality
+        int want_g,want_mu,want_pred,want_fish,want_catch;   //also return growth, total mortality, predation mortality, fishing mortality, catch
         double *pla;           //plankton abundance
         double **pel;          //abundance of each pelagic species
         double **ben;          //abundance of each benthic species
@@ -55,6 +55,7 @@ typedef struct output_arrays{
         double **pel_g,**pel_mu,**pel_fish;   //growth rate, total mortality and fishing mortality of each pelagic species (NULL if not wanted)
         double ***pel_pred;    //pel_pred[s][p]: predation mortality on pelagic species s from pelagic species p
         double **ben_g,**ben_mu,**ben_pred,**ben_fish;   //the same for each benthic species (predation from all pelagic species)
+        double **pel_catch,**ben_catch;   //catch rate density of each species: fishing mortality * abundance * body mass (per unit ln mass)
         SEXP list;             //the R list holding all of the above
         } OUTPUT_ARRAYS;
 
@@ -608,7 +609,8 @@ static void setup_output_arrays(RUN *run, GRID *grid, OUTPUT_ARRAYS *out)
         R_xlen_t nfull = ncell * out->nmo * out->nto;
         const char *names[] = {"t", "x", "y", "m", "plankton", "pelagic", "benthic", "detritus",
                                "pelagic_growth", "pelagic_mortality", "pelagic_predation", "pelagic_fishing",
-                               "benthic_growth", "benthic_mortality", "benthic_predation", "benthic_fishing", ""};
+                               "benthic_growth", "benthic_mortality", "benthic_predation", "benthic_fishing",
+                               "pelagic_catch", "benthic_catch", ""};
         SEXP list = PROTECT(mkNamed(VECSXP, names));
         out->list = list;
         SEXP v;
@@ -625,6 +627,7 @@ static void setup_output_arrays(RUN *run, GRID *grid, OUTPUT_ARRAYS *out)
         out->pel_g    = out->want_g    ? species_arrays(list, 8, n, nfull)  : NULL;
         out->pel_mu   = out->want_mu   ? species_arrays(list, 9, n, nfull)  : NULL;
         out->pel_fish = out->want_fish ? species_arrays(list, 11, n, nfull) : NULL;
+        out->pel_catch = out->want_catch ? species_arrays(list, 16, n, nfull) : NULL;
         out->pel_pred = NULL;
         if (out->want_pred) {
                 /*one list per prey species, holding one array per pelagic predator species*/
@@ -633,7 +636,7 @@ static void setup_output_arrays(RUN *run, GRID *grid, OUTPUT_ARRAYS *out)
                 for (s = 0; s < n; s++) out->pel_pred[s] = species_arrays(pred, s, n, nfull);
         }
         out->ben = NULL; out->det = NULL;
-        out->ben_g = NULL; out->ben_mu = NULL; out->ben_pred = NULL; out->ben_fish = NULL;
+        out->ben_g = NULL; out->ben_mu = NULL; out->ben_pred = NULL; out->ben_fish = NULL; out->ben_catch = NULL;
         if (c != 0) {
                 out->ben = species_arrays(list, 6, c, nfull);
                 v = allocVector(REALSXP, ncell * out->nto); SET_VECTOR_ELT(list, 7, v); out->det = REAL(v);
@@ -641,6 +644,7 @@ static void setup_output_arrays(RUN *run, GRID *grid, OUTPUT_ARRAYS *out)
                 if (out->want_mu)   out->ben_mu   = species_arrays(list, 13, c, nfull);
                 if (out->want_pred) out->ben_pred = species_arrays(list, 14, c, nfull);
                 if (out->want_fish) out->ben_fish = species_arrays(list, 15, c, nfull);
+                if (out->want_catch) out->ben_catch = species_arrays(list, 17, c, nfull);
         }
 }
 
@@ -665,6 +669,7 @@ static void capture_output(RUN *run, GRID *grid, COMMUNITY *community, int time)
                                         if (o->pel_g != NULL)    o->pel_g[s][idx]    = pe->g_values[i][k][l];
                                         if (o->pel_mu != NULL)   o->pel_mu[s][idx]   = pe->mu_values[i][k][l];
                                         if (o->pel_fish != NULL) o->pel_fish[s][idx] = pe->mu_fish_values[i][k][l];
+                                        if (o->pel_catch != NULL) o->pel_catch[s][idx] = pe->mu_fish_values[i][k][l] * pe->u_values[i][k][l] * exp(grid->m_values[i]);
                                         if (o->pel_pred != NULL) {
                                                 for (p = 0; p < run->no_pelagic; p++) o->pel_pred[s][p][idx] = pe->mu_pred_values[p][i][k][l];
                                         }
@@ -676,6 +681,7 @@ static void capture_output(RUN *run, GRID *grid, COMMUNITY *community, int time)
                                         if (o->ben_mu != NULL)   o->ben_mu[s][idx]   = be->mu_values[i][k][l];
                                         if (o->ben_pred != NULL) o->ben_pred[s][idx] = be->mu_pred_values[i][k][l];
                                         if (o->ben_fish != NULL) o->ben_fish[s][idx] = be->mu_fish_values[i][k][l];
+                                        if (o->ben_catch != NULL) o->ben_catch[s][idx] = be->mu_fish_values[i][k][l] * be->u_values[i][k][l] * exp(grid->m_values[i]);
                                 }
                         }
                         if (o->det != NULL) {
@@ -778,11 +784,11 @@ SEXP SizeSpectrum(
                 names_params[i] = (char *) CHAR(STRING_ELT(names_params_r, i));
         }
         
-        // Output: c(mode, growth, mortality, predation, fishing). mode: 0 = text files only (returns NULL),
-        // 1 = text files and arrays, 2 = arrays only. The other four are 0/1 flags for the optional
+        // Output: c(mode, growth, mortality, predation, fishing, catch). mode: 0 = text files only (returns
+        // NULL), 1 = text files and arrays, 2 = arrays only. The other five are 0/1 flags for the optional
         // variables returned alongside abundance.
-        if (!isInteger(output_r) || LENGTH(output_r) != 5 || INTEGER(output_r)[0] < 0 || INTEGER(output_r)[0] > 2) {
-                error("output_r must be 5 integers: mode (0 files, 1 files and arrays, 2 arrays) and four 0/1 variable flags");
+        if (!isInteger(output_r) || LENGTH(output_r) != 6 || INTEGER(output_r)[0] < 0 || INTEGER(output_r)[0] > 2) {
+                error("output_r must be 6 integers: mode (0 files, 1 files and arrays, 2 arrays) and five 0/1 variable flags");
         }
         OUTPUT_ARRAYS out;
         out.mode = INTEGER(output_r)[0];
@@ -790,6 +796,7 @@ SEXP SizeSpectrum(
         out.want_mu = INTEGER(output_r)[2] != 0;
         out.want_pred = INTEGER(output_r)[3] != 0;
         out.want_fish = INTEGER(output_r)[4] != 0;
+        out.want_catch = INTEGER(output_r)[5] != 0;
         out.list = R_NilValue;
 
         // Optional inputs passed as R arrays instead of text files (inputs_r is NULL or a named list).

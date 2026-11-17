@@ -22,8 +22,8 @@
 #'   R as arrays and writes no per-timestep text output. `"both"` does both.
 #' @param variables Used with `output = "arrays"` or `"both"`: which variables
 #'   to return. Abundance is always returned; `"growth"`, `"mortality"`,
-#'   `"predation"` and `"fishing"` are returned by default and can be left out to
-#'   save memory on large grids.
+#'   `"predation"`, `"fishing"` and `"catch"` are returned by default and can be
+#'   left out to save memory on large grids.
 #'
 #' @return With `output = "files"`, a character vector of the paths and species
 #'   filenames produced by the run, suitable for passing to [Read.In()].
@@ -42,6 +42,15 @@
 #'   * `predation`: predation mortality rate. For a pelagic species, a list with
 #'     one array per pelagic predator species; for a benthic species, one array
 #'     (predation by all pelagic species);
+#'   * `catch`: a named list with one `[x, y, m, t]` array per pelagic and
+#'     benthic species, holding the catch rate density: fishing mortality times
+#'     abundance times body mass, per unit natural-log body mass. Summed over
+#'     size classes and multiplied by the size step (`diff(m)[1]`) it is the
+#'     total catch rate. Like every other variable it is the rate at the output
+#'     time, not a total over the interval between outputs. (In a run without
+#'     movement the total equals the `fishing` column of the species'
+#'     `summary.txt`; with movement that column is computed before the
+#'     movement step and differs slightly.);
 #'   * `detritus`: detritus biomass as `[x, y, t]` (when the run has benthos).
 #'
 #'   The values are those the text files would hold (`results.txt`,
@@ -54,7 +63,7 @@
 #' @export
 `SizeSpectrum` <-
 function(run.in, grid.in, plankton.in, pelagic.in, benthic.in, detritus.in, forcing = NULL, output = c("files", "arrays", "both"),
-         variables = c("abundance", "growth", "mortality", "predation", "fishing")){
+         variables = c("abundance", "growth", "mortality", "predation", "fishing", "catch")){
   output <- match.arg(output)
   variables <- match.arg(variables, several.ok = TRUE)
 
@@ -374,7 +383,7 @@ tiny<-1e-7
     as.integer(flags.params),
     inputs,
     c(c(files = 0L, both = 1L, arrays = 2L)[[output]],
-      as.integer(c("growth", "mortality", "predation", "fishing") %in% variables))
+      as.integer(c("growth", "mortality", "predation", "fishing", "catch") %in% variables))
   )
 
 #-----------------------------------------------------------------#
@@ -418,6 +427,7 @@ tiny<-1e-7
     out$predation <- c(pp, lapply(x$benthic_predation, shape)); names(out$predation) <- spnames
   }
   if("fishing" %in% variables)   out$fishing   <- by_species(x$pelagic_fishing, x$benthic_fishing)
+  if("catch" %in% variables)     out$catch     <- by_species(x$pelagic_catch, x$benthic_catch)
   if(has_ben){
     det <- x$detritus; dim(det) <- dims[c(1, 2, 4)]
     out$detritus <- det
