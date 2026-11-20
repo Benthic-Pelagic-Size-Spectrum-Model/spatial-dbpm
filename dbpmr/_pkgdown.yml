@@ -18,7 +18,6 @@ reference:
       - Setup.Rep
       - Setup.fishing
       - Setup.CellParams
-      - Setup.Forcing
   - title: Run the model
     contents:
       - SizeSpectrum

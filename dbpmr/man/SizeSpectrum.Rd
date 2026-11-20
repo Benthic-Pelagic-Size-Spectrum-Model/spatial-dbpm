@@ -4,15 +4,7 @@
 \alias{SizeSpectrum}
 \title{Run the dynamic size-spectrum simulation}
 \usage{
-SizeSpectrum(
-  run.in,
-  grid.in,
-  plankton.in,
-  pelagic.in,
-  benthic.in,
-  detritus.in,
-  forcing = NULL
-)
+SizeSpectrum(run.in, grid.in, plankton.in, pelagic.in, benthic.in, detritus.in)
 }
 \arguments{
 \item{run.in}{A \link{run.params} object.}
@@ -29,10 +21,6 @@ pelagic species).}
 
 \item{detritus.in}{A \link{detritus.params} object. Optional when
 \code{run.in@no_benthic == 0}.}
-
-\item{forcing}{Optional environmental forcing held in memory, from
-\code{\link[=Setup.Forcing]{Setup.Forcing()}}. When given, it replaces the \code{forcing_ts.txt} input file
-(it is an error to supply both).}
 }
 \value{
 A character vector of the paths and species filenames produced by the

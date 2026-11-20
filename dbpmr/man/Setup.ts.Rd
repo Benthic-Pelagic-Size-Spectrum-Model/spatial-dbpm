@@ -4,18 +4,7 @@
 \alias{Setup.ts}
 \title{Write initial-condition or time-series input for a species}
 \usage{
-Setup.ts(
-  species,
-  run.in,
-  grid.in,
-  func,
-  mat,
-  dataname,
-  intercept,
-  slope,
-  layer,
-  time
-)
+Setup.ts(species, run.in, grid.in, func, mat, dataname)
 }
 \arguments{
 \item{species}{A species parameter object (e.g. from \code{\link[=Setup.Pelagic]{Setup.Pelagic()}}).}
@@ -31,26 +20,10 @@ columns = the species' mass bins).}
 
 \item{dataname}{Path to a CSV file whose first line is the file type
 (\code{"intercept"}, \code{"interslope"} or \code{"spectrum"}).}
-
-\item{intercept, slope}{Plankton only (\code{ts_flag = TRUE}): numeric arrays with
-dimensions \verb{[x, y, layer]} giving, for each spatial cell and layer, the
-plankton spectrum \code{u(m) = intercept * exp(slope * m)} (\code{m} is natural-log
-body mass; \code{intercept} is the abundance density at \code{m = 0}, not its
-logarithm). For a 1-D run a matrix \verb{[x, layer]} and for a 0-D run a vector
-with one value per layer are also accepted.}
-
-\item{layer}{Used with \code{intercept}/\code{slope}: for each model time point
-(\code{seq(0, tmax, tstep)}) the layer it uses, as whole numbers from 1. May be
-omitted when there is one layer per time point, or a single layer.}
-
-\item{time}{Used with \code{intercept}/\code{slope} instead of \code{layer}: the start time
-(in model years) of each layer; each time point uses the latest layer that
-has started.}
 }
 \value{
-Invisibly \code{NULL} when writing an input file under the run's \code{Input}
-directory. When \code{intercept} and \code{slope} are given, invisibly the plankton
-object with the arrays attached (assign it).
+Invisibly \code{NULL}; called for the side effect of writing the input
+file under the run's \code{Input} directory.
 }
 \description{
 Generates the \verb{_ts.txt} input file used to seed a species' initial size
@@ -60,11 +33,6 @@ an R matrix, or read from a CSV data file. Exactly one of \code{func}, \code{mat
 \code{dataname} must be given.
 }
 \details{
-A plankton time series can instead be supplied in memory as \code{intercept} and
-\code{slope} arrays, with no input file written. In that case the function returns
-the plankton object carrying the arrays, which must be assigned and passed on
-to \code{\link[=SizeSpectrum]{SizeSpectrum()}}: \code{pl <- Setup.ts(pl, run, grid, intercept = a, slope = b)}.
-
 For an initial condition (\code{ts_flag = FALSE}) the supplied \code{mat} /
 data may have either a single row, applied uniformly to every spatial cell,
 or one row per spatial cell (\code{x * y} rows) ordered with x outermost and y

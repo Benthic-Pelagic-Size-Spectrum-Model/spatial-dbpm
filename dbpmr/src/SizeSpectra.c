@@ -9,34 +9,6 @@
 // Structure Declarations //
 //------------------------//
 
-/*Inputs handed over from R as arrays instead of <run>/Input text files (opt-in; NULL pointers = not supplied).
-  All arrays are R arrays [x][y][layer] (column-major): index k + x*(l + y*layer).
-  Plankton: the spectrum in cell (k,l) for a given layer is u(m) = a*exp(b*m), with a = pla_int and b = pla_slp.
-  Forcing: one array per channel of the forcing plugin, in the order of FRC_NAMES below; a channel has either
-  one layer (constant in time) or the common number of layers.*/
-#define N_FRC 9
-enum { FRC_PEL_TEMPEFF, FRC_BEN_TEMPEFF, FRC_SINKING_RATE, FRC_DEPTH, FRC_RESIDENCE_TIME,
-       FRC_EXPORT_ATTN, FRC_EXPORT_GAMMA, FRC_EXPORT_MAGG, FRC_GRAVITY };
-static const char *FRC_NAMES[N_FRC] = { "forcing_pel_tempeff", "forcing_ben_tempeff", "forcing_sinking_rate",
-       "forcing_depth", "forcing_residence_time", "forcing_export_attn", "forcing_export_gamma",
-       "forcing_export_magg", "forcing_gravity" };
-typedef struct array_inputs{
-        const double *pla_int; //plankton intercept a
-        const double *pla_slp; //plankton slope b
-        const int *pla_layer;  //0-based layer used by each time block (block 0 = initial state, then one per timestep)
-        int pla_nlayer;        //number of layers in the arrays
-        int pla_nblock;        //length of pla_layer
-        R_xlen_t pla_len;      //length of pla_int / pla_slp (checked against x*y*layers once the grid is known)
-
-        int have_forcing;      //1 = forcing channels supplied as arrays (forcing_ts.txt is not opened)
-        const double *frc[N_FRC];   //channel arrays (NULL = channel absent)
-        int frc_nlayer[N_FRC];      //layers of each channel (1 = constant in time)
-        R_xlen_t frc_len[N_FRC];    //length of each channel array (checked against x*y*layers)
-        const int *frc_layer;  //0-based layer at each model time point (0, tstep, 2*tstep, ...); the forcing applied
-                               //in timestep r (advancing to time r*tstep) is that of time point r
-        int frc_nblock;        //length of frc_layer
-        } ARRAY_INPUTS;
-
 typedef struct run_info{
         
         char *filename;        //root filename for runs
@@ -57,8 +29,6 @@ typedef struct run_info{
            a col_* index + an apply hook. Missing channels fall back to the neutral defaults. */
         int forcing_flag;      //time-varying forcing driver active
         FILE *fptr_forcing;    //forcing time-series file ptr
-        const ARRAY_INPUTS *arr; //inputs supplied from R as arrays (NULL or have_forcing=0 -> forcing comes from the file, if any)
-        int frc_step;          //timesteps of array forcing applied so far
         int forcing_ncol;      //number of columns in each data row
         int col_pel_tempeff;   //column index of each channel (-1 if absent)
         int col_ben_tempeff;
@@ -135,8 +105,6 @@ typedef struct plankton_info{
         
         int initial_flag;
         int ts_flag;
-        const ARRAY_INPUTS *arr; //plankton series supplied from R as arrays (NULL = read the _ts file)
-        int ts_block;          //next time block to load from the arrays
         
         double ***u_values;
         double ***g_values;    //for futureproofing
@@ -399,7 +367,7 @@ typedef struct vectors{
 /*Setup Functions*/
 void setup_run(RUN *, int *, char *);
 void setup_grid(GRID *, double *);
-void setup_plankton(RUN *, GRID *, PLANKTON *, double *, char *, int, int, const ARRAY_INPUTS *);           //sets up plankton values
+void setup_plankton(RUN *, GRID *, PLANKTON *, double *, char *, int, int);           //sets up plankton values
 void setup_pelagic(RUN *, GRID *, PELAGIC *, double *, char *, int, int, int, int);   //sets up pelagic values
 void setup_benthic(RUN *, GRID *, BENTHIC *, double *, char *, int, int, int, int);   //sets up benthic values
 void setup_detritus(RUN *, GRID *, DETRITUS *, double *, char *, int, int);           //sets up detritus values
@@ -483,58 +451,7 @@ void *safe_malloc(size_t, int, char *);           //Wrappered function for memor
 FILE *safe_fopen(char *, char *, int, char *);    //Wrappered function for file opening
 
 /*Protype of the internal size-spectrum function (no interface with R)*/
-static void SizeSpectrum_internals(int *, double *, double *, double *, double *, double *, char **, int *, const ARRAY_INPUTS *);
-
-/*Element of an R list by name (R_NilValue if absent)*/
-static SEXP get_list_element(SEXP list, const char *name)
-{
-        SEXP names = getAttrib(list, R_NamesSymbol);
-        int i;
-        if (names == R_NilValue) return R_NilValue;
-        for (i = 0; i < LENGTH(list); i++) {
-                if (strcmp(CHAR(STRING_ELT(names, i)), name) == 0) return VECTOR_ELT(list, i);
-        }
-        return R_NilValue;
-}
-
-/*Fill the plankton spectrum of every cell from the R arrays for the next time block, then advance the block.
-  Past the last block the final one is reused. Size classes outside the plankton range stay at zero.*/
-static void plankton_from_arrays(GRID *grid, PLANKTON *plankton)
-{
-        const ARRAY_INPUTS *arr = plankton->arr;
-        int i, k, l;
-        int x = grid->xnum, y = grid->ynum;
-        int block = plankton->ts_block < arr->pla_nblock ? plankton->ts_block : arr->pla_nblock - 1;
-        R_xlen_t layer = arr->pla_layer[block];
-        for (k = 0; k < x; k++) {
-                for (l = 0; l < y; l++) {
-                        R_xlen_t idx = (R_xlen_t)k + (R_xlen_t)x * ((R_xlen_t)l + (R_xlen_t)y * layer);
-                        double a = arr->pla_int[idx], b = arr->pla_slp[idx];
-                        for (i = plankton->iplamin; i < (plankton->iplamax + 1); i++) {
-                                plankton->u_values[i][k][l] = a * exp(b * grid->m_values[i]);
-                        }
-                }
-        }
-        plankton->ts_block++;
-}
-
-/*Forcing values of cell (k,l) for the current timestep from the R arrays, written into vals[] at the
-  channel positions of FRC_NAMES (absent channels are left untouched). Returns the number of columns.*/
-static int forcing_from_arrays(RUN *run, GRID *grid, int k, int l, double *vals)
-{
-        const ARRAY_INPUTS *arr = run->arr;
-        int c;
-        int x = grid->xnum, y = grid->ynum;
-        int tp = run->frc_step + 1;
-        if (tp > arr->frc_nblock - 1) tp = arr->frc_nblock - 1;
-        R_xlen_t layer = arr->frc_layer[tp];
-        for (c = 0; c < N_FRC; c++) {
-                if (arr->frc[c] == NULL) continue;
-                R_xlen_t lay = arr->frc_nlayer[c] == 1 ? 0 : layer;
-                vals[c] = arr->frc[c][(R_xlen_t)k + (R_xlen_t)x * ((R_xlen_t)l + (R_xlen_t)y * lay)];
-        }
-        return N_FRC;
-}
+static void SizeSpectrum_internals(int *, double *, double *, double *, double *, double *, char **, int *);
 
 // This is the new R interface. SizeSpectrum() is now a wrapper function that
 // takes the objects from R (.Call()). SizeSpectrum() checks the SEXP objects from
@@ -551,8 +468,7 @@ SEXP SizeSpectrum(
         SEXP benthic_params_r, 
         SEXP detritus_params_r, 
         SEXP names_params_r, 
-        SEXP flags_params_r,
-        SEXP inputs_r
+        SEXP flags_params_r
 ) {
         // Ensure that all of the SEXP objects are of the correct type after
         // passing in from R.
@@ -627,75 +543,6 @@ SEXP SizeSpectrum(
                 names_params[i] = (char *) CHAR(STRING_ELT(names_params_r, i));
         }
         
-        // Optional inputs passed as R arrays instead of text files (inputs_r is NULL or a named list).
-        // Currently: the plankton series as intercept/slope arrays [x, y, layer] plus, for each time
-        // block, the (0-based) layer it uses. The arrays stay owned by R for the duration of the call.
-        ARRAY_INPUTS arr;
-        arr.pla_int = NULL; arr.pla_slp = NULL; arr.pla_layer = NULL;
-        arr.pla_nlayer = 0; arr.pla_nblock = 0; arr.pla_len = 0;
-        arr.have_forcing = 0; arr.frc_layer = NULL; arr.frc_nblock = 0;
-        for (i = 0; i < N_FRC; i++) { arr.frc[i] = NULL; arr.frc_nlayer[i] = 0; arr.frc_len[i] = 0; }
-        if (inputs_r != R_NilValue) {
-                if (!isNewList(inputs_r)) {
-                        error("inputs_r must be NULL or a list");
-                }
-                SEXP pint = get_list_element(inputs_r, "plankton_intercept");
-                SEXP pslp = get_list_element(inputs_r, "plankton_slope");
-                SEXP play = get_list_element(inputs_r, "plankton_layer");
-                SEXP pnl  = get_list_element(inputs_r, "plankton_nlayer");
-                if (pint != R_NilValue || pslp != R_NilValue || play != R_NilValue || pnl != R_NilValue) {
-                        if (!isReal(pint) || !isReal(pslp) || !isInteger(play) || !isInteger(pnl) || LENGTH(pnl) != 1) {
-                                error("plankton arrays: intercept and slope must be numeric, layer and nlayer integer");
-                        }
-                        int nlayer = INTEGER(pnl)[0];
-                        if (nlayer < 1 || LENGTH(play) < 1 || XLENGTH(pint) != XLENGTH(pslp) || XLENGTH(pint) < nlayer) {
-                                error("plankton arrays: inconsistent lengths");
-                        }
-                        for (i = 0; i < LENGTH(play); i++) {
-                                if (INTEGER(play)[i] < 0 || INTEGER(play)[i] >= nlayer) {
-                                        error("plankton arrays: layer index out of range at time block %d", i + 1);
-                                }
-                        }
-                        arr.pla_int = REAL(pint); arr.pla_slp = REAL(pslp); arr.pla_layer = INTEGER(play);
-                        arr.pla_nlayer = nlayer; arr.pla_nblock = LENGTH(play); arr.pla_len = XLENGTH(pint);
-                }
-
-                // Forcing channels as arrays: forcing_layer (0-based layer at each time point),
-                // forcing_nlayer (layers of each channel, in FRC_NAMES order) and one array per channel present.
-                SEXP flay = get_list_element(inputs_r, "forcing_layer");
-                SEXP fnl  = get_list_element(inputs_r, "forcing_nlayer");
-                if (flay != R_NilValue || fnl != R_NilValue) {
-                        if (!isInteger(flay) || !isInteger(fnl) || LENGTH(fnl) != N_FRC || LENGTH(flay) < 1) {
-                                error("forcing arrays: forcing_layer and forcing_nlayer must be integer, the latter of length %d", N_FRC);
-                        }
-                        int maxlayer = 1, nch = 0, c;
-                        for (c = 0; c < N_FRC; c++) {
-                                SEXP ch = get_list_element(inputs_r, FRC_NAMES[c]);
-                                if (ch == R_NilValue) continue;
-                                int nl = INTEGER(fnl)[c];
-                                if (!isReal(ch) || nl < 1 || XLENGTH(ch) < nl) {
-                                        error("forcing arrays: %s must be numeric with at least one layer", FRC_NAMES[c]);
-                                }
-                                arr.frc[c] = REAL(ch); arr.frc_nlayer[c] = nl; arr.frc_len[c] = XLENGTH(ch);
-                                if (nl > maxlayer) maxlayer = nl;
-                                nch++;
-                        }
-                        for (c = 0; c < N_FRC; c++) {
-                                if (arr.frc[c] != NULL && arr.frc_nlayer[c] != 1 && arr.frc_nlayer[c] != maxlayer) {
-                                        error("forcing arrays: channels must have 1 layer or the same number of layers");
-                                }
-                        }
-                        for (i = 0; i < LENGTH(flay); i++) {
-                                if (INTEGER(flay)[i] < 0 || INTEGER(flay)[i] >= maxlayer) {
-                                        error("forcing arrays: layer index out of range at time point %d", i + 1);
-                                }
-                        }
-                        if (nch > 0) {
-                                arr.have_forcing = 1; arr.frc_layer = INTEGER(flay); arr.frc_nblock = LENGTH(flay);
-                        }
-                }
-        }
-
         SizeSpectrum_internals(
                 run_params,
                 grid_params,
@@ -704,8 +551,7 @@ SEXP SizeSpectrum(
                 ben_params,
                 det_params,
                 names_params,
-                flags_params,
-                &arr
+                flags_params
         );
         return(R_NilValue);
 }
@@ -714,7 +560,7 @@ SEXP SizeSpectrum(
 // This is the internal function that does the work of the program called by R //
 //-----------------------------------------------------------------------------//
 
-static void SizeSpectrum_internals(int *run_params, double *grid_params, double *pla_params, double *pel_params, double *ben_params, double * det_params, char **names_params, int *flags_params, const ARRAY_INPUTS *arr)
+static void SizeSpectrum_internals(int *run_params, double *grid_params, double *pla_params, double *pel_params, double *ben_params, double * det_params, char **names_params, int *flags_params)
 // run_params is an array of run parameters
 // grid_params is an array of grid discretisation values
 // pla_params is plankton params
@@ -736,8 +582,6 @@ static void SizeSpectrum_internals(int *run_params, double *grid_params, double 
         
     /*Setup run*/
     setup_run(&run, run_params, names_params[0]);
-    run.arr=arr;          //inputs supplied from R as arrays (may hold none)
-    run.frc_step=0;
     
     /*Setup grid*/
     setup_grid(&grid, grid_params);
@@ -751,7 +595,7 @@ static void SizeSpectrum_internals(int *run_params, double *grid_params, double 
     }
     
     /*Setup plankton*/
-    setup_plankton(&run, &grid, community.plankton, pla_params, names_params[1], flags_params[0], flags_params[1], arr); 
+    setup_plankton(&run, &grid, community.plankton, pla_params, names_params[1], flags_params[0], flags_params[1]); 
     
     /*Setup pelagic*/
     temp_pel_params=setup_pelagic_params(run.no_pelagic, pel_params);
@@ -919,7 +763,7 @@ double **setup_benthic_params(int no_benthic, double *ben_params)
     return(temp_params);
 }
 
-void setup_plankton(RUN *run, GRID *grid, PLANKTON *plankton, double *pla_params, char *filename, int initial_flag, int ts_flag, const ARRAY_INPUTS *arr)
+void setup_plankton(RUN *run, GRID *grid, PLANKTON *plankton, double *pla_params, char *filename, int initial_flag, int ts_flag)
 {
      /*Declare plankton name*/
      plankton->filename=filename;
@@ -987,20 +831,7 @@ void setup_plankton(RUN *run, GRID *grid, PLANKTON *plankton, double *pla_params
           
      /*Setup initial values for u(m,0,x,y)*/
      /*Use user defined values*/
-     /*Plankton series supplied from R as intercept/slope arrays: no _ts file is opened or read*/
-     plankton->arr=NULL;
-     plankton->ts_block=0;
-     if(arr!=NULL && arr->pla_int!=NULL){
-             if(plankton->ts_flag!=1){
-                     error("plankton arrays were supplied but the plankton ts_flag is not set\n");
-             }
-             if(arr->pla_len!=(R_xlen_t)x*(R_xlen_t)y*(R_xlen_t)arr->pla_nlayer){
-                     error("plankton arrays hold %ld values; expected x*y*layers = %d*%d*%d\n",(long)arr->pla_len,x,y,arr->pla_nlayer);
-             }
-             plankton->arr=arr;
-             plankton_from_arrays(grid, plankton);
-     }
-     else if(plankton->initial_flag==1 || plankton->ts_flag==1){
+     if(plankton->initial_flag==1 || plankton->ts_flag==1){
              /*Create plankton input filename*/
              snprintf(plankton->fname_ts, sizeof(plankton->fname_ts),"%s/Input/%s_%s.txt",run->filename,plankton->filename,"ts");
              plankton->fptr_ts=safe_fopen(plankton->fname_ts,"r",__LINE__,__FILE__);
@@ -1830,28 +1661,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      run->pel_tempeff_c=NULL; run->ben_tempeff_c=NULL; run->sinking_rate_c=NULL;
      run->depth_c=NULL; run->export_attn_c=NULL; run->export_gamma_c=NULL; run->export_magg_c=NULL;
      { char *e=getenv("TEMP_ON_MORT"); run->temp_on_mort = e ? atoi(e) : 1; }
-     if(run->arr!=NULL && run->arr->have_forcing){
-             /*Forcing channels supplied from R as arrays: forcing_ts.txt is not opened. A channel that is
-               present gets its own position as column index, so everything keyed on col_* works unchanged.*/
-             int ch;
-             for(ch=0 ; ch<N_FRC ; ch++){
-                     if(run->arr->frc[ch]!=NULL && run->arr->frc_len[ch]!=(R_xlen_t)grid->xnum*(R_xlen_t)grid->ynum*(R_xlen_t)run->arr->frc_nlayer[ch]){
-                             error("%s holds %ld values; expected x*y*layers = %d*%d*%d\n",FRC_NAMES[ch],(long)run->arr->frc_len[ch],grid->xnum,grid->ynum,run->arr->frc_nlayer[ch]);
-                     }
-             }
-             run->forcing_flag=1;
-             run->forcing_ncol=N_FRC;
-             run->col_pel_tempeff    = run->arr->frc[FRC_PEL_TEMPEFF]!=NULL    ? FRC_PEL_TEMPEFF    : -1;
-             run->col_ben_tempeff    = run->arr->frc[FRC_BEN_TEMPEFF]!=NULL    ? FRC_BEN_TEMPEFF    : -1;
-             run->col_sinking_rate   = run->arr->frc[FRC_SINKING_RATE]!=NULL   ? FRC_SINKING_RATE   : -1;
-             run->col_depth          = run->arr->frc[FRC_DEPTH]!=NULL          ? FRC_DEPTH          : -1;
-             run->col_residence_time = run->arr->frc[FRC_RESIDENCE_TIME]!=NULL ? FRC_RESIDENCE_TIME : -1;
-             run->col_export_attn    = run->arr->frc[FRC_EXPORT_ATTN]!=NULL    ? FRC_EXPORT_ATTN    : -1;
-             run->col_export_gamma   = run->arr->frc[FRC_EXPORT_GAMMA]!=NULL   ? FRC_EXPORT_GAMMA   : -1;
-             run->col_export_magg    = run->arr->frc[FRC_EXPORT_MAGG]!=NULL    ? FRC_EXPORT_MAGG    : -1;
-             run->col_gravity        = run->arr->frc[FRC_GRAVITY]!=NULL        ? FRC_GRAVITY        : -1;
-     }
-     else{
+     {
              char fname_forcing[256];
              snprintf(fname_forcing, sizeof(fname_forcing), "%s/Input/forcing_ts.txt", run->filename);
              run->fptr_forcing=fopen(fname_forcing,"r");
@@ -1889,8 +1699,7 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
         off (default), the single global row is used and these arrays are unused -> behaviour unchanged. */
      if(run->forcing_flag==1){
              char *e=getenv("FORCING_PERCELL");
-             int from_arrays = (run->arr!=NULL && run->arr->have_forcing);   /*array forcing is always per cell in a spatial run*/
-             run->forcing_percell = ((from_arrays || (e && atoi(e)!=0)) && (run->spatial_dim==1 || run->spatial_dim==2)) ? 1 : 0;
+             run->forcing_percell = (e && atoi(e)!=0 && (run->spatial_dim==1 || run->spatial_dim==2)) ? 1 : 0;
              int xx=grid->xnum, yy=grid->ynum, kk, ll;
              run->pel_tempeff_c=(double**)safe_malloc(xx*sizeof(double*),__LINE__,__FILE__);
              run->ben_tempeff_c=(double**)safe_malloc(xx*sizeof(double*),__LINE__,__FILE__);
@@ -2215,10 +2024,10 @@ void calculate_results(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelma
      }
      
      /*Close ts files*/
-     if(community->plankton->ts_flag==1 && community->plankton->arr==NULL){
+     if(community->plankton->ts_flag==1){
              fclose(community->plankton->fptr_ts);
      }
-     if(run->forcing_flag==1 && run->fptr_forcing!=NULL){
+     if(run->forcing_flag==1){
              fclose(run->fptr_forcing);
              if(run->pel_tempeff_c!=NULL){
                      for(k=0;k<x;k++){ free(run->pel_tempeff_c[k]); free(run->ben_tempeff_c[k]); free(run->sinking_rate_c[k]);
@@ -2968,15 +2777,9 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
              char fline[1024]; double vals[64];
              for(k=0 ; k<x ; k++){
                      for(l=0 ; l<y ; l++){
-                             int nv=0;
-                             if(run->arr!=NULL && run->arr->have_forcing){
-                                     nv=forcing_from_arrays(run, grid, k, l, vals);
-                             }
-                             else{
-                                     if(fgets(fline,sizeof(fline),run->fptr_forcing)==NULL) break;
-                                     char *tok=strtok(fline,",");
-                                     while(tok!=NULL && nv<64){ vals[nv++]=atof(tok); tok=strtok(NULL,","); }
-                             }
+                             if(fgets(fline,sizeof(fline),run->fptr_forcing)==NULL) break;
+                             int nv=0; char *tok=strtok(fline,",");
+                             while(tok!=NULL && nv<64){ vals[nv++]=atof(tok); tok=strtok(NULL,","); }
                              run->pel_tempeff_c[k][l]  = (run->col_pel_tempeff>=0 && run->col_pel_tempeff<nv) ? vals[run->col_pel_tempeff] : 1.0;
                              run->ben_tempeff_c[k][l]  = (run->col_ben_tempeff>=0 && run->col_ben_tempeff<nv) ? vals[run->col_ben_tempeff] : 1.0;
                              run->sinking_rate_c[k][l] = (run->col_sinking_rate>=0 && run->col_sinking_rate<nv) ? vals[run->col_sinking_rate] : 1.0;
@@ -2986,32 +2789,16 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                              run->export_magg_c[k][l]  = (run->col_export_magg>=0 && run->col_export_magg<nv) ? vals[run->col_export_magg] : -1e30;
                      }
              }
-             if(run->arr!=NULL && run->arr->have_forcing){
-                     /*channels with no per-cell storage are taken from the first cell (R checks they are uniform in space)*/
-                     forcing_from_arrays(run, grid, 0, 0, vals);
-                     if(run->col_residence_time>=0) run->residence_time=vals[run->col_residence_time];
-                     if(run->col_gravity>=0) run->gravity=vals[run->col_gravity];
-                     run->frc_step++;
-             }
              for(s=0 ; s<n ; s++){ community->pelagic[s].A=community->pelagic[s].A_base; community->pelagic[s].mu_0=community->pelagic[s].mu_0_base; }
              for(b=0 ; b<c ; b++){ community->benthic[b].A=community->benthic[b].A_base; community->benthic[b].mu_0=community->benthic[b].mu_0_base; }
      }
      else if(run->forcing_flag==1){
              char fline[1024];
-             double vals[64];
-             int nv=0;
-             int got=0;
-             if(run->arr!=NULL && run->arr->have_forcing){
-                     nv=forcing_from_arrays(run, grid, 0, 0, vals);
-                     run->frc_step++;
-                     got=1;
-             }
-             else if(fgets(fline,sizeof(fline),run->fptr_forcing)!=NULL){
+             if(fgets(fline,sizeof(fline),run->fptr_forcing)!=NULL){
+                     double vals[64];
+                     int nv=0;
                      char *tok=strtok(fline,",");
                      while(tok!=NULL && nv<64){ vals[nv++]=atof(tok); tok=strtok(NULL,","); }
-                     got=1;
-             }
-             if(got){
                      if(run->col_pel_tempeff>=0 && run->col_pel_tempeff<nv) run->pel_tempeff=vals[run->col_pel_tempeff];
                      if(run->col_ben_tempeff>=0 && run->col_ben_tempeff<nv) run->ben_tempeff=vals[run->col_ben_tempeff];
                      if(run->col_sinking_rate>=0 && run->col_sinking_rate<nv) run->sinking_rate=vals[run->col_sinking_rate];
@@ -3068,11 +2855,7 @@ void mass_solver(RUN *run, GRID *grid, COMMUNITY *community, MATRIX *pelmatrix, 
                      }
              }
      }
-     if(community->plankton->ts_flag==1 && community->plankton->arr!=NULL){
-             /*Next time block from the R arrays*/
-             plankton_from_arrays(grid, community->plankton);
-     }
-     else if(community->plankton->ts_flag==1){
+     if(community->plankton->ts_flag==1){
              int MAX_LEN=grid->mnum*15; //this is the upper bound for the row length in characters
              char *input;               //input string to store line as string
              input=(char *)safe_malloc(MAX_LEN*sizeof(char),__LINE__,__FILE__); 
