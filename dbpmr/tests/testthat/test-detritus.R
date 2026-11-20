@@ -1,4 +1,4 @@
-# Regression test for the detritus-pool NaN guard (in the C source).
+# Regression test for the detritus-pool NaN guard (SizeSpectra.c).
 # The detritus pool W is advanced with an explicit Euler step
 # W <- W + dt*(g - mu); a coarse timestep can overshoot (mu*dt > W) and drive W
 # negative, which without a guard propagates to NaN and crashes the coupled run

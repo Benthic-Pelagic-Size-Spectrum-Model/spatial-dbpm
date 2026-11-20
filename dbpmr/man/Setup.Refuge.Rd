@@ -4,39 +4,27 @@
 \alias{Setup.Refuge}
 \title{Supply a size-structured prey refuge (reef structural complexity)}
 \usage{
-Setup.Refuge(species, run.in, grid.in, refuge, min_A = 0, file = TRUE)
+Setup.Refuge(species, run.in, grid.in, refuge, min_A = 0)
 }
 \arguments{
 \item{species}{A pelagic species parameter object (from \code{\link[=Setup.Pelagic]{Setup.Pelagic()}}).}
 
 \item{run.in}{A \link{run.params} object.}
 
-\item{grid.in}{A \link{grid.params} object.
-With \code{file = FALSE} the refuge is held in memory: no file is written, the
-floor \code{min_A} travels with it (the environment variable is not used), and the
-function returns the species object, which must be assigned and passed on to
-\code{\link[=SizeSpectrum]{SizeSpectrum()}}: \code{pe <- Setup.Refuge(pe, run, grid, refuge, file = FALSE)}.
-Held in memory, the refuge may differ between cells.}
+\item{grid.in}{A \link{grid.params} object.}
 
-\item{refuge}{A numeric vector of refuge-space density (count m^-2), one value
-per mass class on the model's size grid, or a function of natural-log body
-mass \code{m} returning the refuge density at \code{m}. With \code{file = FALSE} it may also
-be an array \verb{[x, y, mass class]}, giving each cell its own refuge.}
+\item{refuge}{Either a numeric vector of refuge-space density (count m^-2),
+one value per mass class on the model's size grid, or a function of log10...
+actually of natural-log body mass \code{m} returning the refuge density at \code{m}.}
 
 \item{min_A}{The availability floor \eqn{\mathrm{min\_A}} (the minimum
 proportion of a size class that remains vulnerable to predation; \code{0}–\code{1}).
 Default \code{0}. Sets the \code{REFUGE_MIN_A} environment variable read by the
-engine (process-global; affects every species with a refuge in this run).
-With \code{file = FALSE} it applies to this species only.}
-
-\item{file}{\code{TRUE} (the default) writes the refuge to its input file.
-\code{FALSE} holds it in memory and returns the species object.}
+engine (process-global; affects every species with a refuge in this run).}
 }
 \value{
-With \code{file = TRUE}, invisibly \code{NULL}; called for the side effect of
-writing \verb{<run>/Input/<species>_refuge.txt} and setting \code{REFUGE_MIN_A}. With
-\code{file = FALSE}, invisibly the species object with the refuge attached
-(assign it).
+Invisibly \code{NULL}; called for the side effect of writing
+\verb{<run>/Input/<species>_refuge.txt} and setting \code{REFUGE_MIN_A}.
 }
 \description{
 Writes the optional per-size \emph{refuge} input that activates the reef

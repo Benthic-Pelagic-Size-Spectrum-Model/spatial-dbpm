@@ -10,11 +10,3 @@ An S4 object holding the physiological, detritus-feeding, reproduction and
 fishing parameters for a benthic species. Usually created with
 \code{\link[=Setup.Benthic]{Setup.Benthic()}}.
 }
-\details{
-The \code{arrays} slot is a list of the inputs of this species that are held in memory
-instead of being written to text files: \code{initial}
-(starting abundance, \code{\link[=Setup.ts]{Setup.ts()}}), \code{fishing} (\code{\link[=Setup.fishing]{Setup.fishing()}}) and
-\code{reproduction} (\code{\link[=Setup.Rep]{Setup.Rep()}}). It is empty when none
-has been supplied. The functions that fill it return the object, which must
-be assigned.
-}

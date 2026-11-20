@@ -13,62 +13,13 @@
 #'   `run.in@no_benthic == 0`.
 #' @param detritus.in A [detritus.params] object. Optional when
 #'   `run.in@no_benthic == 0`.
-#' @param forcing Optional environmental forcing held in memory, from
-#'   [Setup.Forcing()]. When given, it replaces the `forcing_ts.txt` input file
-#'   (it is an error to supply both).
-#' @param gravity Optional allocation of fishing effort among cells during the
-#'   run, from [Setup.Gravity()]. The rates given to [Setup.fishing()] are then
-#'   the fishing mortality at evenly spread effort.
 #'
-#' @param output Where the model output goes. `"files"` (the default) writes the
-#'   text result files under the run directory. `"arrays"` returns the output to
-#'   R as arrays and writes no per-timestep text output. `"both"` does both.
-#' @param variables Used with `output = "arrays"` or `"both"`: which variables
-#'   to return. Abundance is always returned; `"growth"`, `"mortality"`,
-#'   `"predation"`, `"fishing"` and `"catch"` are returned by default and can be
-#'   left out to save memory on large grids.
-#'
-#' @return With `output = "files"`, a character vector of the paths and species
-#'   filenames produced by the run, suitable for passing to [Read.In()].
-#'
-#'   With `output = "arrays"` or `"both"`, an object of class `dbpmr_output`, a
-#'   list with:
-#'
-#'   * `t` (years), `x`, `y` and `m` (natural-log body mass): the output
-#'     coordinates;
-#'   * `abundance`: a named list with one array per group (the plankton and each
-#'     pelagic and benthic species, named by their file names), each with
-#'     dimensions `[x, y, m, t]`;
-#'   * `growth`, `mortality`, `fishing`: named lists with one `[x, y, m, t]`
-#'     array per pelagic and benthic species, holding the growth rate, the total
-#'     mortality rate and the fishing mortality rate;
-#'   * `predation`: predation mortality rate. For a pelagic species, a list with
-#'     one array per pelagic predator species; for a benthic species, one array
-#'     (predation by all pelagic species);
-#'   * `catch`: a named list with one `[x, y, m, t]` array per pelagic and
-#'     benthic species, holding the catch rate density: fishing mortality times
-#'     abundance times body mass, per unit natural-log body mass. Summed over
-#'     size classes and multiplied by the size step (`diff(m)[1]`) it is the
-#'     total catch rate. Like every other variable it is the rate at the output
-#'     time, not a total over the interval between outputs. (In a run without
-#'     movement the total equals the `fishing` column of the species'
-#'     `summary.txt`; with movement that column is computed before the
-#'     movement step and differs slightly.);
-#'   * `detritus`: detritus biomass as `[x, y, t]` (when the run has benthos).
-#'
-#'   The values are those the text files would hold (`results.txt`,
-#'   `growth.txt`, `mortality.txt`, `predation*.txt`, `fishing.txt`): the same
-#'   output times, cells and size classes (set by `toutstep`, `xoutstep`,
-#'   `youtstep` and `moutstep` in [Setup.Grid()]), with zeros outside a group's
-#'   size range. With `"both"` the character vector described above is attached
-#'   as the attribute `"files"`. See [Write.NetCDF()] to save the object.
-#' @seealso [Read.In()], [Write.NetCDF()], [Setup.Run()]
+#' @return A character vector of the paths and species filenames produced by the
+#'   run, suitable for passing to [Read.In()].
+#' @seealso [Read.In()], [Setup.Run()]
 #' @export
 `SizeSpectrum` <-
-function(run.in, grid.in, plankton.in, pelagic.in, benthic.in, detritus.in, forcing = NULL, output = c("files", "arrays", "both"),
-         variables = c("abundance", "growth", "mortality", "predation", "fishing", "catch"), gravity = NULL){
-  output <- match.arg(output)
-  variables <- match.arg(variables, several.ok = TRUE)
+function(run.in, grid.in, plankton.in, pelagic.in, benthic.in, detritus.in){
 
 #run.in is an object of class of run.params (2 strings and 6 integers relating to the entire run process)
 
@@ -291,25 +242,21 @@ tiny<-1e-7
   
   
   #Check initial input files exist
-  #(a plankton time series held in memory as intercept/slope arrays needs no file)
-  if(is.null(plankton.in@arrays$ts) && is.null(plankton.in@arrays$initial) && (plankton.in@initial_flag==1 || plankton.in@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",plankton.in@filename,"_ts.txt",sep=""))){
-    stop("A required Plankton initial/ts file does not exist. Write one with Setup.ts(), or, for values held in memory, ",
-         "assign the result: pl <- Setup.ts(pl, run, grid, intercept = , slope = ) or pl <- Setup.ts(pl, run, grid, initial = )")
-  }
+  if((plankton.in@initial_flag==1 || plankton.in@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",plankton.in@filename,"_ts.txt",sep=""))) stop("A required Plankton initial/ts file does not exist")
   
   for(i in 1:length(pelagic.in)){
-    if(is.null(pelagic.in[[i]]@arrays$initial) && (pelagic.in[[i]]@initial_flag==1 || pelagic.in[[i]]@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",pelagic.in[[i]]@filename,"_ts.txt",sep=""))) stop("A required Pelagic initial/ts file does not exist. Write one with Setup.ts(), or, for starting values held in memory, assign the result: pe <- Setup.ts(pe, run, grid, initial = )")
-    if( pelagic.in[[i]]@fishing_flag==1 && is.null(pelagic.in[[i]]@arrays$fishing) && !file.exists(paste(run.in@filename,"/Input/",pelagic.in[[i]]@filename,"_fishing_ts.txt",sep=""))) stop("A required Pelagic fishing file does not exist. Write one with Setup.fishing(), or, for a rate held in memory, assign the result: pe <- Setup.fishing(pe, run, grid, rate = )")
-    if( pelagic.in[[i]]@rep_method==1 && is.null(pelagic.in[[i]]@arrays$reproduction) && !file.exists(paste(run.in@filename,"/Input/",pelagic.in[[i]]@filename,"_rep_ts.txt",sep=""))) stop("A required Pelagic reproduction file does not exist. Write one with Setup.Rep(), or, for values held in memory, assign the result: pe <- Setup.Rep(pe, run, grid, eggs = )")
+    if((pelagic.in[[i]]@initial_flag==1 || pelagic.in[[i]]@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",pelagic.in[[i]]@filename,"_ts.txt",sep=""))) stop("A required Pelagic initial/ts file does not exist")
+    if( pelagic.in[[i]]@fishing_flag==1 && !file.exists(paste(run.in@filename,"/Input/",pelagic.in[[i]]@filename,"_fishing_ts.txt",sep=""))) stop("A required Pelagic fishing file does not exist")
+    if( pelagic.in[[i]]@rep_method==1 && !file.exists(paste(run.in@filename,"/Input/",pelagic.in[[i]]@filename,"_rep_ts.txt",sep=""))) stop("A required Pelagic reproduction file does not exist")
     
   }
   if(run.in@no_benthic!=0){
     for(i in 1:length(benthic.in)){
-      if(is.null(benthic.in[[i]]@arrays$initial) && (benthic.in[[i]]@initial_flag==1 || benthic.in[[i]]@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",benthic.in[[i]]@filename,"_ts.txt",sep=""))) stop("A required Benthic initial/ts file does not exist. Write one with Setup.ts(), or, for starting values held in memory, assign the result: be <- Setup.ts(be, run, grid, initial = )")
-      if( benthic.in[[i]]@fishing_flag==1 && is.null(benthic.in[[i]]@arrays$fishing) && !file.exists(paste(run.in@filename,"/Input/",benthic.in[[i]]@filename,"_fishing_ts.txt",sep=""))) stop("A required Benthic fishing file does not exist. Write one with Setup.fishing(), or, for a rate held in memory, assign the result: be <- Setup.fishing(be, run, grid, rate = )")
-      if( benthic.in[[i]]@rep_method==1 && is.null(benthic.in[[i]]@arrays$reproduction) && !file.exists(paste(run.in@filename,"/Input/",benthic.in[[i]]@filename,"_rep_ts.txt",sep=""))) stop("A required Benthic reproduction file does not exist. Write one with Setup.Rep(), or, for values held in memory, assign the result: be <- Setup.Rep(be, run, grid, eggs = )")
+      if((benthic.in[[i]]@initial_flag==1 || benthic.in[[i]]@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",benthic.in[[i]]@filename,"_ts.txt",sep=""))) stop("A required Benthic initial/ts file does not exist")
+      if( benthic.in[[i]]@fishing_flag==1 && !file.exists(paste(run.in@filename,"/Input/",benthic.in[[i]]@filename,"_fishing_ts.txt",sep=""))) stop("A required Benthic fishing file does not exist")
+      if( benthic.in[[i]]@rep_method==1 && !file.exists(paste(run.in@filename,"/Input/",benthic.in[[i]]@filename,"_rep_ts.txt",sep=""))) stop("A required Benthic reproduction file does not exist")
     }
-    if(is.null(detritus.in@arrays$initial) && (detritus.in@initial_flag==1 || detritus.in@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",detritus.in@filename,"_ts.txt",sep=""))) stop("A required Detritus initial/ts file does not exist. Write one with Setup.ts(), or, for a starting value held in memory, assign the result: de <- Setup.ts(de, run, grid, initial = )")
+    if((detritus.in@initial_flag==1 || detritus.in@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",detritus.in@filename,"_ts.txt",sep=""))) stop("A required Detritus initial/ts file does not exist")
   }
   
   
@@ -349,120 +296,6 @@ tiny<-1e-7
 # Call C code #
 #-------------#
 
-  # Inputs passed to C as arrays instead of text files (NULL = none)
-  inputs <- NULL
-  if(!is.null(plankton.in@arrays$ts)){
-    ta <- plankton.in@arrays$ts
-    inputs <- list(plankton_intercept=ta$intercept, plankton_slope=ta$slope,
-                   plankton_layer=as.integer(ta$layer-1L), plankton_nlayer=as.integer(dim(ta$intercept)[3]))
-  }
-  # Fishing mortality held in memory: one entry per species (NULL where it comes from a file or the species is not fished)
-  fish_in <- function(sp.list, what){
-    lapply(sp.list, function(sp){
-      fa <- sp@arrays$fishing
-      if(is.null(fa)) return(NULL)
-      if(!isTRUE(sp@fishing_flag)) stop("fishing rate supplied for ", sp@filename, " but its fishing_flag is FALSE")
-      if(file.exists(file.path(run.in@filename, "Input", paste0(sp@filename, "_fishing_ts.txt"))))
-        stop("Both a fishing rate held in memory and the file ", sp@filename, "_fishing_ts.txt were supplied for ", what, " species ", sp@filename, "; use one or the other")
-      fgrid <- c(length(grid_seq(grid.in@xmin, grid.in@xmax, grid.in@xstep)), length(grid_seq(grid.in@ymin, grid.in@ymax, grid.in@ystep)))
-      if(!identical(as.integer(dim(fa$rate)[1:2]), as.integer(fgrid)) || length(fa$layer)!=length(seq(0, grid.in@tmax, grid.in@tstep)))
-        stop("the fishing rate of ", sp@filename, " was built for a different grid; rebuild it with Setup.fishing() using this grid")
-      list(rate=fa$rate, layer=as.integer(fa$layer-1L), nlayer=as.integer(dim(fa$rate)[3]), range=as.double(fa$range))
-    })
-  }
-  fpel <- fish_in(pelagic.in, "pelagic")
-  fben <- if(run.in@no_benthic!=0) fish_in(benthic.in, "benthic") else list()
-  if(any(!vapply(fpel, is.null, TRUE)) || any(!vapply(fben, is.null, TRUE))){
-    if(is.null(inputs)) inputs <- list()
-    inputs$fishing_pelagic <- fpel
-    if(run.in@no_benthic!=0) inputs$fishing_benthic <- fben
-  }
-  # Other inputs held in memory, one entry per species (NULL where a species has none): starting abundance,
-  # reproduction, refuge and per-cell parameters. Each replaces its text file; supplying both is an error.
-  ncell <- c(length(grid_seq(grid.in@xmin, grid.in@xmax, grid.in@xstep)), length(grid_seq(grid.in@ymin, grid.in@ymax, grid.in@ystep)))
-  ntime <- length(seq(0, grid.in@tmax, grid.in@tstep))
-  in_file <- function(nm, suffix) file.exists(file.path(run.in@filename, "Input", paste0(nm, suffix)))
-  not_both <- function(nm, suffix, what) if(in_file(nm, suffix))
-    stop("Both ", what, " held in memory and the file ", nm, suffix, " were supplied for ", nm, "; use one or the other")
-  same_grid <- function(a, nm, what, setup) if(!identical(as.integer(dim(a)[1:2]), as.integer(ncell)))
-    stop("the ", what, " of ", nm, " was built for a different grid; rebuild it with ", setup, " using this grid")
-  initial_in <- function(sp){
-    a <- sp@arrays$initial
-    if(is.null(a)) return(NULL)
-    if(!isTRUE(sp@initial_flag) || isTRUE(sp@ts_flag)) stop("starting values were supplied for ", sp@filename, " but its initial_flag is FALSE (or its ts_flag is TRUE)")
-    not_both(sp@filename, "_ts.txt", "starting values")
-    same_grid(a, sp@filename, "starting values", "Setup.ts()")
-    a
-  }
-  sp_in <- function(sp.list){
-    lapply(sp.list, function(sp){
-      a <- sp@arrays; out <- list()
-      out$initial <- initial_in(sp)
-      if(!is.null(a$reproduction)){
-        if(sp@rep_method!=1) stop("reproduction values were supplied for ", sp@filename, " but its rep_method is not 1")
-        not_both(sp@filename, "_rep_ts.txt", "reproduction values")
-        same_grid(a$reproduction$values, sp@filename, "reproduction values", "Setup.Rep()")
-        if(length(a$reproduction$layer)!=ntime) stop("the reproduction values of ", sp@filename, " were built for a different grid; rebuild them with Setup.Rep() using this grid")
-        out$rep <- a$reproduction$values; out$rep_layer <- as.integer(a$reproduction$layer-1L); out$rep_nlayer <- as.integer(dim(a$reproduction$values)[3])
-      }
-      if(!is.null(a$refuge)){
-        not_both(sp@filename, "_refuge.txt", "a refuge")
-        same_grid(a$refuge$values, sp@filename, "refuge", "Setup.Refuge()")
-        if(dim(a$refuge$values)[3]!=length(grid_seq(grid.in@mmin, grid.in@mmax, grid.in@mstep)))
-          stop("the refuge of ", sp@filename, " has ", dim(a$refuge$values)[3], " mass classes but the run has ", length(grid_seq(grid.in@mmin, grid.in@mmax, grid.in@mstep)),
-               "; build it with a grid whose mmin and mmax span all the species")
-        out$refuge <- a$refuge$values; out$refuge_min_a <- as.double(a$refuge$min_A)
-      }
-      if(!is.null(a$pref_ben)){
-        not_both(sp@filename, "_cellpar.txt", "per-cell parameters")
-        same_grid(a$pref_ben, sp@filename, "per-cell parameters", "Setup.CellParams()")
-        out$pref_ben <- a$pref_ben
-      }
-      if(length(out)) out else NULL
-    })
-  }
-  spel <- sp_in(pelagic.in)
-  sben <- if(run.in@no_benthic!=0) sp_in(benthic.in) else list()
-  pla0 <- if(is.null(plankton.in@arrays$ts)) initial_in(plankton.in) else NULL
-  det0 <- if(run.in@no_benthic!=0) initial_in(detritus.in) else NULL
-  if(any(!vapply(spel, is.null, TRUE)) || any(!vapply(sben, is.null, TRUE)) || !is.null(pla0) || !is.null(det0)){
-    if(is.null(inputs)) inputs <- list()
-    if(any(!vapply(spel, is.null, TRUE))) inputs$species_pelagic <- spel
-    if(any(!vapply(sben, is.null, TRUE))) inputs$species_benthic <- sben
-    if(!is.null(pla0)) inputs$plankton_initial <- pla0
-    if(!is.null(det0)) inputs$detritus_initial <- det0
-  }
-  if(!is.null(forcing)){
-    if(!inherits(forcing, "dbpmr_forcing")) stop("forcing must be created with Setup.Forcing()")
-    if(file.exists(file.path(run.in@filename, "Input", "forcing_ts.txt")))
-      stop("Both forcing arrays and the file ", file.path(run.in@filename, "Input", "forcing_ts.txt"),
-           " were supplied; use one or the other")
-    fgrid <- c(length(grid_seq(grid.in@xmin, grid.in@xmax, grid.in@xstep)), length(grid_seq(grid.in@ymin, grid.in@ymax, grid.in@ystep)))
-    if(!identical(as.integer(dim(forcing$channels[[1]])[1:2]), as.integer(fgrid)) ||
-       length(forcing$layer)!=length(seq(0, grid.in@tmax, grid.in@tstep)))
-      stop("forcing was built for a different grid; rebuild it with Setup.Forcing() using this grid")
-    fnames <- c("pel_tempeff", "ben_tempeff", "sinking_rate", "depth", "residence_time",
-                "export_attn", "export_gamma", "export_magg", "gravity")
-    fin <- forcing$channels
-    names(fin) <- paste0("forcing_", names(fin))
-    fnl <- vapply(fnames, function(nm) if(is.null(forcing$channels[[nm]])) 0L else dim(forcing$channels[[nm]])[3], integer(1))
-    if(is.null(inputs)) inputs <- list()
-    inputs <- c(inputs, fin, list(forcing_layer=as.integer(forcing$layer-1L), forcing_nlayer=as.integer(fnl)))
-  }
-
-  if(!is.null(gravity)){
-    if(!inherits(gravity, "dbpmr_gravity")) stop("gravity must be created with Setup.Gravity()")
-    fgrid <- c(length(grid_seq(grid.in@xmin, grid.in@xmax, grid.in@xstep)), length(grid_seq(grid.in@ymin, grid.in@ymax, grid.in@ystep)))
-    if(!identical(as.integer(dim(gravity$access)), as.integer(fgrid)))
-      stop("gravity was built for a different grid; rebuild it with Setup.Gravity() using this grid")
-    fished <- c(vapply(pelagic.in, function(sp) isTRUE(sp@fishing_flag), TRUE),
-                if(run.in@no_benthic!=0) vapply(benthic.in, function(sp) isTRUE(sp@fishing_flag), TRUE))
-    if(!any(fished)) stop("gravity was supplied but no species is fished (fishing_flag = TRUE and a rate from Setup.fishing())")
-    if(is.null(inputs)) inputs <- list()
-    inputs$gravity <- list(access=as.double(gravity$access), thick_pel=as.double(gravity$pelagic_thickness),
-                           thick_ben=as.double(gravity$benthic_thickness), nupdate=as.integer(gravity$nupdate))
-  }
-
   x <- .Call(
     C_SizeSpectrum, 
     as.integer(run.params), 
@@ -472,10 +305,7 @@ tiny<-1e-7
     as.double(ben.params), 
     as.double(det.params), 
     as.character(names.params), 
-    as.integer(flags.params),
-    inputs,
-    c(c(files = 0L, both = 1L, arrays = 2L)[[output]],
-      as.integer(c("growth", "mortality", "predation", "fishing", "catch") %in% variables))
+    as.integer(flags.params)
   )
 
 #-----------------------------------------------------------------#
@@ -501,31 +331,6 @@ tiny<-1e-7
     filenames[run.in@no_pelagic+run.in@no_benthic+3]<-detritus.in@filename
   }
   
-  if(output == "files") return(filenames)
-
-  # Output returned from C as arrays: give them their dimensions and names
-  dims <- c(length(x$x), length(x$y), length(x$m), length(x$t))
-  shape <- function(a){ dim(a) <- dims; a }
-  has_ben <- run.in@no_benthic!=0
-  spnames <- c(pel.names, if(has_ben) ben.names)
-  # one array per pelagic then per benthic species, named by species
-  by_species <- function(pel, ben){ l <- c(lapply(pel, shape), lapply(ben, shape)); names(l) <- spnames; l }
-  out <- list(t = x$t, x = x$x, y = x$y, m = x$m,
-              abundance = c(structure(list(shape(x$plankton)), names = plankton.in@filename), by_species(x$pelagic, x$benthic)))
-  if("growth" %in% variables)    out$growth    <- by_species(x$pelagic_growth, x$benthic_growth)
-  if("mortality" %in% variables) out$mortality <- by_species(x$pelagic_mortality, x$benthic_mortality)
-  if("predation" %in% variables){
-    pp <- lapply(x$pelagic_predation, function(l){ l <- lapply(l, shape); names(l) <- pel.names; l })   # by predator species
-    out$predation <- c(pp, lapply(x$benthic_predation, shape)); names(out$predation) <- spnames
-  }
-  if("fishing" %in% variables)   out$fishing   <- by_species(x$pelagic_fishing, x$benthic_fishing)
-  if("catch" %in% variables)     out$catch     <- by_species(x$pelagic_catch, x$benthic_catch)
-  if(has_ben){
-    det <- x$detritus; dim(det) <- dims[c(1, 2, 4)]
-    out$detritus <- det
-  }
-  class(out) <- "dbpmr_output"
-  if(output == "both") attr(out, "files") <- filenames
-  return(out)
+  return(filenames)
 }
 

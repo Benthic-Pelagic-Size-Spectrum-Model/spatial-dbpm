@@ -6,16 +6,6 @@
 #' an R matrix, or read from a CSV data file. Exactly one of `func`, `mat` or
 #' `dataname` must be given.
 #'
-#' A plankton time series can instead be supplied in memory as `intercept` and
-#' `slope` arrays, with no input file written. In that case the function returns
-#' the plankton object carrying the arrays, which must be assigned and passed on
-#' to [SizeSpectrum()]: `pl <- Setup.ts(pl, run, grid, intercept = a, slope = b)`.
-#'
-#' Starting values can also be held in memory, with `initial`, for the plankton,
-#' a pelagic or benthic species, or the detritus. Again no file is written and
-#' the returned object must be assigned:
-#' `pe <- Setup.ts(pe, run, grid, initial = u0)`.
-#'
 #' @param species A species parameter object (e.g. from [Setup.Pelagic()]).
 #' @param run.in A [run.params] object.
 #' @param grid.in A [grid.params] object.
@@ -24,24 +14,6 @@
 #'   columns = the species' mass bins).
 #' @param dataname Path to a CSV file whose first line is the file type
 #'   (`"intercept"`, `"interslope"` or `"spectrum"`).
-#' @param intercept,slope Plankton only (`ts_flag = TRUE`): numeric arrays with
-#'   dimensions `[x, y, layer]` giving, for each spatial cell and layer, the
-#'   plankton spectrum `u(m) = intercept * exp(slope * m)` (`m` is natural-log
-#'   body mass; `intercept` is the abundance density at `m = 0`, not its
-#'   logarithm). For a 1-D run a matrix `[x, layer]` and for a 0-D run a vector
-#'   with one value per layer are also accepted.
-#' @param layer Used with `intercept`/`slope`: for each model time point
-#'   (`seq(0, tmax, tstep)`) the layer it uses, as whole numbers from 1. May be
-#'   omitted when there is one layer per time point, or a single layer.
-#' @param time Used with `intercept`/`slope` instead of `layer`: the start time
-#'   (in model years) of each layer; each time point uses the latest layer that
-#'   has started.
-#' @param initial Starting values held in memory (`initial_flag = TRUE`,
-#'   `ts_flag = FALSE`). For the plankton or a pelagic or benthic species: the
-#'   abundance density in each size class of that species
-#'   (`seq(mmin, mmax, by = mstep)`), as a vector (the same in every cell) or an
-#'   array `[x, y, size class]`. For the detritus: the biomass, as a single
-#'   number or a matrix `[x, y]`.
 #'
 #' @details For an initial condition (`ts_flag = FALSE`) the supplied `mat` /
 #'   data may have either a single row, applied uniformly to every spatial cell,
@@ -50,32 +22,13 @@
 #'   (`ts_flag = TRUE`) it must have `t * x * y` rows in the same x/y order
 #'   nested within time.
 #'
-#' @return Invisibly `NULL` when writing an input file under the run's `Input`
-#'   directory. When `intercept` and `slope`, or `initial`, are given, invisibly
-#'   the object with the arrays attached (assign it).
+#' @return Invisibly `NULL`; called for the side effect of writing the input
+#'   file under the run's `Input` directory.
 #' @seealso [Setup.Rep()], [Setup.fishing()]
 #' @export
 `Setup.ts`<-
-function(species, run.in, grid.in, func, mat, dataname, intercept, slope, layer, time, initial){
+function(species, run.in, grid.in, func, mat, dataname){
 #func is a function of the variables m, x, y, and z
-
-#Starting values held in memory: nothing is written
-if(!missing(initial)){
-  if(!missing(func) || !missing(mat) || !missing(dataname) || !missing(intercept) || !missing(slope) || !missing(layer) || !missing(time))
-    stop("initial cannot be combined with func, mat, dataname, intercept, slope, layer or time")
-  return(invisible(initial_array(species, grid.in, initial)))
-}
-
-#Plankton time series held in memory as intercept/slope arrays: nothing is written
-if(!missing(intercept) || !missing(slope)){
-  if(!missing(func) || !missing(mat) || !missing(dataname)) stop("intercept/slope cannot be combined with func, mat or dataname")
-  return(invisible(plankton_ts_arrays(species, grid.in,
-                                      if(missing(intercept)) NULL else intercept,
-                                      if(missing(slope)) NULL else slope,
-                                      if(missing(layer)) NULL else layer,
-                                      if(missing(time)) NULL else time)))
-}
-if(!missing(layer) || !missing(time)) stop("layer and time are only used with intercept and slope")
 #dataname is a filename containing either a vector of intercepts, two vectors of intercepts and slopes or a full matrix of ts values
 
 #Input checking stuff

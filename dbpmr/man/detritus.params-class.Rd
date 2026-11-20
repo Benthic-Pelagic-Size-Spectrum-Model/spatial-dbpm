@@ -9,8 +9,3 @@
 An S4 object holding the parameters of the detritus pool. Usually created
 with \code{\link[=Setup.Detritus]{Setup.Detritus()}}.
 }
-\details{
-The \code{arrays} slot is a list of the detritus inputs held in memory instead of
-being written to text files: \code{initial}, the starting biomass (see
-\code{\link[=Setup.ts]{Setup.ts()}}). It is empty when none has been supplied.
-}
