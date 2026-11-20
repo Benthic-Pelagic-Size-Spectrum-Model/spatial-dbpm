@@ -35,14 +35,8 @@
 #' @param q_0 Preferred predator-prey log-mass ratio.
 #' @param sig Width of the feeding kernel.
 #' @param trunc Truncation of the feeding kernel.
-#' @param prey,pred,comp Movement coefficients for spatial runs: `prey` moves
-#'   biomass up the gradient in growth rate (prey-seeking), `pred` moves it down
-#'   the gradient in mortality (predator-avoidance) and `comp` is diffusion.
-#'   Predator-avoidance needs diffusion: because predation mortality rises with
-#'   local biomass, avoidance on its own acts as backward diffusion and a smooth
-#'   field develops a grid-scale checkerboard that grows over time. A warning is
-#'   given for a spatial run with `pred > 0` and `comp <= 0`; keep `comp` at
-#'   least as large as `pred`.
+#' @param prey,pred,comp Density-dependence coefficients for prey, predator and
+#'   competition effects.
 #' @param gamma_prey,gamma_pred,gamma_comp Mass-scaling exponents for the prey,
 #'   predator and competition effects.
 #' @param rep_method Integer reproduction method. `0` = fixed recruitment held
@@ -82,15 +76,6 @@ Setup.Pelagic<-function(run.in, mmin=-3*log(10), mmat=2*log(10), mmax=6*log(10),
     "the species will collapse silently - set mmat below mmax.", call.=FALSE)
   if( mmat <= mmin ) warning("mmat (", signif(mmat, 4), ") <= mmin (", signif(mmin, 4),
     "): every size class is treated as mature.", call.=FALSE)
-
-  #Predator-avoidance needs diffusion. The avoidance velocity is -pred * grad(mortality); predation
-  #mortality rises with local biomass, so on its own this is backward diffusion of the biomass field,
-  #whose fastest-growing mode is grid-scale: a smooth field develops a checkerboard that grows in time.
-  #Prey-seeking alone does not have this problem, so only avoidance without diffusion is flagged.
-  if( run.in@spatial_dim > 0 && pred > 0 && comp <= 0 ) warning("pred (", signif(pred, 4),
-    ") > 0 with comp (", signif(comp, 4), ") <= 0: predator-avoidance movement without diffusion ",
-    "produces a grid-scale checkerboard that grows over time. Set comp > 0, at least comp >= pred.",
-    call.=FALSE)
 
   if(missing(K_pla))  K_pla<-K_pel
   if(missing(R_pla))  R_pla<-R_pel
