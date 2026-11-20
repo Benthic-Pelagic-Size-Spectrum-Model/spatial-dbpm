@@ -296,14 +296,14 @@ tiny<-1e-7
   
   for(i in 1:length(pelagic.in)){
     if((pelagic.in[[i]]@initial_flag==1 || pelagic.in[[i]]@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",pelagic.in[[i]]@filename,"_ts.txt",sep=""))) stop("A required Pelagic initial/ts file does not exist")
-    if( pelagic.in[[i]]@fishing_flag==1 && length(pelagic.in[[i]]@fishing_arrays)==0 && !file.exists(paste(run.in@filename,"/Input/",pelagic.in[[i]]@filename,"_fishing_ts.txt",sep=""))) stop("A required Pelagic fishing file does not exist. Write one with Setup.fishing(), or, for a rate held in memory, assign the result: pe <- Setup.fishing(pe, run, grid, rate = )")
+    if( pelagic.in[[i]]@fishing_flag==1 && !file.exists(paste(run.in@filename,"/Input/",pelagic.in[[i]]@filename,"_fishing_ts.txt",sep=""))) stop("A required Pelagic fishing file does not exist")
     if( pelagic.in[[i]]@rep_method==1 && !file.exists(paste(run.in@filename,"/Input/",pelagic.in[[i]]@filename,"_rep_ts.txt",sep=""))) stop("A required Pelagic reproduction file does not exist")
     
   }
   if(run.in@no_benthic!=0){
     for(i in 1:length(benthic.in)){
       if((benthic.in[[i]]@initial_flag==1 || benthic.in[[i]]@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",benthic.in[[i]]@filename,"_ts.txt",sep=""))) stop("A required Benthic initial/ts file does not exist")
-      if( benthic.in[[i]]@fishing_flag==1 && length(benthic.in[[i]]@fishing_arrays)==0 && !file.exists(paste(run.in@filename,"/Input/",benthic.in[[i]]@filename,"_fishing_ts.txt",sep=""))) stop("A required Benthic fishing file does not exist. Write one with Setup.fishing(), or, for a rate held in memory, assign the result: be <- Setup.fishing(be, run, grid, rate = )")
+      if( benthic.in[[i]]@fishing_flag==1 && !file.exists(paste(run.in@filename,"/Input/",benthic.in[[i]]@filename,"_fishing_ts.txt",sep=""))) stop("A required Benthic fishing file does not exist")
       if( benthic.in[[i]]@rep_method==1 && !file.exists(paste(run.in@filename,"/Input/",benthic.in[[i]]@filename,"_rep_ts.txt",sep=""))) stop("A required Benthic reproduction file does not exist")
     }
     if((detritus.in@initial_flag==1 || detritus.in@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",detritus.in@filename,"_ts.txt",sep=""))) stop("A required Detritus initial/ts file does not exist")
@@ -352,27 +352,6 @@ tiny<-1e-7
     ta <- plankton.in@ts_arrays
     inputs <- list(plankton_intercept=ta$intercept, plankton_slope=ta$slope,
                    plankton_layer=as.integer(ta$layer-1L), plankton_nlayer=as.integer(dim(ta$intercept)[3]))
-  }
-  # Fishing mortality held in memory: one entry per species (NULL where it comes from a file or the species is not fished)
-  fish_in <- function(sp.list, what){
-    lapply(sp.list, function(sp){
-      fa <- sp@fishing_arrays
-      if(length(fa)==0) return(NULL)
-      if(!isTRUE(sp@fishing_flag)) stop("fishing rate supplied for ", sp@filename, " but its fishing_flag is FALSE")
-      if(file.exists(file.path(run.in@filename, "Input", paste0(sp@filename, "_fishing_ts.txt"))))
-        stop("Both a fishing rate held in memory and the file ", sp@filename, "_fishing_ts.txt were supplied for ", what, " species ", sp@filename, "; use one or the other")
-      fgrid <- c(length(grid_seq(grid.in@xmin, grid.in@xmax, grid.in@xstep)), length(grid_seq(grid.in@ymin, grid.in@ymax, grid.in@ystep)))
-      if(!identical(as.integer(dim(fa$rate)[1:2]), as.integer(fgrid)) || length(fa$layer)!=length(seq(0, grid.in@tmax, grid.in@tstep)))
-        stop("the fishing rate of ", sp@filename, " was built for a different grid; rebuild it with Setup.fishing() using this grid")
-      list(rate=fa$rate, layer=as.integer(fa$layer-1L), nlayer=as.integer(dim(fa$rate)[3]), range=as.double(fa$range))
-    })
-  }
-  fpel <- fish_in(pelagic.in, "pelagic")
-  fben <- if(run.in@no_benthic!=0) fish_in(benthic.in, "benthic") else list()
-  if(any(!vapply(fpel, is.null, TRUE)) || any(!vapply(fben, is.null, TRUE))){
-    if(is.null(inputs)) inputs <- list()
-    inputs$fishing_pelagic <- fpel
-    if(run.in@no_benthic!=0) inputs$fishing_benthic <- fben
   }
   if(!is.null(forcing)){
     if(!inherits(forcing, "dbpmr_forcing")) stop("forcing must be created with Setup.Forcing()")

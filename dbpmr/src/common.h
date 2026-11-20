@@ -26,17 +26,6 @@
 enum { FRC_PEL_TEMPEFF, FRC_BEN_TEMPEFF, FRC_SINKING_RATE, FRC_DEPTH, FRC_RESIDENCE_TIME,
        FRC_EXPORT_ATTN, FRC_EXPORT_GAMMA, FRC_EXPORT_MAGG, FRC_GRAVITY };
 extern const char *FRC_NAMES[N_FRC];   //names of the forcing channels in the list passed from R (defined in memory_inputs.c)
-/*Fishing mortality of one species supplied from R as an array instead of its _fishing_ts.txt file:
-  the rate applies to the size classes with lo <= m <= hi and is zero for the others.*/
-typedef struct fishing_array{
-        const double *rate;    //fishing mortality rate, an R array [x][y][layer]; NULL = read the fishing file
-        const int *layer;      //0-based layer at each model time point (0, tstep, 2*tstep, ...)
-        int nlayer;            //number of layers
-        int nblock;            //length of layer
-        R_xlen_t len;          //length of rate (checked against x*y*layers once the grid is known)
-        double lo,hi;          //fished size range (natural-log body mass)
-        } FISHING_ARRAY;
-
 typedef struct array_inputs{
         const double *pla_int; //plankton intercept a
         const double *pla_slp; //plankton slope b
@@ -52,9 +41,6 @@ typedef struct array_inputs{
         const int *frc_layer;  //0-based layer at each model time point (0, tstep, 2*tstep, ...); the forcing applied
                                //in timestep r (advancing to time r*tstep) is that of time point r
         int frc_nblock;        //length of frc_layer
-
-        FISHING_ARRAY *fish_pel;   //one entry per pelagic species (NULL = none supplied for any species)
-        FISHING_ARRAY *fish_ben;   //one entry per benthic species
         } ARRAY_INPUTS;
 
 /*Model output handed back to R as arrays (opt-in). The arrays live in R memory (elements of the list
@@ -101,7 +87,6 @@ typedef struct run_info{
         FILE *fptr_forcing;    //forcing time-series file ptr
         const ARRAY_INPUTS *arr; //inputs supplied from R as arrays (NULL or have_forcing=0 -> forcing comes from the file, if any)
         int frc_step;          //timesteps of array forcing applied so far
-        int fish_block;        //number of times fishing mortality has been set (indexes the time point of array fishing)
         OUTPUT_ARRAYS *out;    //output returned to R as arrays (NULL or mode 0 -> text files only)
         int forcing_ncol;      //number of columns in each data row
         int col_pel_tempeff;   //column index of each channel (-1 if absent)
@@ -262,7 +247,6 @@ typedef struct pelagic_info{
         int initial_flag;
         int ts_flag;
         int fishing_flag;      //flag for fishing; 0-off, 1-on
-        const FISHING_ARRAY *fish_arr;   //fishing mortality supplied from R as an array (NULL = read the fishing file)
         
         double ***u_values;        //number densities for each time step (outputted as file)
         double ***g_values;        //growth rates for each time step (outputted as file)
@@ -341,7 +325,6 @@ typedef struct benthic_info{
         int initial_flag;      //initial distribution supplied; 0-no , 1-yes
         int ts_flag;           //timeseries of distributions supplied; 0-no , 1-yes
         int fishing_flag;      //flag for fishing; 0-off, 1-on
-        const FISHING_ARRAY *fish_arr;   //fishing mortality supplied from R as an array (NULL = read the fishing file)
         
         double ***u_values;        //number densities for each time step (outputted as file)
         double ***g_values;        //growth rates for each time step (outputted as file)

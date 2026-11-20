@@ -74,8 +74,7 @@
                                            pref_pla="numeric", pref_pel="numeric", pref_ben="numeric",
                                            q_0="numeric", sig="numeric", trunc="numeric",
                                            prey="numeric", pred="numeric", comp="numeric",gamma_prey="numeric", gamma_pred="numeric", gamma_comp="numeric",
-                                           rep_method="integer", initial_flag="logical", ts_flag="logical", fishing_flag="logical",
-                                           fishing_arrays="list"),
+                                           rep_method="integer", initial_flag="logical", ts_flag="logical", fishing_flag="logical"),
                         prototype(filename="pelagic",speciestype="pelagic",
                                   mmin=-3*log(10), mmat=2*log(10), mmax=6*log(10),
                                   A=640, alpha=0.82, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-1,
@@ -83,8 +82,7 @@
                                   pref_pla=1, pref_pel=1, pref_ben=1,
                                   q_0=2*log(10), sig=1*log(10),
                                   prey=0, pred=0, comp=0.1, gamma_prey=0.33, gamma_pred=0.33, gamma_comp=0.75,
-                                  rep_method=as.integer(2), initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE,
-                                  fishing_arrays=list()))
+                                  rep_method=as.integer(2), initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE))
 
 #' Benthic species parameters
 #'
@@ -99,15 +97,13 @@
                                            A="numeric", alpha="numeric", mu_0="numeric", beta="numeric", mu_s="numeric", epsilon="numeric", u_0="numeric", lambda="numeric",
                                            K_det="numeric", R_det="numeric", Ex_det="numeric",
                                            pref_det="numeric",
-                                           rep_method="integer", initial_flag="logical", ts_flag="logical", fishing_flag="logical",
-                                           fishing_arrays="list"),
+                                           rep_method="integer", initial_flag="logical", ts_flag="logical", fishing_flag="logical"),
                         prototype(filename="benthic",speciestype="benthic",
                                   mmin=-3*log(10), mmat=0, mmax=4*log(10),
                                   A=64, alpha=0.75, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-0.75,
                                   K_det=0.2, R_det=0.2, Ex_det=0.2,
                                   pref_det=1,
-                                  rep_method=as.integer(2), initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE,
-                                  fishing_arrays=list()))
+                                  rep_method=as.integer(2), initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE))
 
 #' Detritus parameters
 #'
