@@ -13,8 +13,7 @@ SizeSpectrum(
   detritus.in,
   forcing = NULL,
   output = c("files", "arrays", "both"),
-  variables = c("abundance", "growth", "mortality", "predation", "fishing", "catch"),
-  gravity = NULL
+  variables = c("abundance", "growth", "mortality", "predation", "fishing", "catch")
 )
 }
 \arguments{
@@ -45,10 +44,6 @@ R as arrays and writes no per-timestep text output. \code{"both"} does both.}
 to return. Abundance is always returned; \code{"growth"}, \code{"mortality"},
 \code{"predation"}, \code{"fishing"} and \code{"catch"} are returned by default and can be
 left out to save memory on large grids.}
-
-\item{gravity}{Optional allocation of fishing effort among cells during the
-run, from \code{\link[=Setup.Gravity]{Setup.Gravity()}}. The rates given to \code{\link[=Setup.fishing]{Setup.fishing()}} are then
-the fishing mortality at evenly spread effort.}
 }
 \value{
 With \code{output = "files"}, a character vector of the paths and species

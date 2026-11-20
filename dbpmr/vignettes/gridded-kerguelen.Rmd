@@ -296,14 +296,14 @@ parameter (`Setup.CellParams()`), and the output comes back as arrays
 
 ```{r eval = FALSE}
 run_dbpm <- function(int, slp, tex, tob, exp, depth, nyr = 25, layer = NULL, fishing = NULL,
-                     spacing = c(1, 1), prey = 0, pred = 0, comp = 0) {
+                     prey = 0, pred = 0, comp = 0) {
   wd <- tempfile("dbpm"); dir.create(wd); old <- setwd(wd)
   on.exit({ setwd(old); unlink(wd, recursive = TRUE, force = TRUE) }, add = TRUE)
   nx <- nrow(depth); ny <- ncol(depth); as_grid <- nx * ny > 1
   run  <- Setup.Run("R", 1, 1, if (as_grid) 2 else 0, TRUE, 1)
   grid <- if (as_grid) Setup.Grid(run, tmax = nyr, tstep = 1/48, toutstep = 0.5,
-                                  xmin = 0, xmax = (nx - 1) * spacing[1], xstep = spacing[1], xoutstep = spacing[1],
-                                  ymin = 0, ymax = (ny - 1) * spacing[2], ystep = spacing[2], youtstep = spacing[2])
+                                  xmin = 1, xmax = nx, xstep = 1, xoutstep = 1,
+                                  ymin = 1, ymax = ny, ystep = 1, youtstep = 1)
           else Setup.Grid(run, tmax = nyr, tstep = 1/48, toutstep = 0.5)
   # the forcing layer each model time point uses: by default the supplied months repeat every year
   if (is.null(layer)) layer <- (floor(seq(0, nyr, 1/48) * 12) %% dim(int)[3]) + 1
@@ -324,13 +324,9 @@ run_dbpm <- function(int, slp, tex, tob, exp, depth, nyr = 25, layer = NULL, fis
                       K_det = Kl, R_det = Rl, Ex_det = El, rep_method = 2, fishing_flag = fished,
                       initial_flag = TRUE)
   de <- Setup.Detritus(run, filename = "detritus")
-  gv <- NULL
-  if (fished) {                                                             # fishing mortality, held in memory
+  if (fished) {                                                             # fishing mortality as [x, y, layer] arrays
     pe <- Setup.fishing(pe, run, grid, rate = fishing$pel, min_size = fishing$min_size, layer = fishing$layer)
     be <- Setup.fishing(be, run, grid, rate = fishing$ben, min_size = fishing$min_size, layer = fishing$layer)
-    if (!is.null(fishing$access))                                           # effort placed by gravity, updated every year
-      gv <- Setup.Gravity(run, grid, access = fishing$access, pelagic_thickness = pmin(depth, 200),
-                          benthic_thickness = 20, update = 1)
   }
   Setup.CellParams(pe, run, grid, pref_ben = 0.8 * exp(-depth / 1500))      # per-cell benthic preference
   start <- function(sp) {                                                   # the same starting spectrum in every cell
@@ -341,8 +337,7 @@ run_dbpm <- function(int, slp, tex, tob, exp, depth, nyr = 25, layer = NULL, fis
 
   out <- NULL
   invisible(utils::capture.output(
-    out <- SizeSpectrum(run, grid, pl, pe, be, de, forcing = fo, gravity = gv, output = "arrays",
-                        variables = c("catch", "fishing"))))
+    out <- SizeSpectrum(run, grid, pl, pe, be, de, forcing = fo, output = "arrays", variables = "catch")))
   # sum over size classes and convert to per-area: pelagic over the top 200 m, benthic over a 20 m layer.
   # Abundance is weighted by body mass to give biomass; catch is already in biomass per size class.
   dm <- diff(out$m)[1]; last <- length(out$t)
@@ -353,9 +348,6 @@ run_dbpm <- function(int, slp, tex, tob, exp, depth, nyr = 25, layer = NULL, fis
     mid <- abs(out$t %% 1 - 0.5) < 1e-6
     res$catch <- list(pel = per_area(out$catch$fish, dm, pmin(depth, 200))[, , mid, drop = FALSE],
                       ben = per_area(out$catch$benthos, dm, 20)[, , mid, drop = FALSE])
-    Fpel <- out$fishing$fish[, , length(out$m), mid, drop = FALSE]          # fishing mortality of the largest fish,
-    dim(Fpel) <- dim(Fpel)[c(1, 2, 4)]                                      # as each cell's share of the grid total
-    res$share <- sweep(Fpel, 3, pmax(apply(Fpel, 3, sum), 1e-300), "/")
   }
   res
 }
@@ -400,20 +392,18 @@ abline(0, 1, col = "grey50")
 
 Because the grid and the single-cell runs agree, differences that appear once
 movement is switched on (`prey`, `pred` and `comp` in `run_dbpm()`) can be put
-down to movement itself; section 8 does that. The output object can be saved with
-`Write.NetCDF()`.
+down to movement itself. See the *spatial-movement* vignette for how to choose
+those coefficients: they depend on the grid spacing, which for movement should be
+given in distance units rather than the cell indices used here. The output object
+can be saved with `Write.NetCDF()`.
 
 ## 7. Fishing on the grid
 
-Fishing on the grid has two parts. How much fishing there is changes through
-*time*, and is forced here by the regional effort series. Where it falls in
-*space* can be set in two ways: a **fixed share** of effort per cell, or a
-**gravity** rule that moves effort towards the cells with the most accessible
-catch as the run goes. Closed areas work with either.
-
-### A fixed share of effort per cell
-
-With a fixed share, fishing mortality in a cell and year is
+The calibrated run of section 5 redistributes effort among cells every year with
+a gravity model. A simpler way to fish the grid is to **force** it: the regional
+effort series sets how fishing changes through *time*, and a fixed share of effort
+per cell sets where it falls in *space*. Fishing mortality in a cell and year is
+then
 
 > catchability × regional effort that year × number of cells × that cell's share of effort,
 
@@ -490,142 +480,12 @@ image(fg$lon, fg$lat, log10(pos(fg$cell_pel + fg$cell_ben)), col = hcl.colors(64
       xlab = "Longitude", ylab = "Latitude", main = "Catch 2001-2010 (log10)")
 ```
 
-The forced run follows the same effort series as the calibrated one but does not
+The forced run follows the same effort series as the calibrated one but will not
 match it exactly: with a fixed share, effort cannot follow the fish as they are
-depleted. Because fishing is just an array, other spatial patterns are one line
-away; a uniform share is `share[] <- 1 / length(share)`.
-
-### Effort that follows the fish (gravity)
-
-With `Setup.Gravity()` the model places the effort itself. The rate given to
-`Setup.fishing()` is then the fishing mortality when effort is spread evenly,
-catchability × regional effort that year, the same in every cell. Each cell's
-share of effort is proportional to its accessibility times the catch that rate
-would take there, and is updated every year from the current biomass. This is the
-rule the calibrated run of section 5 used, there applied between yearly restarts
-of the single-cell runs and here inside one grid run. Accessibility falls with
-depth and with distance from shore:
-
-```{r}
-shore <- depth * NA
-shore[cbind(match(cells$lon, lons), match(cells$lat, lats))] <- cells$shore_km
-access <- exp(-depth / 800) * exp(-shore / 150)                # [lon, lat], between 0 and 1
-# one rate per layer, the same in every cell: the unfished spin-up, then catchability x effort each year
-gravity <- list(pel = c(0, cal$qg[1] * effort), ben = c(0, cal$qg[2] * effort),
-                min_size = fishing$min_size, layer = fishing$layer, access = access)
-```
-
-### Closed areas
-
-A marine protected area is a mask that multiplies the fishing rate: `[lon, lat]`
-if it does not change, `[lon, lat, layer]` if it starts or ends during the run.
-Such masks usually come as NetCDF, which reads straight into an array of that
-shape with `ncdf4::ncvar_get()`, or with `terra::rast()` followed by
-`as.array()`. Here we close a block of six cells on the southern bank from 2003
-onwards. It is an illustration, not the boundary of a real reserve.
-
-```{r}
-mpa <- array(0, c(dim(depth), nyear + 1))                      # [lon, lat, layer], 1 = closed to fishing
-mpa[lons > 72 & lons < 75, lats > -53 & lats < -51, c(FALSE, cal$yrs >= 2003)] <- 1
-closed <- gravity                                              # the same fishing, with the closure
-closed$pel <- sweep(1 - mpa, 3, gravity$pel, "*"); closed$ben <- sweep(1 - mpa, 3, gravity$ben, "*")
-```
-
-With gravity, effort that would have gone to a closed cell goes to the open cells
-from the moment the closure starts; with a fixed share, setting the rate to zero
-simply removes it.
-
-```{r eval = FALSE}
-full <- function(f, ...) run_dbpm(Aint, Aslp, Atex, Atob, Aexp, depth, nyr = spin + nyear, layer = months, fishing = f, ...)
-summarise <- function(r, yrs = recent) {                       # regional series, and catch and effort share per cell
-  cp <- r$catch$pel[, , spin + seq_len(nyear)]; cb <- r$catch$ben[, , spin + seq_len(nyear)]
-  list(pel = reg(cp), ben = reg(cb), cell = apply((cp + cb)[, , yrs], c(1, 2), mean),
-       share = apply(r$share[, , spin + seq_len(nyear)][, , yrs], c(1, 2), mean))
-}
-after <- cal$yrs >= 2004
-with_gravity <- full(gravity); with_closure <- full(closed)
-fg$gravity <- summarise(with_gravity)
-fg$mpa <- c(summarise(with_closure, after),
-            list(mask = mpa[, , nyear + 1], from = 2003, open_share = summarise(with_gravity, after)$share))
-```
-
-```{r fig.height = 4}
-recent <- fg$year >= 2001
-rbind("section 5 (single cells, yearly restarts)" = c(pelagic = mean(cal$pel[recent]), benthic = mean(cal$ben[recent])),
-      "one grid, gravity"     = c(mean(fg$gravity$pel[recent]), mean(fg$gravity$ben[recent])),
-      "one grid, fixed share" = c(mean(fg$pel[recent]), mean(fg$ben[recent])))      # catch 2001-2010, g m^-2 yr^-1
-
-par(mfrow = c(1, 3), mar = c(4, 4.2, 3, 1))
-plot(fg$year, pos(cal$pel), type = "l", lwd = 2, col = "#1f78b4", log = "y", ylim = c(1e-4, 1), xlim = c(1985, 2010),
-     xlab = "Year", ylab = expression("Pelagic catch (g m"^-2*" yr"^-1*")"), main = "Gravity on the grid")
-lines(fg$year, pos(fg$gravity$pel), lwd = 2, lty = 2, col = "#d95f02"); lines(fg$year, pos(fg$mpa$pel), lwd = 2, col = "#1b9e77")
-abline(v = fg$mpa$from, col = "grey60", lty = 3)
-legend("bottomright", c("section 5", "one grid", "one grid, closure from 2003"), lty = c(1, 2, 1), lwd = 2,
-       col = c("#1f78b4", "#d95f02", "#1b9e77"), bty = "n", cex = 0.75)
-shpal <- hcl.colors(64, "YlOrRd", rev = TRUE); zl <- c(0, max(fg$mpa$share, fg$mpa$open_share))
-box_mpa <- function() {                                        # outline of the closed block
-  k <- which(fg$mpa$mask == 1, arr.ind = TRUE)
-  rect(min(fg$lon[k[, 1]]) - 0.5, min(fg$lat[k[, 2]]) - 0.5, max(fg$lon[k[, 1]]) + 0.5, max(fg$lat[k[, 2]]) + 0.5, lwd = 2)
-}
-image(fg$lon, fg$lat, fg$mpa$open_share, col = shpal, zlim = zl, xlab = "Longitude", ylab = "Latitude",
-      main = "Share of effort 2004-2010"); box_mpa()
-image(fg$lon, fg$lat, fg$mpa$share, col = shpal, zlim = zl, xlab = "Longitude", ylab = "Latitude",
-      main = "... with the closure"); box_mpa()
-```
-
-Run as one grid, gravity gives nearly the same catch as the calibrated run of
-section 5, and puts the effort in the same cells. With the closure, the effort
-leaves the outlined cells and concentrates on the northern shelf.
-
-## 8. Movement between cells
-
-Everything so far has had movement switched off, so each cell kept its own fish.
-Movement needs the grid spacing as a distance, because its coefficients are in
-distance squared per year. `run_dbpm()` takes the spacing as an argument; in
-metres, with the east--west step taken at the middle latitude:
-
-```{r}
-dy <- 111200; dx <- round(dy * cos(mean(lats) * pi / 180))     # metres per degree of latitude and of longitude
-K  <- dy^2                                                     # one squared degree of latitude, in m^2
-c(dx = dx, dy = dy)
-```
-
-Two kinds of movement are used here: fish move towards cells where they grow
-faster (`prey`), and spread out by diffusion (`comp`). Both coefficients are set
-to `0.2 * K`, an illustrative value rather than an estimate. Avoidance of
-predators (`pred`) is left off; on its own it is unstable, and `Setup.Pelagic()`
-warns if it is used without diffusion (see the *spatial-movement* vignette).
-
-```{r eval = FALSE}
-still <- run_dbpm(Aint[, , mo], Aslp[, , mo], Atex[, , mo], Atob[, , mo], Aexp[, , mo], depth, spacing = c(dx, dy))
-moved <- run_dbpm(Aint[, , mo], Aslp[, , mo], Atex[, , mo], Atob[, , mo], Aexp[, , mo], depth, spacing = c(dx, dy),
-                  prey = 0.2 * K, comp = 0.2 * K)
-fished_moved <- summarise(full(gravity, spacing = c(dx, dy), prey = 0.2 * K, comp = 0.2 * K))
-mv <- list(lon = lons, lat = lats, still = still[c("BU", "BV")], moved = moved[c("BU", "BV")],
-           pel = fished_moved$pel, ben = fished_moved$ben, share = fished_moved$share)
-```
-
-```{r fig.height = 4}
-mv <- readRDS(ex("kerguelen_grid_movement.rds"))
-rbind(still = range(mv$still$BU), moved = range(mv$moved$BU))  # pelagic biomass across cells, g m^-2
-
-par(mfrow = c(1, 3), mar = c(4, 4.2, 3, 1))
-zl <- range(mv$still$BU, mv$moved$BU)
-image(mv$lon, mv$lat, mv$still$BU, col = pal, zlim = zl, xlab = "Longitude", ylab = "Latitude", main = "Pelagic: movement off")
-image(mv$lon, mv$lat, mv$moved$BU, col = pal, zlim = zl, xlab = "Longitude", ylab = "Latitude", main = "Pelagic: movement on")
-plot(fg$year, pos(fg$gravity$pel), type = "l", lwd = 2, col = "#d95f02", log = "y", ylim = c(1e-4, 1), xlim = c(1985, 2010),
-     xlab = "Year", ylab = expression("Pelagic catch (g m"^-2*" yr"^-1*")"), main = "Fished with gravity")
-lines(fg$year, pos(mv$pel), lwd = 2, col = "#7570b3")
-legend("bottomright", c("movement off", "movement on"), lty = 1, lwd = 2, col = c("#d95f02", "#7570b3"), bty = "n", cex = 0.75)
-```
-
-The run is stable with movement on, and movement evens out the biomass between
-neighbouring cells. It also lowers the catch several-fold at the same
-catchability. The movement coefficients grow with body size, so the large fish
-that are fished mix across the whole region and no longer build up in the few
-accessible cells where the effort is. Catchabilities calibrated with movement off
-therefore do not carry over: with movement on, the calibration of section 5 has
-to be repeated.
+depleted, which is what the gravity model does. Because fishing is just an array,
+other spatial patterns are one line away: a uniform share is
+`share[] <- 1 / length(share)`, and a closed area is fishing set to zero in some
+cells, for example `fishing$pel[5:8, 3:5, ] <- 0`.
 
 ## Going further
 
