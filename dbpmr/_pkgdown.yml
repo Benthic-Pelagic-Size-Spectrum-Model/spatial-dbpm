@@ -17,7 +17,6 @@ reference:
       - Setup.ts
       - Setup.Rep
       - Setup.fishing
-      - Setup.CellParams
   - title: Run the model
     contents:
       - SizeSpectrum
