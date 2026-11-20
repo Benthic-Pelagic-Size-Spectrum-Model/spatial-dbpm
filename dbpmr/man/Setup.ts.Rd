@@ -14,8 +14,7 @@ Setup.ts(
   intercept,
   slope,
   layer,
-  time,
-  initial
+  time
 )
 }
 \arguments{
@@ -47,18 +46,11 @@ omitted when there is one layer per time point, or a single layer.}
 \item{time}{Used with \code{intercept}/\code{slope} instead of \code{layer}: the start time
 (in model years) of each layer; each time point uses the latest layer that
 has started.}
-
-\item{initial}{Starting values held in memory (\code{initial_flag = TRUE},
-\code{ts_flag = FALSE}). For the plankton or a pelagic or benthic species: the
-abundance density in each size class of that species
-(\code{seq(mmin, mmax, by = mstep)}), as a vector (the same in every cell) or an
-array \verb{[x, y, size class]}. For the detritus: the biomass, as a single
-number or a matrix \verb{[x, y]}.}
 }
 \value{
 Invisibly \code{NULL} when writing an input file under the run's \code{Input}
-directory. When \code{intercept} and \code{slope}, or \code{initial}, are given, invisibly
-the object with the arrays attached (assign it).
+directory. When \code{intercept} and \code{slope} are given, invisibly the plankton
+object with the arrays attached (assign it).
 }
 \description{
 Generates the \verb{_ts.txt} input file used to seed a species' initial size
@@ -72,11 +64,6 @@ A plankton time series can instead be supplied in memory as \code{intercept} and
 \code{slope} arrays, with no input file written. In that case the function returns
 the plankton object carrying the arrays, which must be assigned and passed on
 to \code{\link[=SizeSpectrum]{SizeSpectrum()}}: \code{pl <- Setup.ts(pl, run, grid, intercept = a, slope = b)}.
-
-Starting values can also be held in memory, with \code{initial}, for the plankton,
-a pelagic or benthic species, or the detritus. Again no file is written and
-the returned object must be assigned:
-\code{pe <- Setup.ts(pe, run, grid, initial = u0)}.
 
 For an initial condition (\code{ts_flag = FALSE}) the supplied \code{mat} /
 data may have either a single row, applied uniformly to every spatial cell,

@@ -10,8 +10,7 @@ An S4 object holding the size range and spectrum parameters for the plankton
 resource. Usually created with \code{\link[=Setup.Plankton]{Setup.Plankton()}}.
 }
 \details{
-The \code{arrays} slot is a list of the plankton inputs that are held in memory
-instead of being written to text files: \code{ts}, a time series given as
-intercept and slope arrays, and \code{initial}, a starting spectrum (see
-\code{\link[=Setup.ts]{Setup.ts()}}). It is empty when none has been supplied.
+The \code{ts_arrays} slot holds a plankton time series supplied in memory as
+intercept and slope arrays (see \code{\link[=Setup.ts]{Setup.ts()}}); it is an empty list when the
+series comes from an input file or is not used.
 }

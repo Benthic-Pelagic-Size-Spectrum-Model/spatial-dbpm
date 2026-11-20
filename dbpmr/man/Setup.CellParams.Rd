@@ -4,7 +4,7 @@
 \alias{Setup.CellParams}
 \title{Supply per-cell model parameters for a spatial run}
 \usage{
-Setup.CellParams(species, run.in, grid.in, pref_ben, file = TRUE)
+Setup.CellParams(species, run.in, grid.in, pref_ben)
 }
 \arguments{
 \item{species}{A pelagic species parameter object (from \code{\link[=Setup.Pelagic]{Setup.Pelagic()}}).}
@@ -18,14 +18,9 @@ per y cell (\code{pref_ben[i, j]} is the value at the \code{i}-th x and \code{j}
 position; for a 1-D or 0-D run it has a single column), or a function of
 \verb{(x, y)} returning the value at that grid position. Values must be finite and
 non-negative.}
-
-\item{file}{\code{TRUE} (the default) writes the values to their input file.
-\code{FALSE} holds them in memory and returns the species object.}
 }
 \value{
-With \code{file = FALSE}, invisibly the species object with the values
-attached (assign it). With \code{file = TRUE},
-invisibly the \code{x} by \code{y} matrix that was written; called for the side
+Invisibly, the \code{x} by \code{y} matrix that was written; called for the side
 effect of writing \verb{<run>/Input/<species>_cellpar.txt} (a header line naming
 the columns, then one row per cell with x as the outer and y as the inner
 index, the same cell order as \code{\link[=Setup.ts]{Setup.ts()}} and per-cell forcing).
@@ -48,10 +43,6 @@ benthos.
 The values are static (read once at the start of the run). If this function is
 not called the scalar parameter is used in every cell and results are
 unchanged.
-
-With \code{file = FALSE} the values are held in memory: no file is written and the
-function returns the species object, which must be assigned and passed on to
-\code{\link[=SizeSpectrum]{SizeSpectrum()}}: \code{pe <- Setup.CellParams(pe, run, grid, pref_ben = p, file = FALSE)}.
 }
 \examples{
 \dontrun{

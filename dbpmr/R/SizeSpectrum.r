@@ -292,24 +292,24 @@ tiny<-1e-7
   
   #Check initial input files exist
   #(a plankton time series held in memory as intercept/slope arrays needs no file)
-  if(is.null(plankton.in@arrays$ts) && is.null(plankton.in@arrays$initial) && (plankton.in@initial_flag==1 || plankton.in@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",plankton.in@filename,"_ts.txt",sep=""))){
-    stop("A required Plankton initial/ts file does not exist. Write one with Setup.ts(), or, for values held in memory, ",
-         "assign the result: pl <- Setup.ts(pl, run, grid, intercept = , slope = ) or pl <- Setup.ts(pl, run, grid, initial = )")
+  if(length(plankton.in@ts_arrays)==0 && (plankton.in@initial_flag==1 || plankton.in@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",plankton.in@filename,"_ts.txt",sep=""))){
+    stop("A required Plankton initial/ts file does not exist. Write one with Setup.ts(), or, for intercept/slope arrays, ",
+         "assign the result: pl <- Setup.ts(pl, run, grid, intercept = , slope = )")
   }
   
   for(i in 1:length(pelagic.in)){
-    if(is.null(pelagic.in[[i]]@arrays$initial) && (pelagic.in[[i]]@initial_flag==1 || pelagic.in[[i]]@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",pelagic.in[[i]]@filename,"_ts.txt",sep=""))) stop("A required Pelagic initial/ts file does not exist. Write one with Setup.ts(), or, for starting values held in memory, assign the result: pe <- Setup.ts(pe, run, grid, initial = )")
-    if( pelagic.in[[i]]@fishing_flag==1 && is.null(pelagic.in[[i]]@arrays$fishing) && !file.exists(paste(run.in@filename,"/Input/",pelagic.in[[i]]@filename,"_fishing_ts.txt",sep=""))) stop("A required Pelagic fishing file does not exist. Write one with Setup.fishing(), or, for a rate held in memory, assign the result: pe <- Setup.fishing(pe, run, grid, rate = )")
-    if( pelagic.in[[i]]@rep_method==1 && is.null(pelagic.in[[i]]@arrays$reproduction) && !file.exists(paste(run.in@filename,"/Input/",pelagic.in[[i]]@filename,"_rep_ts.txt",sep=""))) stop("A required Pelagic reproduction file does not exist. Write one with Setup.Rep(), or, for values held in memory, assign the result: pe <- Setup.Rep(pe, run, grid, eggs = )")
+    if((pelagic.in[[i]]@initial_flag==1 || pelagic.in[[i]]@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",pelagic.in[[i]]@filename,"_ts.txt",sep=""))) stop("A required Pelagic initial/ts file does not exist")
+    if( pelagic.in[[i]]@fishing_flag==1 && length(pelagic.in[[i]]@fishing_arrays)==0 && !file.exists(paste(run.in@filename,"/Input/",pelagic.in[[i]]@filename,"_fishing_ts.txt",sep=""))) stop("A required Pelagic fishing file does not exist. Write one with Setup.fishing(), or, for a rate held in memory, assign the result: pe <- Setup.fishing(pe, run, grid, rate = )")
+    if( pelagic.in[[i]]@rep_method==1 && !file.exists(paste(run.in@filename,"/Input/",pelagic.in[[i]]@filename,"_rep_ts.txt",sep=""))) stop("A required Pelagic reproduction file does not exist")
     
   }
   if(run.in@no_benthic!=0){
     for(i in 1:length(benthic.in)){
-      if(is.null(benthic.in[[i]]@arrays$initial) && (benthic.in[[i]]@initial_flag==1 || benthic.in[[i]]@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",benthic.in[[i]]@filename,"_ts.txt",sep=""))) stop("A required Benthic initial/ts file does not exist. Write one with Setup.ts(), or, for starting values held in memory, assign the result: be <- Setup.ts(be, run, grid, initial = )")
-      if( benthic.in[[i]]@fishing_flag==1 && is.null(benthic.in[[i]]@arrays$fishing) && !file.exists(paste(run.in@filename,"/Input/",benthic.in[[i]]@filename,"_fishing_ts.txt",sep=""))) stop("A required Benthic fishing file does not exist. Write one with Setup.fishing(), or, for a rate held in memory, assign the result: be <- Setup.fishing(be, run, grid, rate = )")
-      if( benthic.in[[i]]@rep_method==1 && is.null(benthic.in[[i]]@arrays$reproduction) && !file.exists(paste(run.in@filename,"/Input/",benthic.in[[i]]@filename,"_rep_ts.txt",sep=""))) stop("A required Benthic reproduction file does not exist. Write one with Setup.Rep(), or, for values held in memory, assign the result: be <- Setup.Rep(be, run, grid, eggs = )")
+      if((benthic.in[[i]]@initial_flag==1 || benthic.in[[i]]@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",benthic.in[[i]]@filename,"_ts.txt",sep=""))) stop("A required Benthic initial/ts file does not exist")
+      if( benthic.in[[i]]@fishing_flag==1 && length(benthic.in[[i]]@fishing_arrays)==0 && !file.exists(paste(run.in@filename,"/Input/",benthic.in[[i]]@filename,"_fishing_ts.txt",sep=""))) stop("A required Benthic fishing file does not exist. Write one with Setup.fishing(), or, for a rate held in memory, assign the result: be <- Setup.fishing(be, run, grid, rate = )")
+      if( benthic.in[[i]]@rep_method==1 && !file.exists(paste(run.in@filename,"/Input/",benthic.in[[i]]@filename,"_rep_ts.txt",sep=""))) stop("A required Benthic reproduction file does not exist")
     }
-    if(is.null(detritus.in@arrays$initial) && (detritus.in@initial_flag==1 || detritus.in@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",detritus.in@filename,"_ts.txt",sep=""))) stop("A required Detritus initial/ts file does not exist. Write one with Setup.ts(), or, for a starting value held in memory, assign the result: de <- Setup.ts(de, run, grid, initial = )")
+    if((detritus.in@initial_flag==1 || detritus.in@ts_flag==1) && !file.exists(paste(run.in@filename,"/Input/",detritus.in@filename,"_ts.txt",sep=""))) stop("A required Detritus initial/ts file does not exist")
   }
   
   
@@ -351,16 +351,16 @@ tiny<-1e-7
 
   # Inputs passed to C as arrays instead of text files (NULL = none)
   inputs <- NULL
-  if(!is.null(plankton.in@arrays$ts)){
-    ta <- plankton.in@arrays$ts
+  if(length(plankton.in@ts_arrays)!=0){
+    ta <- plankton.in@ts_arrays
     inputs <- list(plankton_intercept=ta$intercept, plankton_slope=ta$slope,
                    plankton_layer=as.integer(ta$layer-1L), plankton_nlayer=as.integer(dim(ta$intercept)[3]))
   }
   # Fishing mortality held in memory: one entry per species (NULL where it comes from a file or the species is not fished)
   fish_in <- function(sp.list, what){
     lapply(sp.list, function(sp){
-      fa <- sp@arrays$fishing
-      if(is.null(fa)) return(NULL)
+      fa <- sp@fishing_arrays
+      if(length(fa)==0) return(NULL)
       if(!isTRUE(sp@fishing_flag)) stop("fishing rate supplied for ", sp@filename, " but its fishing_flag is FALSE")
       if(file.exists(file.path(run.in@filename, "Input", paste0(sp@filename, "_fishing_ts.txt"))))
         stop("Both a fishing rate held in memory and the file ", sp@filename, "_fishing_ts.txt were supplied for ", what, " species ", sp@filename, "; use one or the other")
@@ -376,61 +376,6 @@ tiny<-1e-7
     if(is.null(inputs)) inputs <- list()
     inputs$fishing_pelagic <- fpel
     if(run.in@no_benthic!=0) inputs$fishing_benthic <- fben
-  }
-  # Other inputs held in memory, one entry per species (NULL where a species has none): starting abundance,
-  # reproduction, refuge and per-cell parameters. Each replaces its text file; supplying both is an error.
-  ncell <- c(length(grid_seq(grid.in@xmin, grid.in@xmax, grid.in@xstep)), length(grid_seq(grid.in@ymin, grid.in@ymax, grid.in@ystep)))
-  ntime <- length(seq(0, grid.in@tmax, grid.in@tstep))
-  in_file <- function(nm, suffix) file.exists(file.path(run.in@filename, "Input", paste0(nm, suffix)))
-  not_both <- function(nm, suffix, what) if(in_file(nm, suffix))
-    stop("Both ", what, " held in memory and the file ", nm, suffix, " were supplied for ", nm, "; use one or the other")
-  same_grid <- function(a, nm, what, setup) if(!identical(as.integer(dim(a)[1:2]), as.integer(ncell)))
-    stop("the ", what, " of ", nm, " was built for a different grid; rebuild it with ", setup, " using this grid")
-  initial_in <- function(sp){
-    a <- sp@arrays$initial
-    if(is.null(a)) return(NULL)
-    if(!isTRUE(sp@initial_flag) || isTRUE(sp@ts_flag)) stop("starting values were supplied for ", sp@filename, " but its initial_flag is FALSE (or its ts_flag is TRUE)")
-    not_both(sp@filename, "_ts.txt", "starting values")
-    same_grid(a, sp@filename, "starting values", "Setup.ts()")
-    a
-  }
-  sp_in <- function(sp.list){
-    lapply(sp.list, function(sp){
-      a <- sp@arrays; out <- list()
-      out$initial <- initial_in(sp)
-      if(!is.null(a$reproduction)){
-        if(sp@rep_method!=1) stop("reproduction values were supplied for ", sp@filename, " but its rep_method is not 1")
-        not_both(sp@filename, "_rep_ts.txt", "reproduction values")
-        same_grid(a$reproduction$values, sp@filename, "reproduction values", "Setup.Rep()")
-        if(length(a$reproduction$layer)!=ntime) stop("the reproduction values of ", sp@filename, " were built for a different grid; rebuild them with Setup.Rep() using this grid")
-        out$rep <- a$reproduction$values; out$rep_layer <- as.integer(a$reproduction$layer-1L); out$rep_nlayer <- as.integer(dim(a$reproduction$values)[3])
-      }
-      if(!is.null(a$refuge)){
-        not_both(sp@filename, "_refuge.txt", "a refuge")
-        same_grid(a$refuge$values, sp@filename, "refuge", "Setup.Refuge()")
-        if(dim(a$refuge$values)[3]!=length(grid_seq(grid.in@mmin, grid.in@mmax, grid.in@mstep)))
-          stop("the refuge of ", sp@filename, " has ", dim(a$refuge$values)[3], " mass classes but the run has ", length(grid_seq(grid.in@mmin, grid.in@mmax, grid.in@mstep)),
-               "; build it with a grid whose mmin and mmax span all the species")
-        out$refuge <- a$refuge$values; out$refuge_min_a <- as.double(a$refuge$min_A)
-      }
-      if(!is.null(a$pref_ben)){
-        not_both(sp@filename, "_cellpar.txt", "per-cell parameters")
-        same_grid(a$pref_ben, sp@filename, "per-cell parameters", "Setup.CellParams()")
-        out$pref_ben <- a$pref_ben
-      }
-      if(length(out)) out else NULL
-    })
-  }
-  spel <- sp_in(pelagic.in)
-  sben <- if(run.in@no_benthic!=0) sp_in(benthic.in) else list()
-  pla0 <- if(is.null(plankton.in@arrays$ts)) initial_in(plankton.in) else NULL
-  det0 <- if(run.in@no_benthic!=0) initial_in(detritus.in) else NULL
-  if(any(!vapply(spel, is.null, TRUE)) || any(!vapply(sben, is.null, TRUE)) || !is.null(pla0) || !is.null(det0)){
-    if(is.null(inputs)) inputs <- list()
-    if(any(!vapply(spel, is.null, TRUE))) inputs$species_pelagic <- spel
-    if(any(!vapply(sben, is.null, TRUE))) inputs$species_benthic <- sben
-    if(!is.null(pla0)) inputs$plankton_initial <- pla0
-    if(!is.null(det0)) inputs$detritus_initial <- det0
   }
   if(!is.null(forcing)){
     if(!inherits(forcing, "dbpmr_forcing")) stop("forcing must be created with Setup.Forcing()")

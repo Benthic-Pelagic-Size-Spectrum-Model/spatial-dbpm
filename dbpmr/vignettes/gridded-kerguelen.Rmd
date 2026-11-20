@@ -291,12 +291,8 @@ One function then runs either the whole grid or a single cell, depending only on
 the arrays it is given. The plankton spectrum goes in as intercept and slope
 arrays (`Setup.ts()`), temperature, export and depth as forcing arrays
 (`Setup.Forcing()`), the depth-dependent benthic feeding preference as a per-cell
-parameter (`Setup.CellParams()`), the starting spectra with `Setup.ts(initial = )`,
-and the output comes back as arrays (`output = "arrays"`). Every input is held
-in memory, so the run reads no input files; the only files it writes are a
-record of the parameters and empty headers for the text output. The functions
-that take arrays return the object they were given, which must be assigned.
-Fishing is optional and is used in the next section.
+parameter (`Setup.CellParams()`), and the output comes back as arrays
+(`output = "arrays"`). Fishing is optional and is used in the next section.
 
 ```{r eval = FALSE}
 run_dbpm <- function(int, slp, tex, tob, exp, depth, nyr = 25, layer = NULL, fishing = NULL,
