@@ -17,55 +17,12 @@
 #'   [Setup.Forcing()]. When given, it replaces the `forcing_ts.txt` input file
 #'   (it is an error to supply both).
 #'
-#' @param output Where the model output goes. `"files"` (the default) writes the
-#'   text result files under the run directory. `"arrays"` returns the output to
-#'   R as arrays and writes no per-timestep text output. `"both"` does both.
-#' @param variables Used with `output = "arrays"` or `"both"`: which variables
-#'   to return. Abundance is always returned; `"growth"`, `"mortality"`,
-#'   `"predation"`, `"fishing"` and `"catch"` are returned by default and can be
-#'   left out to save memory on large grids.
-#'
-#' @return With `output = "files"`, a character vector of the paths and species
-#'   filenames produced by the run, suitable for passing to [Read.In()].
-#'
-#'   With `output = "arrays"` or `"both"`, an object of class `dbpmr_output`, a
-#'   list with:
-#'
-#'   * `t` (years), `x`, `y` and `m` (natural-log body mass): the output
-#'     coordinates;
-#'   * `abundance`: a named list with one array per group (the plankton and each
-#'     pelagic and benthic species, named by their file names), each with
-#'     dimensions `[x, y, m, t]`;
-#'   * `growth`, `mortality`, `fishing`: named lists with one `[x, y, m, t]`
-#'     array per pelagic and benthic species, holding the growth rate, the total
-#'     mortality rate and the fishing mortality rate;
-#'   * `predation`: predation mortality rate. For a pelagic species, a list with
-#'     one array per pelagic predator species; for a benthic species, one array
-#'     (predation by all pelagic species);
-#'   * `catch`: a named list with one `[x, y, m, t]` array per pelagic and
-#'     benthic species, holding the catch rate density: fishing mortality times
-#'     abundance times body mass, per unit natural-log body mass. Summed over
-#'     size classes and multiplied by the size step (`diff(m)[1]`) it is the
-#'     total catch rate. Like every other variable it is the rate at the output
-#'     time, not a total over the interval between outputs. (In a run without
-#'     movement the total equals the `fishing` column of the species'
-#'     `summary.txt`; with movement that column is computed before the
-#'     movement step and differs slightly.);
-#'   * `detritus`: detritus biomass as `[x, y, t]` (when the run has benthos).
-#'
-#'   The values are those the text files would hold (`results.txt`,
-#'   `growth.txt`, `mortality.txt`, `predation*.txt`, `fishing.txt`): the same
-#'   output times, cells and size classes (set by `toutstep`, `xoutstep`,
-#'   `youtstep` and `moutstep` in [Setup.Grid()]), with zeros outside a group's
-#'   size range. With `"both"` the character vector described above is attached
-#'   as the attribute `"files"`. See [Write.NetCDF()] to save the object.
-#' @seealso [Read.In()], [Write.NetCDF()], [Setup.Run()]
+#' @return A character vector of the paths and species filenames produced by the
+#'   run, suitable for passing to [Read.In()].
+#' @seealso [Read.In()], [Setup.Run()]
 #' @export
 `SizeSpectrum` <-
-function(run.in, grid.in, plankton.in, pelagic.in, benthic.in, detritus.in, forcing = NULL, output = c("files", "arrays", "both"),
-         variables = c("abundance", "growth", "mortality", "predation", "fishing", "catch")){
-  output <- match.arg(output)
-  variables <- match.arg(variables, several.ok = TRUE)
+function(run.in, grid.in, plankton.in, pelagic.in, benthic.in, detritus.in, forcing = NULL){
 
 #run.in is an object of class of run.params (2 strings and 6 integers relating to the entire run process)
 
@@ -381,9 +338,7 @@ tiny<-1e-7
     as.double(det.params), 
     as.character(names.params), 
     as.integer(flags.params),
-    inputs,
-    c(c(files = 0L, both = 1L, arrays = 2L)[[output]],
-      as.integer(c("growth", "mortality", "predation", "fishing", "catch") %in% variables))
+    inputs
   )
 
 #-----------------------------------------------------------------#
@@ -409,31 +364,6 @@ tiny<-1e-7
     filenames[run.in@no_pelagic+run.in@no_benthic+3]<-detritus.in@filename
   }
   
-  if(output == "files") return(filenames)
-
-  # Output returned from C as arrays: give them their dimensions and names
-  dims <- c(length(x$x), length(x$y), length(x$m), length(x$t))
-  shape <- function(a){ dim(a) <- dims; a }
-  has_ben <- run.in@no_benthic!=0
-  spnames <- c(pel.names, if(has_ben) ben.names)
-  # one array per pelagic then per benthic species, named by species
-  by_species <- function(pel, ben){ l <- c(lapply(pel, shape), lapply(ben, shape)); names(l) <- spnames; l }
-  out <- list(t = x$t, x = x$x, y = x$y, m = x$m,
-              abundance = c(structure(list(shape(x$plankton)), names = plankton.in@filename), by_species(x$pelagic, x$benthic)))
-  if("growth" %in% variables)    out$growth    <- by_species(x$pelagic_growth, x$benthic_growth)
-  if("mortality" %in% variables) out$mortality <- by_species(x$pelagic_mortality, x$benthic_mortality)
-  if("predation" %in% variables){
-    pp <- lapply(x$pelagic_predation, function(l){ l <- lapply(l, shape); names(l) <- pel.names; l })   # by predator species
-    out$predation <- c(pp, lapply(x$benthic_predation, shape)); names(out$predation) <- spnames
-  }
-  if("fishing" %in% variables)   out$fishing   <- by_species(x$pelagic_fishing, x$benthic_fishing)
-  if("catch" %in% variables)     out$catch     <- by_species(x$pelagic_catch, x$benthic_catch)
-  if(has_ben){
-    det <- x$detritus; dim(det) <- dims[c(1, 2, 4)]
-    out$detritus <- det
-  }
-  class(out) <- "dbpmr_output"
-  if(output == "both") attr(out, "files") <- filenames
-  return(out)
+  return(filenames)
 }
 

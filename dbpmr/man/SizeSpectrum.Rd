@@ -11,9 +11,7 @@ SizeSpectrum(
   pelagic.in,
   benthic.in,
   detritus.in,
-  forcing = NULL,
-  output = c("files", "arrays", "both"),
-  variables = c("abundance", "growth", "mortality", "predation", "fishing", "catch")
+  forcing = NULL
 )
 }
 \arguments{
@@ -35,52 +33,10 @@ pelagic species).}
 \item{forcing}{Optional environmental forcing held in memory, from
 \code{\link[=Setup.Forcing]{Setup.Forcing()}}. When given, it replaces the \code{forcing_ts.txt} input file
 (it is an error to supply both).}
-
-\item{output}{Where the model output goes. \code{"files"} (the default) writes the
-text result files under the run directory. \code{"arrays"} returns the output to
-R as arrays and writes no per-timestep text output. \code{"both"} does both.}
-
-\item{variables}{Used with \code{output = "arrays"} or \code{"both"}: which variables
-to return. Abundance is always returned; \code{"growth"}, \code{"mortality"},
-\code{"predation"}, \code{"fishing"} and \code{"catch"} are returned by default and can be
-left out to save memory on large grids.}
 }
 \value{
-With \code{output = "files"}, a character vector of the paths and species
-filenames produced by the run, suitable for passing to \code{\link[=Read.In]{Read.In()}}.
-
-With \code{output = "arrays"} or \code{"both"}, an object of class \code{dbpmr_output}, a
-list with:
-\itemize{
-\item \code{t} (years), \code{x}, \code{y} and \code{m} (natural-log body mass): the output
-coordinates;
-\item \code{abundance}: a named list with one array per group (the plankton and each
-pelagic and benthic species, named by their file names), each with
-dimensions \verb{[x, y, m, t]};
-\item \code{growth}, \code{mortality}, \code{fishing}: named lists with one \verb{[x, y, m, t]}
-array per pelagic and benthic species, holding the growth rate, the total
-mortality rate and the fishing mortality rate;
-\item \code{predation}: predation mortality rate. For a pelagic species, a list with
-one array per pelagic predator species; for a benthic species, one array
-(predation by all pelagic species);
-\item \code{catch}: a named list with one \verb{[x, y, m, t]} array per pelagic and
-benthic species, holding the catch rate density: fishing mortality times
-abundance times body mass, per unit natural-log body mass. Summed over
-size classes and multiplied by the size step (\code{diff(m)[1]}) it is the
-total catch rate. Like every other variable it is the rate at the output
-time, not a total over the interval between outputs. (In a run without
-movement the total equals the \code{fishing} column of the species'
-\code{summary.txt}; with movement that column is computed before the
-movement step and differs slightly.);
-\item \code{detritus}: detritus biomass as \verb{[x, y, t]} (when the run has benthos).
-}
-
-The values are those the text files would hold (\code{results.txt},
-\code{growth.txt}, \code{mortality.txt}, \code{predation*.txt}, \code{fishing.txt}): the same
-output times, cells and size classes (set by \code{toutstep}, \code{xoutstep},
-\code{youtstep} and \code{moutstep} in \code{\link[=Setup.Grid]{Setup.Grid()}}), with zeros outside a group's
-size range. With \code{"both"} the character vector described above is attached
-as the attribute \code{"files"}. See \code{\link[=Write.NetCDF]{Write.NetCDF()}} to save the object.
+A character vector of the paths and species filenames produced by the
+run, suitable for passing to \code{\link[=Read.In]{Read.In()}}.
 }
 \description{
 Validates the supplied parameter objects, assembles the transfer vectors and
@@ -88,5 +44,5 @@ calls the underlying C engine to integrate the dynamic benthic-pelagic size
 spectrum. Output text files are written under the run directory.
 }
 \seealso{
-\code{\link[=Read.In]{Read.In()}}, \code{\link[=Write.NetCDF]{Write.NetCDF()}}, \code{\link[=Setup.Run]{Setup.Run()}}
+\code{\link[=Read.In]{Read.In()}}, \code{\link[=Setup.Run]{Setup.Run()}}
 }
