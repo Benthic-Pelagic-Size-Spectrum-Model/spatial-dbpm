@@ -27,8 +27,7 @@ Suggests:
     testthat (>= 3.0.0),
     knitr,
     rmarkdown,
-    jsonlite,
-    ncdf4
+    jsonlite
 VignetteBuilder: knitr
 Config/testthat/edition: 3
 Roxygen: list(markdown = TRUE, load = "source")

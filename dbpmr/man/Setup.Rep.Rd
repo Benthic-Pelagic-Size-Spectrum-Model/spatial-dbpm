@@ -4,7 +4,7 @@
 \alias{Setup.Rep}
 \title{Write reproduction input for a species}
 \usage{
-Setup.Rep(species, run.in, grid.in, func, dataname, eggs, layer, time)
+Setup.Rep(species, run.in, grid.in, func, dataname)
 }
 \arguments{
 \item{species}{A pelagic or benthic parameter object.}
@@ -17,29 +17,16 @@ Setup.Rep(species, run.in, grid.in, func, dataname, eggs, layer, time)
 
 \item{dataname}{Path to a CSV file of reproduction values (first line is the
 file type).}
-
-\item{eggs}{Reproduction values held in memory: a single number, a vector with
-one value per layer, a matrix \verb{[x, y]} or an array \verb{[x, y, layer]}.}
-
-\item{layer, time}{Used with \code{eggs}: which layer each model time point uses,
-as for \code{\link[=Setup.fishing]{Setup.fishing()}}.}
 }
 \value{
-Invisibly \code{NULL} when writing the input file under the run's \code{Input}
-directory. When \code{eggs} is given, invisibly the species object with the array
-attached (assign it).
+Invisibly \code{NULL}; called for the side effect of writing the input
+file under the run's \code{Input} directory.
 }
 \description{
 Generates the \verb{_rep_ts.txt} reproduction time-series input file for a pelagic
 or benthic species whose \code{rep_method} is \code{1}. The values may be supplied as a
 function of time/space or read from a CSV data file. Exactly one of \code{func} or
 \code{dataname} must be given.
-}
-\details{
-The values can instead be held in memory, with \code{eggs}. No file is written and
-the function returns the species object carrying the array, which must be
-assigned and passed on to \code{\link[=SizeSpectrum]{SizeSpectrum()}}:
-\code{pe <- Setup.Rep(pe, run, grid, eggs = e, time = 0:49)}.
 }
 \note{
 This function is only needed for species with \code{rep_method = 1}, which

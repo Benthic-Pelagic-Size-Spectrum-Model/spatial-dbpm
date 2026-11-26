@@ -42,37 +42,22 @@
 #' An S4 object holding the size range and spectrum parameters for the plankton
 #' resource. Usually created with [Setup.Plankton()].
 #'
-#' The `arrays` slot is a list of the plankton inputs that are held in memory
-#' instead of being written to text files: `ts`, a time series given as
-#' intercept and slope arrays, and `initial`, a starting spectrum (see
-#' [Setup.ts()]). It is empty when none has been supplied.
-#'
 #' @aliases plankton.params
 #' @export
   setClass("plankton.params",representation(filename="character", speciestype="character",
                                             mmin="numeric", mmax="numeric",
                                             u_0="numeric", lambda="numeric", mu_0="numeric", beta="numeric",
-                                            initial_flag="logical", ts_flag="logical",
-                                            arrays="list"),
+                                            initial_flag="logical", ts_flag="logical"),
                         prototype(filename="plankton", speciestype="plankton",
                                   mmin=-12*log(10), mmax=-3*log(10),
                                   u_0=0.01, lambda=-1, mu_0=0.2, beta=-0.25,
-                                  initial_flag=FALSE, ts_flag=FALSE,
-                                  arrays=list()))
+                                  initial_flag=FALSE, ts_flag=FALSE))
   
 #' Pelagic species parameters
 #'
 #' An S4 object holding the physiological, feeding-preference, reproduction and
 #' fishing parameters for a pelagic predator species. Usually created with
 #' [Setup.Pelagic()].
-#'
-#' The `arrays` slot is a list of the inputs of this species that are held in memory
-#' instead of being written to text files: `initial`
-#' (starting abundance, [Setup.ts()]), `fishing` ([Setup.fishing()]),
-#' `reproduction` ([Setup.Rep()]), `refuge` ([Setup.Refuge()]) and `pref_ben`
-#' (per-cell benthic preference, [Setup.CellParams()]). It is empty when none
-#' has been supplied. The functions that fill it return the object, which must
-#' be assigned.
 #'
 #' @aliases pelagic.params
 #' @export
@@ -83,8 +68,7 @@
                                            pref_pla="numeric", pref_pel="numeric", pref_ben="numeric",
                                            q_0="numeric", sig="numeric", trunc="numeric",
                                            prey="numeric", pred="numeric", comp="numeric",gamma_prey="numeric", gamma_pred="numeric", gamma_comp="numeric",
-                                           rep_method="integer", initial_flag="logical", ts_flag="logical", fishing_flag="logical",
-                                           arrays="list"),
+                                           rep_method="integer", initial_flag="logical", ts_flag="logical", fishing_flag="logical"),
                         prototype(filename="pelagic",speciestype="pelagic",
                                   mmin=-3*log(10), mmat=2*log(10), mmax=6*log(10),
                                   A=640, alpha=0.82, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-1,
@@ -92,21 +76,13 @@
                                   pref_pla=1, pref_pel=1, pref_ben=1,
                                   q_0=2*log(10), sig=1*log(10),
                                   prey=0, pred=0, comp=0.1, gamma_prey=0.33, gamma_pred=0.33, gamma_comp=0.75,
-                                  rep_method=as.integer(2), initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE,
-                                  arrays=list()))
+                                  rep_method=as.integer(2), initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE))
 
 #' Benthic species parameters
 #'
 #' An S4 object holding the physiological, detritus-feeding, reproduction and
 #' fishing parameters for a benthic species. Usually created with
 #' [Setup.Benthic()].
-#'
-#' The `arrays` slot is a list of the inputs of this species that are held in memory
-#' instead of being written to text files: `initial`
-#' (starting abundance, [Setup.ts()]), `fishing` ([Setup.fishing()]) and
-#' `reproduction` ([Setup.Rep()]). It is empty when none
-#' has been supplied. The functions that fill it return the object, which must
-#' be assigned.
 #'
 #' @aliases benthic.params
 #' @export
@@ -115,35 +91,27 @@
                                            A="numeric", alpha="numeric", mu_0="numeric", beta="numeric", mu_s="numeric", epsilon="numeric", u_0="numeric", lambda="numeric",
                                            K_det="numeric", R_det="numeric", Ex_det="numeric",
                                            pref_det="numeric",
-                                           rep_method="integer", initial_flag="logical", ts_flag="logical", fishing_flag="logical",
-                                           arrays="list"),
+                                           rep_method="integer", initial_flag="logical", ts_flag="logical", fishing_flag="logical"),
                         prototype(filename="benthic",speciestype="benthic",
                                   mmin=-3*log(10), mmat=0, mmax=4*log(10),
                                   A=64, alpha=0.75, mu_0=0.2, beta=-0.25, mu_s=0.1, epsilon=0.1, u_0=0.01, lambda=-0.75,
                                   K_det=0.2, R_det=0.2, Ex_det=0.2,
                                   pref_det=1,
-                                  rep_method=as.integer(2), initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE,
-                                  arrays=list()))
+                                  rep_method=as.integer(2), initial_flag=FALSE, ts_flag=FALSE, fishing_flag=FALSE))
 
 #' Detritus parameters
 #'
 #' An S4 object holding the parameters of the detritus pool. Usually created
 #' with [Setup.Detritus()].
 #'
-#' The `arrays` slot is a list of the detritus inputs held in memory instead of
-#' being written to text files: `initial`, the starting biomass (see
-#' [Setup.ts()]). It is empty when none has been supplied.
-#'
 #' @aliases detritus.params
 #' @export
   setClass("detritus.params",representation(filename="character",speciestype="character",
                                             w_0="numeric",
-                                            initial_flag="logical", ts_flag="logical",
-                                            arrays="list"),
+                                            initial_flag="logical", ts_flag="logical"),
                         prototype(filename="detritus",speciestype="detritus",
                                   w_0=0.6,
-                                  initial_flag=FALSE, ts_flag=FALSE,
-                                  arrays=list()))
+                                  initial_flag=FALSE, ts_flag=FALSE))
 
 #' Plankton results
 #'
