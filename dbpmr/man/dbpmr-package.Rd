@@ -47,6 +47,7 @@ Useful links:
 
 Authors:
 \itemize{
+  \item Julia Blanchard \email{julia.blanchard@utas.edu.au}
   \item Matthew Castle
 }
 

@@ -23,6 +23,7 @@ reference:
   - title: Read and analyse output
     contents:
       - Read.In
+      - Write.NetCDF
       - Extract.Time
       - Average.Time
   - title: Plotting

@@ -18,6 +18,7 @@ export(Setup.Run)
 export(Setup.fishing)
 export(Setup.ts)
 export(SizeSpectrum)
+export(Write.NetCDF)
 exportClasses(benthic.params)
 exportClasses(benthic.results)
 exportClasses(detritus.params)
@@ -31,9 +32,13 @@ exportClasses(run.params)
 exportClasses(singlefile.results)
 exportClasses(timestep.data)
 import(methods)
-importFrom(graphics,persp)
-importFrom(graphics,plot)
-importFrom(graphics,points)
-importFrom(utils,read.csv)
-importFrom(utils,write.table)
+importFrom(graphics,
+  persp,
+  plot,
+  points
+)
+importFrom(utils,
+  read.csv,
+  write.table
+)
 useDynLib(dbpmr, .registration = TRUE, .fixes = "C_")

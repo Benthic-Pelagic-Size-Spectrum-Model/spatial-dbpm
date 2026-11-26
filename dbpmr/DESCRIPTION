@@ -22,7 +22,8 @@ Depends:
     methods
 Imports:
     utils,
-    graphics
+    graphics,
+    ncdf4
 Suggests:
     testthat (>= 3.0.0),
     knitr,
@@ -31,4 +32,4 @@ Suggests:
 VignetteBuilder: knitr
 Config/testthat/edition: 3
 Roxygen: list(markdown = TRUE, load = "source")
-RoxygenNote: 7.3.3
+Config/roxygen2/version: 8.1.1
