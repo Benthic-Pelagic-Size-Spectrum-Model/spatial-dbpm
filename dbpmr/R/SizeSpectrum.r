@@ -32,8 +32,8 @@
         pelagic.in,
         benthic.in,
         detritus.in,
-        write.files = FALSE,
-        memory.return = TRUE
+        write.files = TRUE,
+        memory.return = FALSE
     ) {
         #run.in is an object of class of run.params (2 strings and 6 integers relating to the entire run process)
 
