@@ -32,9 +32,13 @@ exportClasses(run.params)
 exportClasses(singlefile.results)
 exportClasses(timestep.data)
 import(methods)
-importFrom(graphics,persp)
-importFrom(graphics,plot)
-importFrom(graphics,points)
-importFrom(utils,read.csv)
-importFrom(utils,write.table)
+importFrom(graphics,
+  persp,
+  plot,
+  points
+)
+importFrom(utils,
+  read.csv,
+  write.table
+)
 useDynLib(dbpmr, .registration = TRUE, .fixes = "C_")
