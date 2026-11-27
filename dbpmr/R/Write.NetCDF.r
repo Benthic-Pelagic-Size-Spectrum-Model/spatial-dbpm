@@ -177,7 +177,7 @@
 
         nc <- ncdf4::nc_create(file, vars, force_v4 = TRUE)
         for (nm in names(vars)) {
-            ncdf4::ncvar_put(nc, vars[[nm]], out[[nm]])
+            ncdf4::ncvar_put(nc, vars[[nm]], slot(out, nm))
         }
 
         ncdf4::ncatt_put(nc, 0, "title", "dbpmr model output")
