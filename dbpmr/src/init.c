@@ -17,7 +17,7 @@ extern SEXP SizeSpectrum(
 );
 
 static const R_CallMethodDef CallEntries[] = {
-    {"SizeSpectrum", (DL_FUNC) &SizeSpectrum, 10},
+    {"SizeSpectrum", (DL_FUNC) &SizeSpectrum, 9},
     {NULL, NULL, 0}
 };
 

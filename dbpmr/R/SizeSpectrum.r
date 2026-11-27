@@ -50,7 +50,9 @@
         #detritus.in is an object of class detritus.params (2 strings and 1 float)
 
         if (!write.files & !memory.return) {
-            error("Either `write.files` or `memory.return` must be true to enable model outputs.")
+            error(
+                "Either `write.files` or `memory.return` must be true to enable model outputs."
+            )
         }
 
         tiny <- 1e-7
@@ -602,22 +604,39 @@
         # Check that every value handed to the C code is finite. .C() used to reject NA/NaN/Inf
         # itself; .Call() does not, so a NaN parameter would otherwise run to completion and
         # fill the output files with NaN.
-        check_finite <- function(v, what, nms = NULL){
+        check_finite <- function(v, what, nms = NULL) {
             bad <- which(!is.finite(v))
-            if(length(bad)!=0){
-            where <- if(is.null(nms)) paste("position", paste(bad, collapse=", ")) else paste(nms[bad], collapse=", ")
-            stop("Non-finite value (NA, NaN or Inf) in the ", what, " parameters: ", where)
+            if (length(bad) != 0) {
+                where <- if (is.null(nms)) {
+                    paste("position", paste(bad, collapse = ", "))
+                } else {
+                    paste(nms[bad], collapse = ", ")
+                }
+                stop(
+                    "Non-finite value (NA, NaN or Inf) in the ",
+                    what,
+                    " parameters: ",
+                    where
+                )
             }
         }
         check_finite(grid.params, "grid")
-        check_finite(pla.params, "plankton", c("mmin", "mmax", "mu_0", "beta", "u_0", "lambda"))
+        check_finite(
+            pla.params,
+            "plankton",
+            c("mmin", "mmax", "mu_0", "beta", "u_0", "lambda")
+        )
         check_finite(pel.params, "pelagic")
-        if(run.in@no_benthic!=0){
+        if (run.in@no_benthic != 0) {
             check_finite(ben.params, "benthic")
             check_finite(det.params, "detritus")
         }
-        if(anyNA(run.params)) stop("Missing value (NA) in the run parameters")
-        if(anyNA(flags.params)) stop("Missing value (NA) in the species flags")
+        if (anyNA(run.params)) {
+            stop("Missing value (NA) in the run parameters")
+        }
+        if (anyNA(flags.params)) {
+            stop("Missing value (NA) in the species flags")
+        }
 
         #-------------#
         # Call C code #
@@ -640,93 +659,98 @@
         # Return filenames of files that have been produced by the C code #
         # ! Only performed if memory.return is FALSE                      #
         #-----------------------------------------------------------------#
-    if (!memory.return) {
-                if (run.in@no_benthic != 0) {
-            filenames <- vector(
-                mode = 'character',
-                length = (run.in@no_pelagic + run.in@no_benthic + 3)
-            )
-        } else {
-            filenames <- vector(
-                mode = 'character',
-                length = (run.in@no_pelagic + 2)
-            )
-        }
-
-        filenames[1] <- paste(getwd(), "/", run.in@filename, sep = "")
-        filenames[2] <- plankton.in@filename
-        for (i in 1:run.in@no_pelagic) {
-            filenames[i + 2] <- pel.names[i]
-        }
-        if (run.in@no_benthic != 0) {
-            for (i in 1:run.in@no_benthic) {
-                filenames[2 + run.in@no_pelagic + i] <- ben.names[i]
+        if (!memory.return) {
+            if (run.in@no_benthic != 0) {
+                filenames <- vector(
+                    mode = 'character',
+                    length = (run.in@no_pelagic + run.in@no_benthic + 3)
+                )
+            } else {
+                filenames <- vector(
+                    mode = 'character',
+                    length = (run.in@no_pelagic + 2)
+                )
             }
-            filenames[
-                run.in@no_pelagic + run.in@no_benthic + 3
-            ] <- detritus.in@filename
+
+            filenames[1] <- paste(getwd(), "/", run.in@filename, sep = "")
+            filenames[2] <- plankton.in@filename
+            for (i in 1:run.in@no_pelagic) {
+                filenames[i + 2] <- pel.names[i]
+            }
+            if (run.in@no_benthic != 0) {
+                for (i in 1:run.in@no_benthic) {
+                    filenames[2 + run.in@no_pelagic + i] <- ben.names[i]
+                }
+                filenames[
+                    run.in@no_pelagic + run.in@no_benthic + 3
+                ] <- detritus.in@filename
+            }
+
+            return(filenames)
         }
 
-        return(filenames)
+        dimnames(results$plankton_u) <- list(
+            m = results$m,
+            x = results$x,
+            y = results$y,
+            time = results$time
+        )
+
+        pelagic_dimensions <- list(
+            m = results$m,
+            x = results$x,
+            y = results$y,
+            species = results$pelagic_species,
+            time = results$time
+        )
+        dimnames(results$pelagic_u) <- pelagic_dimensions
+        dimnames(results$pelagic_mu_fish) <- pelagic_dimensions
+        dimnames(results$pelagic_g) <- pelagic_dimensions
+        dimnames(results$pelagic_mu_pred) <- list(
+            m = results$m,
+            x = results$x,
+            y = results$y,
+            prey = results$pelagic_species,
+            pred = results$pelagic_species,
+            time = results$time
+        )
+
+        benthic_dimensions <- list(
+            m = results$m,
+            x = results$x,
+            y = results$y,
+            species = results$benthic_species,
+            time = results$time
+        )
+        dimnames(results$benthic_u) <- benthic_dimensions
+        dimnames(results$benthic_mu_pred) <- benthic_dimensions
+        dimnames(results$benthic_mu_fish) <- benthic_dimensions
+        dimnames(results$benthic_g) <- benthic_dimensions
+
+        detritus_dimensions <- list(
+            x = results$x,
+            y = results$y,
+            time = results$time
+        )
+        dimnames(results$detritus_w) <- detritus_dimensions
+        dimnames(results$detritus_g) <- detritus_dimensions
+        dimnames(results$detritus_mu) <- detritus_dimensions
+
+        # Attach fishing catch as additional output
+        pelagic_catch <- results$pelagic_mu_fish *
+            results$pelagic_u *
+            array(exp(results$m), dim = dim(results$pelagic_mu_fish))
+        results$pelagic_catch <- pelagic_catch
+
+        benthic_catch <- results$benthic_mu_fish *
+            results$benthic_u *
+            array(exp(results$m), dim = dim(results$benthic_mu_fish))
+        results$benthic_catch <- benthic_catch
+
+        memory_outputs <- new("memory.outputs")
+        for (name in names(results)) {
+            slot(memory_outputs, name) <- results[[name]]
+        }
+
+        return(memory_outputs)
     }
-
-    dimnames(results$plankton_u) <- list(
-        m = results$m, 
-        x = results$x,
-        y = results$y, 
-        time = results$time
-    )
-
-    pelagic_dimensions <- list(
-        m = results$m,
-        x = results$x,
-        y = results$y,
-        species = results$pelagic_species,
-        time = results$time
-    )
-    dimnames(results$pelagic_u) <- pelagic_dimensions
-    dimnames(results$pelagic_mu_fish) <- pelagic_dimensions
-    dimnames(results$pelagic_g) <- pelagic_dimensions
-    dimnames(results$pelagic_mu_pred) <- list(
-        m = results$m,
-        x = results$x,
-        y = results$y,
-        prey = results$pelagic_species,
-        pred = results$pelagic_species,
-        time = results$time
-    )
-
-    benthic_dimensions <- list(
-        m = results$m,
-        x = results$x,
-        y = results$y,
-        species = results$benthic_species,
-        time = results$time
-    )
-    dimnames(results$benthic_u) <- benthic_dimensions
-    dimnames(results$benthic_mu_pred) <- benthic_dimensions
-    dimnames(results$benthic_mu_fish) <- benthic_dimensions
-    dimnames(results$benthic_g) <- benthic_dimensions
-
-    detritus_dimensions <- list(
-        x = results$x,
-        y = results$y,
-        time = results$time
-    )
-    dimnames(results$detritus_w) <- detritus_dimensions
-    dimnames(results$detritus_g) <- detritus_dimensions
-    dimnames(results$detritus_mu) <- detritus_dimensions
-
-    # Attach fishing catch as additional output
-    pelagic_catch <- results$pelagic_mu_fish * 
-        results$pelagic_u * 
-        array(exp(results$m), dim = dim(results$pelagic_mu_fish))
-    results$pelagic_catch <- pelagic_catch
-
-    benthic_catch <- results$benthic_mu_fish * 
-        results$benthic_u * 
-        array(exp(results$m), dim = dim(results$benthic_mu_fish))
-    results$benthic_catch <- benthic_catch
-
-    return(results)
-}

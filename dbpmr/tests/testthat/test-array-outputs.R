@@ -190,10 +190,10 @@ test_that("output arrays hold exactly what the text result files hold", {
     f <- read_txt("pelagic", "results", 5, 2, 5)
 
     # Check dimensions are consistent with memory outputs
-    expect_equal(out$m, as.numeric(dimnames(f)$m), tolerance = 1e-6)
-    expect_equal(out$t, as.numeric(dimnames(f)$t))
-    expect_equal(out$x, as.numeric(dimnames(f)$x))
-    expect_equal(out$y, as.numeric(dimnames(f)$y))
+    expect_equal(out@m, as.numeric(dimnames(f)$m), tolerance = 1e-6)
+    expect_equal(out@t, as.numeric(dimnames(f)$t))
+    expect_equal(out@x, as.numeric(dimnames(f)$x))
+    expect_equal(out@y, as.numeric(dimnames(f)$y))
 
     # Check the data values that are underlying each output (m values significant figures do not match, so just removing dimensions)
     for (group in c("plankton", "pelagic", "benthic")) {
@@ -231,8 +231,8 @@ test_that("output arrays hold exactly what the text result files hold", {
         }
     }
 
-    expect_gt(max(out$pelagic_catch), 0)
-    expect_equal(max(out$benthic_catch), 0)
+    expect_gt(max(out@pelagic_catch), 0)
+    expect_equal(max(out@benthic_catch), 0)
 })
 
 test_that("Test the NetCDF writing capability", {
@@ -245,8 +245,8 @@ test_that("Test the NetCDF writing capability", {
     f <- Write.NetCDF(
         out,
         "run.nc",
-        x = 70 + out$x,
-        y = -55 + out$y,
+        x = 70 + out@x,
+        y = -55 + out@y,
         xname = "lon",
         yname = "lat",
         xunits = "degrees_east",
@@ -256,8 +256,8 @@ test_that("Test the NetCDF writing capability", {
     on.exit(ncdf4::nc_close(nc), add = TRUE)
     expect_setequal(
         names(nc$var),
-        names(out)[
-            !(names(out) %in%
+        names(getSlots(class(out)))[
+            !(names(getSlots(class(out))) %in%
                 c("m", "x", "y", "time", "pelagic_species", "benthic_species"))
         ]
     )
@@ -265,32 +265,32 @@ test_that("Test the NetCDF writing capability", {
         vapply(nc$var$pelagic_u$dim, `[[`, "", "name"),
         c("size", "lon", "lat", "pelagic_species", "time")
     )
-    expect_equal(as.vector(nc$dim$lon$vals), 70 + out$x)
-    expect_equal(as.vector(nc$dim$time$vals), out$t)
-    expect_equal(as.vector(nc$dim$size$vals), out$m)
+    expect_equal(as.vector(nc$dim$lon$vals), 70 + out@x)
+    expect_equal(as.vector(nc$dim$time$vals), out@t)
+    expect_equal(as.vector(nc$dim$size$vals), out@m)
     get <- function(v) ncdf4::ncvar_get(nc, v, collapse_degen = FALSE)
-    expect_equal(get("pelagic_u"), out$pelagic_u, check.attributes = FALSE)
-    expect_equal(get("plankton_u"), out$plankton_u, check.attributes = FALSE)
-    expect_equal(get("benthic_g"), out$benthic_g, check.attributes = FALSE)
+    expect_equal(get("pelagic_u"), out@pelagic_u, check.attributes = FALSE)
+    expect_equal(get("plankton_u"), out@plankton_u, check.attributes = FALSE)
+    expect_equal(get("benthic_g"), out@benthic_g, check.attributes = FALSE)
     expect_equal(
         get("pelagic_mu_pred"),
-        out$pelagic_mu_pred,
+        out@pelagic_mu_pred,
         check.attributes = FALSE
     )
     expect_equal(
         get("benthic_mu_pred"),
-        out$benthic_mu_pred,
+        out@benthic_mu_pred,
         check.attributes = FALSE
     )
     expect_equal(
         get("pelagic_mu_fish"),
-        out$pelagic_mu_fish,
+        out@pelagic_mu_fish,
         check.attributes = FALSE
     )
     expect_equal(
         get("pelagic_catch"),
-        out$pelagic_catch,
+        out@pelagic_catch,
         check.attributes = FALSE
     )
-    expect_equal(get("detritus_w"), out$detritus_w, check.attributes = FALSE)
+    expect_equal(get("detritus_w"), out@detritus_w, check.attributes = FALSE)
 })
