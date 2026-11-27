@@ -197,7 +197,7 @@ test_that("output arrays hold exactly what the text result files hold", {
 
     # Check the data values that are underlying each output (m values significant figures do not match, so just removing dimensions)
     for (group in c("plankton", "pelagic", "benthic")) {
-        memory_output <- out[[paste0(group, "_u")]]
+        memory_output <- slot(out, paste0(group, "_u"))
         if (group %in% c("pelagic", "benthic")) {
             memory_output <- memory_output[,,, "1", ] # Remove the species dimension from the pelagic array
         }
@@ -206,7 +206,7 @@ test_that("output arrays hold exactly what the text result files hold", {
     }
     for (group in c("pelagic", "benthic")) {
         for (vari in c("mu_pred", "mu_fish", "g")) {
-            memory_output <- out[[paste0(group, "_", vari)]]
+            memory_output <- slot(out, paste0(group, "_", vari))
             if (vari == "mu_pred") {
                 if (group == "pelagic") {
                     fn <- "predation0"
@@ -266,31 +266,31 @@ test_that("Test the NetCDF writing capability", {
         c("size", "lon", "lat", "pelagic_species", "time")
     )
     expect_equal(as.vector(nc$dim$lon$vals), 70 + out@x)
-    expect_equal(as.vector(nc$dim$time$vals), out@t)
+    expect_equal(as.vector(nc$dim$time$vals), out@time)
     expect_equal(as.vector(nc$dim$size$vals), out@m)
     get <- function(v) ncdf4::ncvar_get(nc, v, collapse_degen = FALSE)
-    expect_equal(get("pelagic_u"), out@pelagic_u, check.attributes = FALSE)
-    expect_equal(get("plankton_u"), out@plankton_u, check.attributes = FALSE)
-    expect_equal(get("benthic_g"), out@benthic_g, check.attributes = FALSE)
+    expect_equal(get("pelagic_u"), out@pelagic_u, ignore_attr = TRUE)
+    expect_equal(get("plankton_u"), out@plankton_u, ignore_attr = TRUE)
+    expect_equal(get("benthic_g"), out@benthic_g, ignore_attr = TRUE)
     expect_equal(
         get("pelagic_mu_pred"),
         out@pelagic_mu_pred,
-        check.attributes = FALSE
+        ignore_attr = TRUE
     )
     expect_equal(
         get("benthic_mu_pred"),
         out@benthic_mu_pred,
-        check.attributes = FALSE
+        ignore_attr = TRUE
     )
     expect_equal(
         get("pelagic_mu_fish"),
         out@pelagic_mu_fish,
-        check.attributes = FALSE
+        ignore_attr = TRUE
     )
     expect_equal(
         get("pelagic_catch"),
         out@pelagic_catch,
-        check.attributes = FALSE
+        ignore_attr = TRUE
     )
-    expect_equal(get("detritus_w"), out@detritus_w, check.attributes = FALSE)
+    expect_equal(get("detritus_w"), out@detritus_w, ignore_attr = TRUE)
 })
