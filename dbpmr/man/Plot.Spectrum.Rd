@@ -16,7 +16,7 @@ Plot.Spectrum(timestep, mass.lim, x.lim, y.lim, ...)
 Used only for spatial runs.}
 
 \item{...}{Further graphical parameters passed to the underlying
-\code{\link[graphics:plot.default]{graphics::plot()}} or \code{\link[graphics:persp]{graphics::persp()}} call.}
+\code{\link[graphics:plot]{graphics::plot()}} or \code{\link[graphics:persp]{graphics::persp()}} call.}
 }
 \value{
 Invisibly \code{NULL}; called for its plotting side effect.
