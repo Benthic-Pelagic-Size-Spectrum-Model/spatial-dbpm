@@ -4,7 +4,16 @@
 \alias{SizeSpectrum}
 \title{Run the dynamic size-spectrum simulation}
 \usage{
-SizeSpectrum(run.in, grid.in, plankton.in, pelagic.in, benthic.in, detritus.in)
+SizeSpectrum(
+  run.in,
+  grid.in,
+  plankton.in,
+  pelagic.in,
+  benthic.in,
+  detritus.in,
+  write.files = TRUE,
+  memory.return = FALSE
+)
 }
 \arguments{
 \item{run.in}{A \link{run.params} object.}
@@ -21,10 +30,18 @@ pelagic species).}
 
 \item{detritus.in}{A \link{detritus.params} object. Optional when
 \code{run.in@no_benthic == 0}.}
+
+\item{write.files}{Bool that controls whether output files are written.}
+
+\item{memory.return}{Bool that controls whether outputs are returned in memory.
+Default = TRUE. For large runs, this can be memory intensive. If this is set
+to FALSE, then the filenames of outputs will be returned instead of outputs.}
 }
 \value{
-A character vector of the paths and species filenames produced by the
-run, suitable for passing to \code{\link[=Read.In]{Read.In()}}.
+Depends on \code{memory.returns} if this argument is TRUE, then this function
+will return all run results to memory (the same outputs that are written to results.txt)
+files. If this argument is false then a character fector will be returned containing
+the filenames of outputs.
 }
 \description{
 Validates the supplied parameter objects, assembles the transfer vectors and
