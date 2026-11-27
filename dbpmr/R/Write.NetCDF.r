@@ -40,8 +40,8 @@
     function(
         output,
         file,
-        x = output$x,
-        y = output$y,
+        x = output@x,
+        y = output@y,
         xname = "x",
         yname = "y",
         xunits = "",
@@ -55,7 +55,7 @@
         dm <- ncdf4::ncdim_def(
             "size",
             "ln(g)",
-            output$m,
+            output@m,
             longname = "natural-log body mass"
         )
         dx <- ncdf4::ncdim_def(xname, xunits, as.numeric(x))
@@ -63,22 +63,22 @@
         dt <- ncdf4::ncdim_def(
             "time",
             "years",
-            output$t,
+            output@t,
             longname = "model time"
         )
 
-        d_pel <- ncdf4::ncdim_def("pelagic_species", "", output$pelagic_species)
-        d_ben <- ncdf4::ncdim_def("benthic_species", "", output$benthic_species)
+        d_pel <- ncdf4::ncdim_def("pelagic_species", "", output@pelagic_species)
+        d_ben <- ncdf4::ncdim_def("benthic_species", "", output@benthic_species)
         # pelagic_mu_pred contains prey and predator dimensions that are just the pelagic species:
         d_pelprey <- ncdf4::ncdim_def(
             "pelagic_prey_species",
             "",
-            output$pelagic_species
+            output@pelagic_species
         )
         d_pelpred <- ncdf4::ncdim_def(
             "pelagic_pred_species",
             "",
-            output$pelagic_species
+            output@pelagic_species
         )
 
         # flatten to one named [x, y, size, time] array per NetCDF variable, with its units and description
