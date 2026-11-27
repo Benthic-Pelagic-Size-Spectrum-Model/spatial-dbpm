@@ -11,8 +11,8 @@ SizeSpectrum(
   pelagic.in,
   benthic.in,
   detritus.in,
-  write.files = FALSE,
-  memory.return = TRUE
+  write.files = TRUE,
+  memory.return = FALSE
 )
 }
 \arguments{

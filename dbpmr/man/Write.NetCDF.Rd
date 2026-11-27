@@ -7,8 +7,8 @@
 Write.NetCDF(
   output,
   file,
-  x = output$x,
-  y = output$y,
+  x = output@x,
+  y = output@y,
   xname = "x",
   yname = "y",
   xunits = "",

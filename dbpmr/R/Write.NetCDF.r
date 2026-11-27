@@ -63,7 +63,7 @@
         dt <- ncdf4::ncdim_def(
             "time",
             "years",
-            output@t,
+            output@time,
             longname = "model time"
         )
 

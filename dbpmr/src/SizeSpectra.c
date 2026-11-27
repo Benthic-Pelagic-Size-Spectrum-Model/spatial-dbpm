@@ -2173,29 +2173,31 @@ static void record_output(RUN *run, GRID *grid, COMMUNITY *c, OUTPUT *out, int t
         }
     }
 
-    // Record outputs for detritus component
-    for (y_idx = 0; y_idx < out->nout_y; y_idx++)
-    {
-        for (x_idx = 0; x_idx < out->nout_x; x_idx++)
+    if (run->no_benthic != 0) {
+        // Record outputs for detritus component
+        for (y_idx = 0; y_idx < out->nout_y; y_idx++)
         {
+            for (x_idx = 0; x_idx < out->nout_x; x_idx++)
+            {
 
-            out->det_w[
+                out->det_w[
 
-                x_idx + out->nout_x * (y_idx + (R_xlen_t)out->nout_y * out->next_time)
+                    x_idx + out->nout_x * (y_idx + (R_xlen_t)out->nout_y * out->next_time)
 
-            ] = c->detritus->w_values[out->x_sel[x_idx]][out->y_sel[y_idx]];
+                ] = c->detritus->w_values[out->x_sel[x_idx]][out->y_sel[y_idx]];
 
-            out->det_g[
+                out->det_g[
 
-                x_idx + out->nout_x * (y_idx + (R_xlen_t)out->nout_y * out->next_time)
+                    x_idx + out->nout_x * (y_idx + (R_xlen_t)out->nout_y * out->next_time)
 
-            ] = c->detritus->g_values[out->x_sel[x_idx]][out->y_sel[y_idx]];
+                ] = c->detritus->g_values[out->x_sel[x_idx]][out->y_sel[y_idx]];
 
-            out->det_mu[
+                out->det_mu[
 
-                x_idx + out->nout_x * (y_idx + (R_xlen_t)out->nout_y * out->next_time)
+                    x_idx + out->nout_x * (y_idx + (R_xlen_t)out->nout_y * out->next_time)
 
-            ] = c->detritus->mu_values[out->x_sel[x_idx]][out->y_sel[y_idx]];
+                ] = c->detritus->mu_values[out->x_sel[x_idx]][out->y_sel[y_idx]];
+            }
         }
     }
 

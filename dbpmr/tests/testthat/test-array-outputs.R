@@ -191,7 +191,7 @@ test_that("output arrays hold exactly what the text result files hold", {
 
     # Check dimensions are consistent with memory outputs
     expect_equal(out@m, as.numeric(dimnames(f)$m), tolerance = 1e-6)
-    expect_equal(out@t, as.numeric(dimnames(f)$t))
+    expect_equal(out@time, as.numeric(dimnames(f)$t))
     expect_equal(out@x, as.numeric(dimnames(f)$x))
     expect_equal(out@y, as.numeric(dimnames(f)$y))
 
